@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a reproducible problem
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a report. Please include enough detail so we can reproduce.
+
+  - type: input
+    id: macos_version
+    attributes:
+      label: macOS version
+      placeholder: "e.g. macOS 15.5"
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: MouseNavigate version
+      placeholder: "e.g. 0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: mouse_model
+    attributes:
+      label: Mouse model
+      placeholder: "e.g. Logitech MX4"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logitech_mapping
+    attributes:
+      label: Logitech button mapping
+      description: Describe Logitech Options / Options+ mappings for buttons 3/4/5/6.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: permissions
+    attributes:
+      label: Permission status
+      options:
+        - Accessibility + Input Monitoring both granted
+        - Accessibility granted only
+        - Input Monitoring granted only
+        - Neither granted
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Launch MouseNavigate
+        2. Open Safari
+        3. Press button 5
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
