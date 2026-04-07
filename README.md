@@ -6,6 +6,11 @@
 
 Global mouse side-button navigation for macOS.
 
+## Why This Project
+
+I wanted simple mouse side-button behavior on macOS without running a heavy helper suite.
+MouseNavigate focuses only on the button mapping logic and keeps everything minimal.
+
 ## Device Support
 
 - Supported: Logitech MX4
@@ -19,6 +24,12 @@ Global mouse side-button navigation for macOS.
 - Button `6` -> Mission Control system-wide (uses your configured Mission Control shortcut if enabled)
 - Single-instance guard: launching again shows `MouseNavigate is already running.`
 - Low-memory mode: `.app` launch acts as a small launcher and runs a lightweight background daemon for mouse handling.
+
+## Resource Usage
+
+- Designed for idle background use.
+- Typical idle usage: about `2-6 MB` memory and around `0%` CPU most of the time.
+- No network activity required.
 
 ## Quick Start
 
