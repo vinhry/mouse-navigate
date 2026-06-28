@@ -11,6 +11,12 @@ BUILD_CONFIG="${1:-release}"
 #   SIGN_IDENTITY='Apple Development: Your Name (TEAMID)' ./scripts/build-app.sh
 SIGN_IDENTITY="${SIGN_IDENTITY:-}"
 
+# Restrict BUILD_CONFIG to safe identifier characters to prevent path traversal.
+if [[ ! "$BUILD_CONFIG" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "Error: Invalid build configuration '$BUILD_CONFIG'. Use 'debug' or 'release'." >&2
+    exit 1
+fi
+
 ICON_SOURCE="$ROOT_DIR/Assets/mouse-navigation-icon.png"
 APP_DIR="$ROOT_DIR/dist/${APP_NAME}.app"
 CONTENTS_DIR="$APP_DIR/Contents"

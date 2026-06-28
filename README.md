@@ -60,7 +60,7 @@ Safari, Finder, Chrome, Chrome Canary, Firefox, Firefox Developer Edition, Arc, 
 ## Resource Usage
 
 - Designed for idle background use.
-- Typical idle usage: about `20–30 MB` memory and around `0%` CPU most of the time.
+- Typical idle usage: less than `30 MB` memory and around `0%` CPU most of the time.
   - The daemon runs `NSApplication` with a status bar item, which loads AppKit — the primary baseline cost. The `ServiceManagement` framework (Launch at Login) adds a small fixed overhead on top.
   - Opening Preferences for the first time allocates the mapping panel (~2 MB additional); it stays resident until the app quits.
 - No network activity required.

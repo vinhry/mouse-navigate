@@ -447,6 +447,12 @@ final class MouseNavigator {
         return unsafeBitCast(symbol, to: CoreDockSendNotificationFn.self)
     }()
 
+    deinit {
+        if let handle = hiServicesHandle {
+            dlclose(handle)
+        }
+    }
+
     func runLauncher() {
         if tryAcquireSingleInstanceLock() {
             releaseSingleInstanceLock()
@@ -486,7 +492,9 @@ final class MouseNavigator {
     }
 
     private func tryAcquireSingleInstanceLock() -> Bool {
-        lockFileDescriptor = open(MouseNavigator.lockFilePath, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        // O_NOFOLLOW prevents a symlink attack where an adversary replaces the lock
+        // file with a symlink to a sensitive path before this process creates it.
+        lockFileDescriptor = open(MouseNavigator.lockFilePath, O_CREAT | O_RDWR | O_NOFOLLOW, S_IRUSR | S_IWUSR)
         guard lockFileDescriptor >= 0 else {
             return false
         }
@@ -502,9 +510,14 @@ final class MouseNavigator {
     }
 
     private func launchDaemon() {
-        let executablePath = CommandLine.arguments[0]
+        // Use Bundle.main.executableURL rather than CommandLine.arguments[0].
+        // argv[0] is caller-controlled and could be spoofed or contain a crafted path.
+        guard let executableURL = Bundle.main.executableURL else {
+            fputs("Failed to determine executable path.\n", stderr)
+            return
+        }
         let daemon = Process()
-        daemon.executableURL = URL(fileURLWithPath: executablePath)
+        daemon.executableURL = executableURL
         daemon.arguments = ["--daemon"]
         daemon.standardInput = nil
         daemon.standardOutput = FileHandle.nullDevice
@@ -594,8 +607,11 @@ final class MouseNavigator {
     }
 
     private func requestAccessibilityPermission() {
+        // takeUnretainedValue() is correct here: kAXTrustedCheckOptionPrompt is a
+        // global constant. takeRetainedValue() would decrement its retain count on
+        // each call, eventually leading to a dangling reference.
         let options: NSDictionary = [
-            kAXTrustedCheckOptionPrompt.takeRetainedValue() as NSString: true
+            kAXTrustedCheckOptionPrompt.takeUnretainedValue() as NSString: true
         ]
         if !AXIsProcessTrustedWithOptions(options) {
             print("Accessibility permission is required. Grant access in System Settings > Privacy & Security > Accessibility.")
