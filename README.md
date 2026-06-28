@@ -18,27 +18,51 @@ MouseNavigate focuses only on the button mapping logic and keeps everything mini
 
 ## Behavior
 
-- Button `3` -> Back (`⌘ + [`) in Safari/Finder
-- Button `4` -> Forward (`⌘ + ]`) in Safari/Finder
-- Button `5` -> App Exposé system-wide (uses your configured Mission Control shortcut if enabled)
-- Button `6` -> Mission Control system-wide (uses your configured Mission Control shortcut if enabled)
+- Buttons `3`–`6` are individually configurable via **Preferences** (see [Button Mapping](#button-mapping) below).
+- Default mapping:
+  - Button `3` → Back (`⌘[`) in supported browsers & Finder
+  - Button `4` → Forward (`⌘]`) in supported browsers & Finder
+  - Button `5` → App Exposé system-wide (uses your configured Mission Control shortcut if enabled)
+  - Button `6` → Mission Control system-wide (uses your configured Mission Control shortcut if enabled)
 - Single-instance guard: launching again shows `MouseNavigate is already running.`
-- Low-memory mode: `.app` launch acts as a small launcher and runs a lightweight background daemon for mouse handling.
+- Background daemon architecture: `.app` launch starts a lightweight background daemon, keeping the main process footprint minimal.
 
 ## Status Bar
 
 - While running, MouseNavigate shows a mouse icon (🖱) in the macOS menu bar.
 - The icon is a gray/white template image that automatically adapts to light and dark menu bar appearances.
-- Hover the icon to see a `MouseNavigate – Running` tooltip confirming the daemon is active.
+- When **Paused**, the icon switches to an outline mouse to indicate navigation is suspended.
+- Hover the icon to see a tooltip confirming the running or paused state.
 - Right-click (or click) the icon for the context menu:
-  - **MouseNavigate** — app name header (non-interactive)
-  - **Quit MouseNavigate** — stops the daemon and removes the status bar icon.
+  - **MouseNavigate** / **vX.Y.Z** — app name and version header (non-interactive)
+  - **⚠ Grant Accessibility Permission…** — shown only when the permission has been revoked; clicking opens System Settings → Accessibility directly
+  - **Pause** / **Resume** — temporarily suspends all button handling without quitting
+  - **Launch at Login** ✓ — toggle to start MouseNavigate automatically at login
+  - **Preferences…** — open the Button Mapping window
+  - **Quit MouseNavigate** — stops the daemon
+
+## Button Mapping
+
+Open **Preferences…** from the status bar menu to configure each button.
+
+| Button | Default | Available actions |
+|--------|---------|-------------------|
+| 3 | Back (`⌘[`) | Back, Forward, App Exposé, Mission Control, Disabled |
+| 4 | Forward (`⌘]`) | Back, Forward, App Exposé, Mission Control, Disabled |
+| 5 | App Exposé | Back, Forward, App Exposé, Mission Control, Disabled |
+| 6 | Mission Control | Back, Forward, App Exposé, Mission Control, Disabled |
+
+Changes apply immediately and persist across restarts (stored in `UserDefaults` suite `com.vinhry.MouseNavigate`).
+
+**Back / Forward — supported apps:**
+Safari, Finder, Chrome, Chrome Canary, Firefox, Firefox Developer Edition, Arc, Brave, Edge, Opera, Vivaldi, Orion
 
 ## Resource Usage
 
 - Designed for idle background use.
-- Typical idle usage: about `10–15 MB` memory and around `0%` CPU most of the time.
-  - The daemon runs `NSApplication` to support the menu bar status item, which loads AppKit and accounts for the majority of the baseline memory footprint. This is normal for any macOS menu bar agent.
+- Typical idle usage: about `20–30 MB` memory and around `0%` CPU most of the time.
+  - The daemon runs `NSApplication` with a status bar item, which loads AppKit — the primary baseline cost. The `ServiceManagement` framework (Launch at Login) adds a small fixed overhead on top.
+  - Opening Preferences for the first time allocates the mapping panel (~2 MB additional); it stays resident until the app quits.
 - No network activity required.
 
 ## Quick Start
