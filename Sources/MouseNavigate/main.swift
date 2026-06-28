@@ -133,6 +133,138 @@ private final class SecondaryLaunchDialogController: NSObject {
     }
 }
 
+private enum ButtonAction: String, CaseIterable {
+    case back = "back"
+    case forward = "forward"
+    case appExpose = "appExpose"
+    case missionControl = "missionControl"
+    case disabled = "disabled"
+
+    var displayName: String {
+        switch self {
+        case .back: return "Back (⌘[)"
+        case .forward: return "Forward (⌘])"
+        case .appExpose: return "App Exposé"
+        case .missionControl: return "Mission Control"
+        case .disabled: return "Disabled"
+        }
+    }
+}
+
+private final class ButtonConfig {
+    static let shared = ButtonConfig()
+
+    private static let defaultActions: [Int: ButtonAction] = [
+        3: .back,
+        4: .forward,
+        5: .appExpose,
+        6: .missionControl,
+    ]
+
+    private let store: UserDefaults
+
+    private init() {
+        store = UserDefaults(suiteName: "com.vinhry.MouseNavigate") ?? .standard
+    }
+
+    func action(forButton button: Int) -> ButtonAction {
+        guard let raw = store.string(forKey: "button\(button)"),
+              let action = ButtonAction(rawValue: raw)
+        else {
+            return Self.defaultActions[button] ?? .disabled
+        }
+        return action
+    }
+
+    func setAction(_ action: ButtonAction, forButton button: Int) {
+        store.set(action.rawValue, forKey: "button\(button)")
+    }
+}
+
+private final class PreferencesWindowController: NSObject {
+    private var panel: NSPanel?
+
+    func showOrFocus() {
+        if let panel {
+            panel.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let p = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 220),
+            styleMask: [.titled, .closable, .utilityWindow],
+            backing: .buffered,
+            defer: false
+        )
+        p.title = "Button Mapping"
+        p.isReleasedWhenClosed = false
+        p.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        p.standardWindowButton(.zoomButton)?.isHidden = true
+        p.level = .floating
+
+        let content = p.contentView!
+
+        var rows: [[NSView]] = []
+        for button in 3...6 {
+            let label = NSTextField(labelWithString: "Button \(button):")
+            label.alignment = .right
+            label.translatesAutoresizingMaskIntoConstraints = false
+
+            let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+            popup.tag = button
+            popup.target = self
+            popup.action = #selector(popupChanged(_:))
+            popup.translatesAutoresizingMaskIntoConstraints = false
+            for action in ButtonAction.allCases {
+                popup.addItem(withTitle: action.displayName)
+            }
+            let currentIndex = ButtonAction.allCases.firstIndex(
+                of: ButtonConfig.shared.action(forButton: button)
+            ) ?? 0
+            popup.selectItem(at: currentIndex)
+
+            rows.append([label, popup])
+        }
+
+        let grid = NSGridView(views: rows)
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        grid.rowSpacing = 10
+        grid.columnSpacing = 12
+        grid.column(at: 0).xPlacement = .trailing
+        content.addSubview(grid)
+
+        let closeButton = NSButton(title: "Close", target: self, action: #selector(closeTapped))
+        closeButton.keyEquivalent = "\r"
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(closeButton)
+
+        NSLayoutConstraint.activate([
+            grid.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
+            grid.centerXAnchor.constraint(equalTo: content.centerXAnchor),
+            closeButton.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 16),
+            closeButton.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+        ])
+
+        p.center()
+        p.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        panel = p
+    }
+
+    @objc private func popupChanged(_ sender: NSPopUpButton) {
+        let button = sender.tag
+        let idx = sender.indexOfSelectedItem
+        let actions = ButtonAction.allCases
+        guard idx >= 0, idx < actions.count else { return }
+        ButtonConfig.shared.setAction(actions[idx], forButton: button)
+    }
+
+    @objc private func closeTapped() {
+        panel?.orderOut(nil)
+    }
+}
+
 private final class StatusBarController: NSObject, NSMenuDelegate {
     private static let appVersion: String =
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
@@ -142,6 +274,8 @@ private final class StatusBarController: NSObject, NSMenuDelegate {
     private var launchAtLoginMenuItem: NSMenuItem?
     private var permissionMenuItem: NSMenuItem?
     private var permissionSeparator: NSMenuItem?
+
+    private let preferencesController = PreferencesWindowController()
 
     var onQuit: (() -> Void)?
     var onPauseToggle: ((Bool) -> Void)?
@@ -193,6 +327,13 @@ private final class StatusBarController: NSObject, NSMenuDelegate {
         loginItem.target = self
         menu.addItem(loginItem)
         launchAtLoginMenuItem = loginItem
+
+        menu.addItem(.separator())
+
+        // Preferences
+        let prefsItem = NSMenuItem(title: "Preferences\u{2026}", action: #selector(preferencesTapped), keyEquivalent: "")
+        prefsItem.target = self
+        menu.addItem(prefsItem)
 
         menu.addItem(.separator())
 
@@ -259,6 +400,12 @@ private final class StatusBarController: NSObject, NSMenuDelegate {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    // MARK: - Preferences
+
+    @objc private func preferencesTapped() {
+        preferencesController.showOrFocus()
     }
 
     // MARK: - Quit
@@ -504,30 +651,8 @@ final class MouseNavigator {
             return Unmanaged.passUnretained(event)
         }
 
-        let button = event.getIntegerValueField(.mouseEventButtonNumber)
-
-        switch button {
-        case 3:
-            guard isSupportedFrontmostApp else {
-                return Unmanaged.passUnretained(event)
-            }
-            sendShortcut(keyCode: CGKeyCode(kVK_ANSI_LeftBracket), flags: .maskCommand)
-            return nil
-        case 4:
-            guard isSupportedFrontmostApp else {
-                return Unmanaged.passUnretained(event)
-            }
-            sendShortcut(keyCode: CGKeyCode(kVK_ANSI_RightBracket), flags: .maskCommand)
-            return nil
-        case 5:
-            triggerSystemAppExpose()
-            return nil
-        case 6:
-            triggerSystemMissionControl()
-            return nil
-        default:
-            return Unmanaged.passUnretained(event)
-        }
+        let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
+        return performAction(ButtonConfig.shared.action(forButton: button), event: event)
     }
 
     private var isSupportedFrontmostApp: Bool {
@@ -535,6 +660,27 @@ final class MouseNavigator {
             return false
         }
         return supportedBundleIDs.contains(bundleID)
+    }
+
+    private func performAction(_ action: ButtonAction, event: CGEvent) -> Unmanaged<CGEvent>? {
+        switch action {
+        case .back:
+            guard isSupportedFrontmostApp else { return Unmanaged.passUnretained(event) }
+            sendShortcut(keyCode: CGKeyCode(kVK_ANSI_LeftBracket), flags: .maskCommand)
+            return nil
+        case .forward:
+            guard isSupportedFrontmostApp else { return Unmanaged.passUnretained(event) }
+            sendShortcut(keyCode: CGKeyCode(kVK_ANSI_RightBracket), flags: .maskCommand)
+            return nil
+        case .appExpose:
+            triggerSystemAppExpose()
+            return nil
+        case .missionControl:
+            triggerSystemMissionControl()
+            return nil
+        case .disabled:
+            return Unmanaged.passUnretained(event)
+        }
     }
 
     private func sendShortcut(keyCode: CGKeyCode, flags: CGEventFlags) {
