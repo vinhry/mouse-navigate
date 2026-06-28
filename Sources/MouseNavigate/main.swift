@@ -3,11 +3,33 @@ import ApplicationServices
 import Carbon.HIToolbox
 import Darwin
 import Foundation
+import ServiceManagement
 import notify
 
 private let supportedBundleIDs: Set<String> = [
+    // Apple
     "com.apple.Safari",
-    "com.apple.finder"
+    "com.apple.finder",
+    // Google
+    "com.google.Chrome",
+    "com.google.Chrome.canary",
+    // Mozilla
+    "org.mozilla.firefox",
+    "org.mozilla.firefoxdeveloperedition",
+    // Arc
+    "company.thebrowser.Browser",
+    // Brave
+    "com.brave.Browser",
+    "com.brave.Browser.beta",
+    // Microsoft
+    "com.microsoft.edgemac",
+    "com.microsoft.edgemac.Beta",
+    // Opera
+    "com.operasoftware.Opera",
+    // Vivaldi
+    "com.vivaldi.Vivaldi",
+    // Orion
+    "com.kagi.kagimacOS",
 ]
 
 private final class SecondaryLaunchDialogController: NSObject {
@@ -111,6 +133,149 @@ private final class SecondaryLaunchDialogController: NSObject {
     }
 }
 
+private final class StatusBarController: NSObject, NSMenuDelegate {
+    private static let appVersion: String =
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
+
+    private var statusItem: NSStatusItem?
+    private var pauseMenuItem: NSMenuItem?
+    private var launchAtLoginMenuItem: NSMenuItem?
+    private var permissionMenuItem: NSMenuItem?
+    private var permissionSeparator: NSMenuItem?
+
+    var onQuit: (() -> Void)?
+    var onPauseToggle: ((Bool) -> Void)?
+
+    private(set) var isPaused = false {
+        didSet {
+            updateIcon()
+            pauseMenuItem?.title = isPaused ? "Resume" : "Pause"
+        }
+    }
+
+    func setup() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        updateIcon()
+
+        let menu = NSMenu()
+        menu.delegate = self
+
+        addDisabledItem("MouseNavigate", to: menu)
+        addDisabledItem("v\(Self.appVersion)", to: menu)
+        menu.addItem(.separator())
+
+        // Accessibility permission warning — shown only when not trusted
+        let permItem = NSMenuItem(
+            title: "⚠ Grant Accessibility Permission…",
+            action: #selector(openAccessibilitySettings),
+            keyEquivalent: ""
+        )
+        permItem.target = self
+        permItem.isHidden = true
+        menu.addItem(permItem)
+        permissionMenuItem = permItem
+
+        let permSep = NSMenuItem.separator()
+        permSep.isHidden = true
+        menu.addItem(permSep)
+        permissionSeparator = permSep
+
+        // Pause / Resume
+        let pauseItem = NSMenuItem(title: "Pause", action: #selector(pauseToggleTapped), keyEquivalent: "")
+        pauseItem.target = self
+        menu.addItem(pauseItem)
+        pauseMenuItem = pauseItem
+
+        menu.addItem(.separator())
+
+        // Launch at Login
+        let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(launchAtLoginTapped), keyEquivalent: "")
+        loginItem.target = self
+        menu.addItem(loginItem)
+        launchAtLoginMenuItem = loginItem
+
+        menu.addItem(.separator())
+
+        // Quit
+        let quitItem = NSMenuItem(title: "Quit MouseNavigate", action: #selector(quitTapped), keyEquivalent: "")
+        quitItem.target = self
+        menu.addItem(quitItem)
+
+        statusItem?.menu = menu
+    }
+
+    // MARK: - NSMenuDelegate
+
+    func menuWillOpen(_ menu: NSMenu) {
+        updatePermissionWarning()
+        updateLaunchAtLoginState()
+    }
+
+    // MARK: - Icon
+
+    private func updateIcon() {
+        let name = isPaused ? "computermouse" : "computermouse.fill"
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+        image?.isTemplate = true
+        statusItem?.button?.image = image
+        statusItem?.button?.toolTip = isPaused ? "MouseNavigate – Paused" : "MouseNavigate – Running"
+    }
+
+    // MARK: - Pause
+
+    @objc private func pauseToggleTapped() {
+        isPaused.toggle()
+        onPauseToggle?(isPaused)
+    }
+
+    // MARK: - Launch at Login
+
+    private func updateLaunchAtLoginState() {
+        launchAtLoginMenuItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
+    }
+
+    @objc private func launchAtLoginTapped() {
+        do {
+            if SMAppService.mainApp.status == .enabled {
+                try SMAppService.mainApp.unregister()
+            } else {
+                try SMAppService.mainApp.register()
+            }
+        } catch {
+            // Silently ignore — typically fails when not running from a signed app bundle
+        }
+        updateLaunchAtLoginState()
+    }
+
+    // MARK: - Accessibility
+
+    private func updatePermissionWarning() {
+        let trusted = AXIsProcessTrusted()
+        permissionMenuItem?.isHidden = trusted
+        permissionSeparator?.isHidden = trusted
+    }
+
+    @objc private func openAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    // MARK: - Quit
+
+    @objc private func quitTapped() {
+        onQuit?()
+    }
+
+    // MARK: - Helpers
+
+    private func addDisabledItem(_ title: String, to menu: NSMenu) {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        menu.addItem(item)
+    }
+}
+
 final class MouseNavigator {
     private static let hiServicesPath =
         "/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework/HIServices"
@@ -120,6 +285,8 @@ final class MouseNavigator {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var lockFileDescriptor: CInt = -1
+    private var statusBarController: StatusBarController?
+    private var isPaused = false
 
     private typealias CoreDockSendNotificationFn = @convention(c) (CFString, UnsafeMutableRawPointer?) -> Void
     private let hiServicesHandle = dlopen(MouseNavigator.hiServicesPath, RTLD_NOW)
@@ -151,14 +318,24 @@ final class MouseNavigator {
         }
 
         registerQuitRequestObserver()
-        defer { teardownSingleInstanceResources() }
 
         setbuf(stdout, nil)
         setbuf(stderr, nil)
         requestAccessibilityPermission()
         installEventTap()
+
+        let controller = StatusBarController()
+        controller.onQuit = { NSApp.terminate(nil) }
+        controller.onPauseToggle = { [weak self] paused in self?.isPaused = paused }
+        controller.setup()
+        statusBarController = controller
+
+        NSApplication.shared.setActivationPolicy(.accessory)
         print("mouse-navigate daemon is running. Listening for side buttons.")
-        CFRunLoopRun()
+        NSApplication.shared.run()
+
+        // Reached only when NSApp.stop() is used instead of terminate
+        teardownSingleInstanceResources()
     }
 
     private func tryAcquireSingleInstanceLock() -> Bool {
@@ -255,7 +432,7 @@ final class MouseNavigator {
 
     private func handleQuitRequest() {
         print("Received quit request. Exiting running daemon.")
-        CFRunLoopStop(CFRunLoopGetMain())
+        NSApp.terminate(nil)
     }
 
     private func teardownSingleInstanceResources() {
@@ -323,7 +500,7 @@ final class MouseNavigator {
             return Unmanaged.passUnretained(event)
         }
 
-        guard type == .otherMouseDown else {
+        guard !isPaused, type == .otherMouseDown else {
             return Unmanaged.passUnretained(event)
         }
 

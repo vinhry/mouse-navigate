@@ -25,10 +25,20 @@ MouseNavigate focuses only on the button mapping logic and keeps everything mini
 - Single-instance guard: launching again shows `MouseNavigate is already running.`
 - Low-memory mode: `.app` launch acts as a small launcher and runs a lightweight background daemon for mouse handling.
 
+## Status Bar
+
+- While running, MouseNavigate shows a mouse icon (🖱) in the macOS menu bar.
+- The icon is a gray/white template image that automatically adapts to light and dark menu bar appearances.
+- Hover the icon to see a `MouseNavigate – Running` tooltip confirming the daemon is active.
+- Right-click (or click) the icon for the context menu:
+  - **MouseNavigate** — app name header (non-interactive)
+  - **Quit MouseNavigate** — stops the daemon and removes the status bar icon.
+
 ## Resource Usage
 
 - Designed for idle background use.
-- Typical idle usage: about `2-6 MB` memory and around `0%` CPU most of the time.
+- Typical idle usage: about `10–15 MB` memory and around `0%` CPU most of the time.
+  - The daemon runs `NSApplication` to support the menu bar status item, which loads AppKit and accounts for the majority of the baseline memory footprint. This is normal for any macOS menu bar agent.
 - No network activity required.
 
 ## Quick Start
