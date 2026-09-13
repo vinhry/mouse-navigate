@@ -4,21 +4,40 @@
   <img src="./Assets/mouse-navigation-icon.png" alt="Mouse Navigation Icon" width="96" />
 </p>
 
-Global mouse side-button navigation for macOS.
+Global mouse side-button navigation and keyboard cursor control for macOS.
 
 ## Why This Project
 
 I wanted simple mouse side-button behavior on macOS without running a heavy helper suite.
-MouseNavigate focuses only on the button mapping logic and keeps everything minimal.
+MouseNavigate focuses on the button mapping logic and keeps everything minimal, and adds
+keyboard cursor control so the pointer is reachable without leaving the home row.
 
 ## Device Support
 
-- Supported: Logitech MX4
-- TODO: Logitech MX3
+MouseNavigate detects the attached mouse and applies that model's button profile
+automatically. Each model keeps its own saved mapping, so switching mice never means
+remapping.
+
+| Model | Status |
+|-------|--------|
+| Logitech MX Master 4 | Auto-detected |
+| Logitech MX Master 3 / 3S | Auto-detected |
+| Anything else | Falls back to a generic profile |
+
+Detection reads the HID product string first and falls back to a product-ID table, so the
+same mouse is recognised over Bluetooth, a Bolt receiver or a Unifying receiver. Override
+it manually in **Preferences → Mouse** if you prefer.
+
+To see what MouseNavigate detects:
+
+```bash
+./.build/release/MouseNavigate --list-devices
+```
 
 ## Behavior
 
-- Buttons `3`–`6` are individually configurable via **Preferences** (see [Button Mapping](#button-mapping) below).
+- Buttons `3`–`9` are individually configurable via **Preferences** (see [Button Mapping](#button-mapping) below).
+- Hold `A` to drive the pointer from the keyboard (see [Keyboard Cursor](#keyboard-cursor) below).
 - Default mapping:
   - Button `3` → Back (`⌘[`) in supported browsers & Finder
   - Button `4` → Forward (`⌘]`) in supported browsers & Finder
@@ -32,30 +51,90 @@ MouseNavigate focuses only on the button mapping logic and keeps everything mini
 - While running, MouseNavigate shows a mouse icon (🖱) in the macOS menu bar.
 - The icon is a gray/white template image that automatically adapts to light and dark menu bar appearances.
 - When **Paused**, the icon switches to an outline mouse to indicate navigation is suspended.
+- While keyboard cursor mode is engaged, the icon switches to a motion cursor so it is obvious that keys are being captured.
 - Hover the icon to see a tooltip confirming the running or paused state.
 - Right-click (or click) the icon for the context menu:
   - **MouseNavigate** / **vX.Y.Z** — app name and version header (non-interactive)
   - **⚠ Grant Accessibility Permission…** — shown only when the permission has been revoked; clicking opens System Settings → Accessibility directly
   - **Pause** / **Resume** — temporarily suspends all button handling without quitting
   - **Launch at Login** ✓ — toggle to start MouseNavigate automatically at login
-  - **Preferences…** — open the Button Mapping window
+  - **⚠ Grant Input Monitoring…** — shown only when keyboard events are blocked
+  - **Preferences…** — open the Preferences window
   - **Quit MouseNavigate** — stops the daemon
 
 ## Button Mapping
 
 Open **Preferences…** from the status bar menu to configure each button.
 
-| Button | Default | Available actions |
-|--------|---------|-------------------|
-| 3 | Back (`⌘[`) | Back, Forward, App Exposé, Mission Control, Disabled |
-| 4 | Forward (`⌘]`) | Back, Forward, App Exposé, Mission Control, Disabled |
-| 5 | App Exposé | Back, Forward, App Exposé, Mission Control, Disabled |
-| 6 | Mission Control | Back, Forward, App Exposé, Mission Control, Disabled |
+Mappings are saved **per device profile**, so the MX Master 4 and MX Master 3 each keep
+their own layout.
+
+| Button | MX Master 4 default | MX Master 3 default |
+|--------|---------------------|---------------------|
+| 3 | Back (`⌘[`) | Back (`⌘[`) |
+| 4 | Forward (`⌘]`) | Forward (`⌘]`) |
+| 5 | App Exposé | — |
+| 6 | Mission Control | — |
+| 7–9 | — | — |
+
+Available actions: Back, Forward, App Exposé, Mission Control, Toggle Keyboard Cursor, Disabled.
+
+Not sure which physical button is which? Open **Preferences → Mouse** and press a button —
+the panel reports the number it reported, so you can map it directly.
 
 Changes apply immediately and persist across restarts (stored in `UserDefaults` suite `com.vinhry.MouseNavigate`).
 
 **Back / Forward — supported apps:**
 Safari, Finder, Chrome, Chrome Canary, Firefox, Firefox Developer Edition, Arc, Brave, Edge, Opera, Vivaldi, Orion
+
+## Keyboard Cursor
+
+Drive the pointer without leaving the home row. **Hold** the activate key (`A` by default)
+to engage, then:
+
+| Key | Action |
+|-----|--------|
+| `I` / `K` / `J` / `L` | Move up / down / left / right |
+| `S` | Left click — hold it while moving to drag |
+| `D` | Right click |
+| `F` | Middle click |
+| `Space` (hold) | `IJKL` scrolls instead of moving |
+| `;` | Lock cursor mode so it stays on after releasing `A` |
+| `Esc` | Exit, releasing anything still held |
+
+Speed tiers, held alongside `A`:
+
+| Modifier | Effect |
+|----------|--------|
+| *(none)* | Normal — eases from 280 up to 1400 pt/s |
+| `Shift` | Fast (×2.2) |
+| `Shift`+`Ctrl` | Fastest (×4.0) |
+| `Option` | Precision (×0.25) |
+
+Movement eases in rather than starting at full speed, and diagonals travel at the same
+rate as the axes. Every key and every speed is rebindable in **Preferences → Keyboard
+Cursor**, along with the hold delay.
+
+### Why it does not break typing
+
+`A` is an ordinary letter, so MouseNavigate never simply swallows it. The key is withheld
+for the hold delay (250 ms by default) and cursor mode engages only if it is *still* down
+when that expires. Anything else hands the letter straight back:
+
+- **Released early** — a tap types `a` as usual.
+- **Another key arrives first** — typing `as` or `ad` at speed replays the `a` and gets out
+  of the way, so a roll never fires a click.
+- **A modifier is involved** — `⌘A`, `⇧A` and friends pass through untouched.
+- **A password field has focus** — Secure Event Input cuts the tap off entirely, so `A`
+  behaves completely normally.
+
+While engaged, only the mapped keys are captured; everything else still reaches the
+frontmost app, so `⌘Tab` and `⌘W` keep working. Cursor mode also releases everything and
+stands down on sleep, screen lock, **Pause**, and if the event tap is ever cut off
+mid-hold.
+
+You can also bind a mouse button to **Toggle Keyboard Cursor** to latch the mode without
+using the keyboard at all.
 
 ## Resource Usage
 
@@ -91,6 +170,16 @@ open /Applications/MouseNavigate.app
 ```bash
 swift build
 ```
+
+## Test
+
+```bash
+swift test
+```
+
+The pure logic — device matching, the movement curve, screen clamping and the activation
+state machine that protects normal typing — lives in the `MouseNavigateCore` target so it
+can be tested without any UI.
 
 ## Build .app Bundle
 
@@ -128,7 +217,9 @@ Or run the built binary directly:
 
 ## Security & Privacy
 
-- MouseNavigate listens to global side-button mouse events.
+- MouseNavigate listens to global side-button mouse events, and to key events when
+  keyboard cursor control is enabled. Keystrokes are inspected only to match them against
+  your configured bindings; nothing is recorded or stored.
 - MouseNavigate sends local keyboard/system actions.
 - MouseNavigate requires macOS Accessibility/Input Monitoring permissions.
 - MouseNavigate does not require network access to function.

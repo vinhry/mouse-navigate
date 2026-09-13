@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-09-12
+
+### Added
+- **Device auto-detection.** The attached mouse is identified over IOKit and its button
+  profile applied automatically. Logitech MX Master 4 and MX Master 3 / 3S are recognised
+  by HID product string, with a product-ID fallback so Bluetooth, Bolt and Unifying
+  connections all match. Anything else gets a generic profile.
+- **Per-device button mappings**, so switching mice no longer means remapping. Buttons
+  `3`–`9` are now configurable, up from `3`–`6`.
+- **Keyboard cursor control.** Hold `A` to drive the pointer: `IJKL` to move, `S` / `D` /
+  `F` to click (hold `S` to drag), `Space` to scroll, `;` to lock, `Esc` to exit. `Shift`
+  and `Shift`+`Ctrl` are speed tiers, `Option` is precision. Movement eases in and
+  diagonals are normalised.
+- Every cursor key and speed value is rebindable in Preferences.
+- **Toggle Keyboard Cursor** as a mouse button action.
+- Button tester in Preferences, which reports the number of whichever button you press.
+- Input Monitoring warning in the status menu, alongside the existing Accessibility one.
+- `--list-devices` flag for diagnosing detection.
+- Unit tests covering device matching, the movement curve, screen clamping and the
+  activation state machine.
+
+### Changed
+- Preferences is now a two-tab window: **Mouse** and **Keyboard Cursor**.
+- The status bar icon changes while cursor mode is engaged.
+- `main.swift` split into focused files, with the pure logic moved to a new
+  `MouseNavigateCore` library target.
+
+### Notes
+- The activation key is withheld rather than swallowed: cursor mode engages only if it is
+  still held after the delay, so typing rolls like `as` and shortcuts like `⌘A` are
+  unaffected.
+
 ## [0.1.0] - 2026-04-06
 
 ### Added
