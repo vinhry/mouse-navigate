@@ -35,6 +35,11 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         didSet { updateIcon() }
     }
 
+    /// Nothing works until Accessibility is granted, so the icon has to say so.
+    var isAwaitingPermission = false {
+        didSet { updateIcon() }
+    }
+
     init(detector: DeviceDetector, preferencesController: PreferencesWindowController) {
         self.detector = detector
         self.preferencesController = preferencesController
@@ -129,7 +134,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     private func updateIcon() {
         let name: String
-        if isCursorModeActive {
+        if isAwaitingPermission {
+            name = "exclamationmark.triangle"
+        } else if isCursorModeActive {
             name = "cursorarrow.motionlines"
         } else if isPaused {
             name = "computermouse"
@@ -142,7 +149,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         image?.isTemplate = true
         statusItem?.button?.image = image
 
-        if isCursorModeActive {
+        if isAwaitingPermission {
+            statusItem?.button?.toolTip = "MouseNavigate – Needs Accessibility permission"
+        } else if isCursorModeActive {
             statusItem?.button?.toolTip = "MouseNavigate – Cursor mode"
         } else {
             statusItem?.button?.toolTip = isPaused

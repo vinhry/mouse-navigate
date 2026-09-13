@@ -14,6 +14,7 @@ final class MouseNavigator {
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var permissionTimer: DispatchSourceTimer?
     private var lockFileDescriptor: CInt = -1
     private var statusBarController: StatusBarController?
     private var preferencesController: PreferencesWindowController?
@@ -72,7 +73,7 @@ final class MouseNavigator {
         setbuf(stdout, nil)
         setbuf(stderr, nil)
         requestAccessibilityPermission()
-        installEventTap()
+        let tapInstalled = installEventTap()
 
         detector.start()
 
@@ -94,6 +95,10 @@ final class MouseNavigator {
 
         cursorEngine.onModeChange = { [weak controller] active in
             controller?.isCursorModeActive = active
+        }
+
+        if !tapInstalled {
+            waitForAccessibilityPermission()
         }
 
         NSApplication.shared.setActivationPolicy(.accessory)
@@ -232,7 +237,9 @@ final class MouseNavigator {
         }
     }
 
-    private func installEventTap() {
+    /// Returns false when the tap cannot be created, which is the normal state until
+    /// Accessibility permission has been granted.
+    private func installEventTap() -> Bool {
         var mask = CGEventMask(1) << CGEventType.otherMouseDown.rawValue
         mask |= CGEventMask(1) << CGEventType.keyDown.rawValue
         mask |= CGEventMask(1) << CGEventType.keyUp.rawValue
@@ -259,7 +266,7 @@ final class MouseNavigator {
 
         guard let eventTap else {
             fputs("Failed to create event tap. Check Accessibility/Input Monitoring permissions.\n", stderr)
-            exit(1)
+            return false
         }
 
         runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
@@ -270,6 +277,27 @@ final class MouseNavigator {
 
         CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: eventTap, enable: true)
+        return true
+    }
+
+    /// Quitting here would leave a first-time user with no icon and no explanation, so stay
+    /// in the menu bar showing the permission warning. macOS posts nothing when the grant
+    /// arrives, so poll for it and install the tap the moment it does.
+    private func waitForAccessibilityPermission() {
+        statusBarController?.isAwaitingPermission = true
+
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + 1, repeating: .seconds(1))
+        timer.setEventHandler { [weak self] in
+            guard let self, AXIsProcessTrusted(), self.installEventTap() else { return }
+
+            self.permissionTimer?.cancel()
+            self.permissionTimer = nil
+            self.statusBarController?.isAwaitingPermission = false
+            print("Accessibility permission granted. Listening for side buttons and keyboard cursor keys.")
+        }
+        timer.resume()
+        permissionTimer = timer
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
