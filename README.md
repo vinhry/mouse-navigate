@@ -52,10 +52,11 @@ To see what MouseNavigate detects:
 - The icon is a gray/white template image that automatically adapts to light and dark menu bar appearances.
 - When **Paused**, the icon switches to an outline mouse to indicate navigation is suspended.
 - While keyboard cursor mode is engaged, the icon switches to a motion cursor so it is obvious that keys are being captured.
+- Until Accessibility permission is granted, the icon shows a warning triangle. MouseNavigate keeps running and starts working as soon as the permission is turned on — no relaunch needed.
 - Hover the icon to see a tooltip confirming the running or paused state.
 - Right-click (or click) the icon for the context menu:
   - **MouseNavigate** / **vX.Y.Z** — app name and version header (non-interactive)
-  - **⚠ Grant Accessibility Permission…** — shown only when the permission has been revoked; clicking opens System Settings → Accessibility directly
+  - **⚠ Grant Accessibility Permission…** — shown only while the permission is missing; clicking opens System Settings → Accessibility directly
   - **Pause** / **Resume** — temporarily suspends all button handling without quitting
   - **Launch at Login** ✓ — toggle to start MouseNavigate automatically at login
   - **⚠ Grant Input Monitoring…** — shown only when keyboard events are blocked
@@ -144,7 +145,24 @@ using the keyboard at all.
   - Opening Preferences for the first time allocates the mapping panel (~2 MB additional); it stays resident until the app quits.
 - No network activity required.
 
-## Quick Start
+## Install
+
+Requires macOS 13 Ventura or later, on Apple silicon or Intel.
+
+1. Download `MouseNavigate.zip` from the [latest release](https://github.com/vinhry/mouse-navigate/releases/latest) and unzip it.
+2. Move **MouseNavigate.app** into your **Applications** folder. Run it from there rather
+   than from Downloads: macOS launches apps left in Downloads from a temporary read-only
+   location, which can break **Launch at Login**.
+3. Open it. macOS confirms that it was downloaded from the internet — click **Open**.
+   Releases are signed with a Developer ID and notarized by Apple.
+4. When asked, allow Accessibility access: `System Settings` → `Privacy & Security` →
+   `Accessibility` → turn on **MouseNavigate**. The menu bar icon shows a warning triangle
+   until you do, then switches to a mouse — no relaunch needed.
+5. If keyboard cursor keys do nothing, also allow `Input Monitoring` in the same place.
+
+Permissions survive updates: download the new release and replace the app.
+
+## Build from Source
 
 1. Build app bundle:
 ```bash
@@ -187,15 +205,18 @@ can be tested without any UI.
 ./scripts/build-app.sh
 ```
 
+The script builds `arm64` and `x86_64` separately and merges them into a universal binary.
+
 Use stable signing (recommended for Accessibility permission persistence):
 
 ```bash
 security find-identity -v -p codesigning
-SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" ./scripts/build-app.sh
+SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/build-app.sh
 ```
 
-If `SIGN_IDENTITY` is not set, the script tries to auto-pick an `Apple Development` identity.
-If none is found, it falls back to ad-hoc signing (`-`), which may require re-adding Accessibility permission after rebuilds.
+If `SIGN_IDENTITY` is not set, the script picks the first `Developer ID Application` identity,
+then the first `Apple Development` one. If neither exists, it falls back to ad-hoc signing
+(`-`), which ties the permission to that exact build, so macOS asks again after every rebuild.
 
 This creates:
 
@@ -226,8 +247,12 @@ Or run the built binary directly:
 
 ## Gatekeeper Notes
 
-- If app is ad-hoc signed, macOS may warn on first launch.
-- For stable identity and fewer permission resets, sign with a persistent development certificate.
+- Release builds are signed with a Developer ID, notarized and stapled, so they open with
+  only the standard downloaded-from-the-internet confirmation.
+- A local build is signed but not notarized. macOS 15 and later block it when it arrives
+  from another Mac; allow it under `System Settings` → `Privacy & Security` → **Open Anyway**.
+- An ad-hoc signed build loses its Accessibility permission on every rebuild. Sign with a
+  Developer ID or Apple Development certificate to avoid that.
 
 ## Images
 
@@ -235,11 +260,12 @@ Or run the built binary directly:
 
 ## Versioning
 
-- Current release: `0.1.0`
-- Create a git tag for release:
+- Current release: `0.2.0`
+- Pushing a version tag builds, signs, notarizes and publishes the release
+  (`.github/workflows/release.yml`):
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 ## Icon Attribution

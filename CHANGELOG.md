@@ -20,12 +20,17 @@ All notable changes to this project will be documented in this file.
 - Button tester in Preferences, which reports the number of whichever button you press.
 - Input Monitoring warning in the status menu, alongside the existing Accessibility one.
 - `--list-devices` flag for diagnosing detection.
+- **Universal binary**, so the app runs on Intel Macs as well as Apple silicon.
 - Unit tests covering device matching, the movement curve, screen clamping and the
   activation state machine.
 
 ### Changed
 - Preferences is now a two-tab window: **Mouse** and **Keyboard Cursor**.
 - The status bar icon changes while cursor mode is engaged.
+- Without Accessibility permission the app no longer quits silently. It stays in the menu
+  bar with a warning icon and starts working as soon as the permission is granted.
+- Local builds are signed with a Developer ID identity when one is available, so
+  permissions survive rebuilds.
 - `main.swift` split into focused files, with the pure logic moved to a new
   `MouseNavigateCore` library target.
 
