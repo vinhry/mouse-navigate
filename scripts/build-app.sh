@@ -6,9 +6,10 @@ APP_NAME="MouseNavigate"
 BUNDLE_ID="com.vinhry.MouseNavigate"
 BUILD_CONFIG="${1:-release}"
 
-# Set this to your persistent signing identity to keep Accessibility permission stable.
-# Example:
-#   SIGN_IDENTITY='Apple Development: Your Name (TEAMID)' ./scripts/build-app.sh
+# A persistent signing identity keeps Accessibility permission stable across rebuilds.
+# Left empty, the first Developer ID Application or Apple Development identity in the
+# keychain is used. To pick one explicitly:
+#   SIGN_IDENTITY='Developer ID Application: Your Name (TEAMID)' ./scripts/build-app.sh
 SIGN_IDENTITY="${SIGN_IDENTITY:-}"
 
 # Restrict BUILD_CONFIG to safe identifier characters to prevent path traversal.
@@ -95,7 +96,13 @@ EOF_PLIST
 
 if command -v codesign >/dev/null 2>&1; then
   if [[ -z "$SIGN_IDENTITY" ]] && command -v security >/dev/null 2>&1; then
-    SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development:/{print $2; exit}')"
+    # Prefer Developer ID: it matches release builds, so a permission granted to a local
+    # build also covers an installed release, and vice versa.
+    IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null)"
+    for PREFIX in "Developer ID Application:" "Apple Development:"; do
+      SIGN_IDENTITY="$(awk -F'"' -v prefix="$PREFIX" 'index($2, prefix) == 1 {print $2; exit}' <<<"$IDENTITIES")"
+      [[ -n "$SIGN_IDENTITY" ]] && break
+    done
   fi
 
   if [[ -n "$SIGN_IDENTITY" ]]; then
