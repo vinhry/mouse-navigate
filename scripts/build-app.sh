@@ -25,20 +25,27 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 ICONSET_DIR="$ROOT_DIR/.build/AppIcon.iconset"
 ICNS_PATH="$RESOURCES_DIR/AppIcon.icns"
-BIN_PATH="$ROOT_DIR/.build/$BUILD_CONFIG/$APP_NAME"
 
 if [[ ! -f "$ICON_SOURCE" ]]; then
   echo "Missing icon source at: $ICON_SOURCE" >&2
   exit 1
 fi
 
-echo "Building ${APP_NAME} (${BUILD_CONFIG})..."
-swift build -c "$BUILD_CONFIG"
+# Build each architecture on its own and merge them with lipo, so the app runs on both
+# Apple silicon and Intel Macs. Passing both --arch flags to one build would require
+# Xcode's build system instead of SwiftPM's own.
+ARCH_BINARIES=()
+for ARCH in arm64 x86_64; do
+  echo "Building ${APP_NAME} (${BUILD_CONFIG}, ${ARCH})..."
+  swift build -c "$BUILD_CONFIG" --arch "$ARCH"
 
-if [[ ! -f "$BIN_PATH" ]]; then
-  echo "Built binary not found: $BIN_PATH" >&2
-  exit 1
-fi
+  ARCH_BINARY="$(swift build -c "$BUILD_CONFIG" --arch "$ARCH" --show-bin-path)/$APP_NAME"
+  if [[ ! -f "$ARCH_BINARY" ]]; then
+    echo "Built binary not found: $ARCH_BINARY" >&2
+    exit 1
+  fi
+  ARCH_BINARIES+=("$ARCH_BINARY")
+done
 
 echo "Preparing app bundle..."
 rm -rf "$APP_DIR" "$ICONSET_DIR"
@@ -58,7 +65,7 @@ sips -z 1024 1024 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/
 
 iconutil -c icns "$ICONSET_DIR" -o "$ICNS_PATH"
 
-cp "$BIN_PATH" "$MACOS_DIR/$APP_NAME"
+lipo -create "${ARCH_BINARIES[@]}" -output "$MACOS_DIR/$APP_NAME"
 chmod +x "$MACOS_DIR/$APP_NAME"
 
 cat >"$CONTENTS_DIR/Info.plist" <<EOF_PLIST
