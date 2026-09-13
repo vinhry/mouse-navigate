@@ -45,7 +45,7 @@ final class PreferencesWindowController: NSObject {
         }
 
         let p = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 480),
             styleMask: [.titled, .closable, .utilityWindow],
             backing: .buffered,
             defer: false
@@ -63,22 +63,37 @@ final class PreferencesWindowController: NSObject {
         tabView.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(tabView)
 
+        let mousePage = makeMouseTab()
         let mouseTab = NSTabViewItem(identifier: "mouse")
         mouseTab.label = "Mouse"
-        mouseTab.view = makeMouseTab()
+        mouseTab.view = mousePage
         tabView.addTabViewItem(mouseTab)
 
+        let cursorPage = makeCursorTab()
         let cursorTab = NSTabViewItem(identifier: "cursor")
         cursorTab.label = "Keyboard Cursor"
-        cursorTab.view = makeCursorTab()
+        cursorTab.view = cursorPage
         tabView.addTabViewItem(cursorTab)
 
+        let margin: CGFloat = 12
         NSLayoutConstraint.activate([
-            tabView.topAnchor.constraint(equalTo: content.topAnchor, constant: 12),
-            tabView.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
-            tabView.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
-            tabView.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12),
+            tabView.topAnchor.constraint(equalTo: content.topAnchor, constant: margin),
+            tabView.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: margin),
+            tabView.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -margin),
+            tabView.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -margin),
         ])
+
+        // A tab view takes no size from its pages, so size the window to the larger page
+        // plus the tab chrome. A fixed size clipped the cursor tab's lower rows.
+        let pages = [mousePage.fittingSize, cursorPage.fittingSize]
+        let probe = NSRect(x: 0, y: 0, width: 1000, height: 1000)
+        tabView.frame = probe
+        let chromeWidth = probe.width - tabView.contentRect.width
+        let chromeHeight = probe.height - tabView.contentRect.height
+        p.setContentSize(NSSize(
+            width: (pages.map(\.width).max() ?? 0) + chromeWidth + margin * 2,
+            height: (pages.map(\.height).max() ?? 0) + chromeHeight + margin * 2
+        ))
 
         p.center()
         p.makeKeyAndOrderFront(nil)
@@ -93,12 +108,8 @@ final class PreferencesWindowController: NSObject {
     // MARK: - Mouse tab
 
     private func makeMouseTab() -> NSView {
-        let view = NSView()
-
         let label = NSTextField(labelWithString: "Detecting…")
         label.font = .systemFont(ofSize: 13, weight: .semibold)
-        label.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(label)
         deviceLabel = label
 
         let overrideLabel = NSTextField(labelWithString: "Profile:")
@@ -111,6 +122,7 @@ final class PreferencesWindowController: NSObject {
         for profile in DeviceProfile.allCases {
             popup.addItem(withTitle: profile.displayName)
         }
+        popup.widthAnchor.constraint(greaterThanOrEqualToConstant: 240).isActive = true
         overridePopup = popup
 
         var rows: [[NSView]] = [[overrideLabel, popup]]
@@ -131,64 +143,96 @@ final class PreferencesWindowController: NSObject {
             rows.append([buttonLabel, actionPopup])
         }
 
-        let grid = NSGridView(views: rows)
-        grid.translatesAutoresizingMaskIntoConstraints = false
-        grid.rowSpacing = 8
-        grid.columnSpacing = 12
-        grid.column(at: 0).xPlacement = .trailing
-        view.addSubview(grid)
+        let grid = makeFormGrid(rows, rowSpacing: 8)
+        // Every picker takes the width of the widest, so the column reads as one edge.
+        grid.column(at: 1).xPlacement = .fill
+        // Keep the profile picker visually apart from the per-button rows.
+        grid.row(at: 0).bottomPadding = 8
 
         let tester = NSTextField(labelWithString: "Press a mouse button to identify it…")
         tester.font = .systemFont(ofSize: 11)
         tester.textColor = .secondaryLabelColor
-        tester.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(tester)
         testerLabel = tester
 
+        let stack = NSStackView(views: [label, grid, tester])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 14
+        stack.setCustomSpacing(18, after: grid)
+
+        return makePage(stack)
+    }
+
+    // MARK: - Layout helpers
+
+    /// Wraps a tab's content with margins. Trailing and bottom are inequalities so the
+    /// page can be handed more room than it needs, which also lets `fittingSize` report
+    /// the size it actually needs.
+    private func makePage(_ content: NSView) -> NSView {
+        let page = NSView()
+        content.translatesAutoresizingMaskIntoConstraints = false
+        page.addSubview(content)
+
         NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
-            label.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
-
-            grid.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 14),
-            grid.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-
-            tester.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 16),
-            tester.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            tester.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
+            content.topAnchor.constraint(equalTo: page.topAnchor, constant: 16),
+            content.centerXAnchor.constraint(equalTo: page.centerXAnchor),
+            content.leadingAnchor.constraint(greaterThanOrEqualTo: page.leadingAnchor, constant: 20),
+            content.bottomAnchor.constraint(lessThanOrEqualTo: page.bottomAnchor, constant: -16),
         ])
 
-        return view
+        return page
+    }
+
+    /// Right-aligned labels in the first column, controls vertically centred on them.
+    private func makeFormGrid(_ rows: [[NSView]], rowSpacing: CGFloat) -> NSGridView {
+        let grid = NSGridView(views: rows)
+        grid.rowSpacing = rowSpacing
+        grid.columnSpacing = 10
+        grid.column(at: 0).xPlacement = .trailing
+        grid.rowAlignment = .none
+        for index in 0..<grid.numberOfRows {
+            grid.row(at: index).yPlacement = .center
+        }
+        // Pin the natural height. Beside a taller section the grid would otherwise stretch
+        // and pour the spare height into arbitrary rows, and its internal spacing
+        // constraints are too weak for content hugging to hold it without squashing rows.
+        let naturalHeight = grid.heightAnchor.constraint(equalToConstant: grid.fittingSize.height)
+        naturalHeight.priority = .init(999)
+        naturalHeight.isActive = true
+        return grid
+    }
+
+    private func makeSection(title: String, content: NSView) -> NSStackView {
+        let header = NSTextField(labelWithString: title)
+        header.font = .systemFont(ofSize: 12, weight: .semibold)
+        header.textColor = .secondaryLabelColor
+
+        let section = NSStackView(views: [header, content])
+        section.orientation = .vertical
+        section.alignment = .leading
+        section.spacing = 10
+        return section
     }
 
     // MARK: - Cursor tab
 
     private func makeCursorTab() -> NSView {
-        let view = NSView()
-
         let checkbox = NSButton(
             checkboxWithTitle: "Enable keyboard cursor control",
             target: self,
             action: #selector(enabledChanged(_:))
         )
         checkbox.state = Preferences.shared.isCursorModeEnabled ? .on : .off
-        checkbox.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(checkbox)
         enableCheckbox = checkbox
 
         let hint = NSTextField(
             labelWithString: "Hold the activate key, then use the movement keys. "
-                + "Shift speeds up, Shift+Ctrl is fastest, Option is precise."
+                + "Shift is faster, Shift+Ctrl fastest, Option precise."
         )
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
-        hint.lineBreakMode = .byWordWrapping
-        hint.maximumNumberOfLines = 3
-        hint.preferredMaxLayoutWidth = 400
-        hint.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(hint)
 
-        var rows: [[NSView]] = []
+        var keyRows: [[NSView]] = []
 
         for binding in CursorBinding.allCases {
             let label = NSTextField(labelWithString: "\(binding.displayName):")
@@ -207,9 +251,10 @@ final class PreferencesWindowController: NSObject {
             }
             recorders[binding] = recorder
 
-            rows.append([label, recorder])
+            keyRows.append([label, recorder])
         }
 
+        var speedRows: [[NSView]] = []
         for setting in CursorSetting.allCases {
             let label = NSTextField(labelWithString: "\(setting.displayName):")
             label.alignment = .right
@@ -223,7 +268,7 @@ final class PreferencesWindowController: NSObject {
             )
             slider.tag = CursorSetting.allCases.firstIndex(of: setting) ?? 0
             slider.translatesAutoresizingMaskIntoConstraints = false
-            slider.widthAnchor.constraint(equalToConstant: 150).isActive = true
+            slider.widthAnchor.constraint(equalToConstant: 160).isActive = true
             sliders[setting] = slider
 
             let valueLabel = NSTextField(labelWithString: "")
@@ -234,40 +279,39 @@ final class PreferencesWindowController: NSObject {
             sliderValueLabels[setting] = valueLabel
             updateValueLabel(for: setting)
 
-            rows.append([label, slider, valueLabel])
+            speedRows.append([label, slider, valueLabel])
         }
 
-        let grid = NSGridView(views: rows)
-        grid.translatesAutoresizingMaskIntoConstraints = false
-        grid.rowSpacing = 6
-        grid.columnSpacing = 10
-        grid.column(at: 0).xPlacement = .trailing
-        view.addSubview(grid)
+        // Keys and speed side by side: stacked, the two lists outgrow a laptop screen.
+        let sections = NSStackView(views: [
+            makeSection(title: "Keys", content: makeFormGrid(keyRows, rowSpacing: 6)),
+            makeSection(title: "Speed", content: makeFormGrid(speedRows, rowSpacing: 12)),
+        ])
+        sections.orientation = .horizontal
+        sections.alignment = .top
+        sections.spacing = 36
 
         let restore = NSButton(
             title: "Restore Defaults",
             target: self,
             action: #selector(restoreDefaultsTapped)
         )
-        restore.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(restore)
 
-        NSLayoutConstraint.activate([
-            checkbox.topAnchor.constraint(equalTo: view.topAnchor, constant: 12),
-            checkbox.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+        // Pushes Restore Defaults to the trailing edge of the row.
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let footer = NSStackView(views: [spacer, restore])
+        footer.orientation = .horizontal
 
-            hint.topAnchor.constraint(equalTo: checkbox.bottomAnchor, constant: 6),
-            hint.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            hint.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+        let stack = NSStackView(views: [checkbox, hint, sections, footer])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.setCustomSpacing(18, after: hint)
+        stack.setCustomSpacing(16, after: sections)
+        footer.widthAnchor.constraint(equalTo: sections.widthAnchor).isActive = true
 
-            grid.topAnchor.constraint(equalTo: hint.bottomAnchor, constant: 10),
-            grid.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-
-            restore.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 12),
-            restore.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-        ])
-
-        return view
+        return makePage(stack)
     }
 
     // MARK: - Live button tester

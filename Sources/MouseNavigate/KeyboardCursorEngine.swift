@@ -406,8 +406,10 @@ final class KeyboardCursorEngine {
             // mode is meant to outlive it.
             guard self.gate.phase == .engaged else { return }
 
+            // Read the hardware state: the tap consumes the activation key, so the
+            // session state never sees it go down and would always report it released.
             let stillDown = CGEventSource.keyState(
-                .combinedSessionState,
+                .hidSystemState,
                 key: CGKeyCode(self.activationKey)
             )
             if !stillDown {

@@ -22,7 +22,7 @@ final class KeyRecorderButton: NSButton {
         target = self
         action = #selector(startRecording)
         translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(greaterThanOrEqualToConstant: 110).isActive = true
+        widthAnchor.constraint(greaterThanOrEqualToConstant: 96).isActive = true
         update(keyCode: keyCode)
     }
 
