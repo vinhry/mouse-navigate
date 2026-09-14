@@ -35,6 +35,8 @@ final class KeyboardCursorEngine {
     private var screens: [Rect] = []
 
     private let keyEventSource = CGEventSource(stateID: .hidSystemState)
+    /// Modifier flags (Caps Lock, in practice) on the activation key-down being withheld.
+    private var withheldFlags: CGEventFlags = []
 
     /// Suspends the engine entirely — used while a key recorder in preferences is armed,
     /// and while the app is paused from the status menu.
@@ -78,7 +80,14 @@ final class KeyboardCursorEngine {
 
     // MARK: - Key routing
 
-    func handleKeyDown(keyCode: UInt16, flags: CGEventFlags, isRepeat: Bool) -> Disposition {
+    /// `proxy` is the tap the event is passing through; replayed keystrokes are inserted
+    /// there so they stay in order with the event being handled.
+    func handleKeyDown(
+        keyCode: UInt16,
+        flags: CGEventFlags,
+        isRepeat: Bool,
+        proxy: CGEventTapProxy
+    ) -> Disposition {
         guard isEnabled else { return .pass }
 
         let outcome = gate.keyDown(
@@ -91,12 +100,15 @@ final class KeyboardCursorEngine {
         switch outcome {
         case .handleEngaged:
             return handleKeyDownEngaged(keyCode: keyCode, flags: flags, isRepeat: isRepeat)
+        case .armHold:
+            withheldFlags = flags
+            return apply(outcome, proxy: proxy)
         default:
-            return apply(outcome)
+            return apply(outcome, proxy: proxy)
         }
     }
 
-    func handleKeyUp(keyCode: UInt16) -> Disposition {
+    func handleKeyUp(keyCode: UInt16, proxy: CGEventTapProxy) -> Disposition {
         guard isEnabled else { return .pass }
 
         let outcome = gate.keyUp(keyCode: keyCode, activationKey: activationKey)
@@ -108,24 +120,24 @@ final class KeyboardCursorEngine {
             tearDownCursorMode()
             return .consume
         default:
-            return apply(outcome)
+            return apply(outcome, proxy: proxy)
         }
     }
 
-    func handleFlagsChanged(flags: CGEventFlags) {
+    func handleFlagsChanged(flags: CGEventFlags, proxy: CGEventTapProxy) {
         guard isEnabled else { return }
 
         // A modifier joining a pending hold means a shortcut, not cursor mode.
         if flags.contains(.maskCommand) || flags.contains(.maskAlternate)
             || flags.contains(.maskControl) {
-            _ = apply(gate.modifierJoined())
+            _ = apply(gate.modifierJoined(), proxy: proxy)
         }
 
         updateTier(from: flags)
     }
 
     /// Carry out the side effects the gate asked for.
-    private func apply(_ outcome: ActivationGate.Outcome) -> Disposition {
+    private func apply(_ outcome: ActivationGate.Outcome, proxy: CGEventTapProxy) -> Disposition {
         switch outcome {
         case .pass:
             return .pass
@@ -136,11 +148,11 @@ final class KeyboardCursorEngine {
             return .consume
         case .replayThenPass:
             cancelHoldTimer()
-            replayActivationKey()
+            replayActivationKey(proxy: proxy)
             return .pass
         case .replayThenConsume:
             cancelHoldTimer()
-            replayActivationKey()
+            replayActivationKey(proxy: proxy)
             return .consume
         case .exitEngaged:
             tearDownCursorMode()
@@ -170,12 +182,12 @@ final class KeyboardCursorEngine {
         holdTimer = nil
     }
 
-    private func replayActivationKey() {
-        postKeyEvent(keyCode: activationKey, down: true)
-        postKeyEvent(keyCode: activationKey, down: false)
+    private func replayActivationKey(proxy: CGEventTapProxy) {
+        postKeyEvent(keyCode: activationKey, down: true, proxy: proxy)
+        postKeyEvent(keyCode: activationKey, down: false, proxy: proxy)
     }
 
-    private func postKeyEvent(keyCode: UInt16, down: Bool) {
+    private func postKeyEvent(keyCode: UInt16, down: Bool, proxy: CGEventTapProxy) {
         guard let event = CGEvent(
             keyboardEventSource: keyEventSource,
             virtualKey: CGKeyCode(keyCode),
@@ -184,7 +196,14 @@ final class KeyboardCursorEngine {
             return
         }
         event.setIntegerValueField(.eventSourceUserData, value: CursorOutput.syntheticTag)
-        event.post(tap: .cghidEventTap)
+        // Replay the letter as it was typed. Left to the source, the event takes whatever
+        // modifiers are down *now*, so rolling "a" into Shift+B produced "A".
+        event.flags = withheldFlags
+        // Posting at the HID tap would re-enter the stream upstream of the key that
+        // triggered the replay, which is then delivered first: typing "abc" fast came out
+        // as "bac". An event posted through the proxy enters the system before the event
+        // the tap callback returns, so the withheld letter keeps its place.
+        event.tapPostEvent(proxy)
     }
 
     // MARK: - Engaged

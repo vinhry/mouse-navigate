@@ -245,13 +245,13 @@ final class MouseNavigator {
         mask |= CGEventMask(1) << CGEventType.keyUp.rawValue
         mask |= CGEventMask(1) << CGEventType.flagsChanged.rawValue
 
-        let callback: CGEventTapCallBack = { _, type, event, userInfo in
+        let callback: CGEventTapCallBack = { proxy, type, event, userInfo in
             guard let userInfo else {
                 return Unmanaged.passUnretained(event)
             }
 
             let navigator = Unmanaged<MouseNavigator>.fromOpaque(userInfo).takeUnretainedValue()
-            return navigator.handle(type: type, event: event)
+            return navigator.handle(type: type, event: event, proxy: proxy)
         }
 
         let selfRef = Unmanaged.passUnretained(self).toOpaque()
@@ -300,7 +300,7 @@ final class MouseNavigator {
         permissionTimer = timer
     }
 
-    private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    private func handle(type: CGEventType, event: CGEvent, proxy: CGEventTapProxy) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
@@ -321,7 +321,7 @@ final class MouseNavigator {
 
         switch type {
         case .keyDown, .keyUp, .flagsChanged:
-            return handleKeyboard(type: type, event: event)
+            return handleKeyboard(type: type, event: event, proxy: proxy)
         case .otherMouseDown:
             let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
             preferencesController?.reportButtonPress(button)
@@ -332,7 +332,11 @@ final class MouseNavigator {
         }
     }
 
-    private func handleKeyboard(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    private func handleKeyboard(
+        type: CGEventType,
+        event: CGEvent,
+        proxy: CGEventTapProxy
+    ) -> Unmanaged<CGEvent>? {
         let keyCode = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
 
         let disposition: KeyboardCursorEngine.Disposition
@@ -342,14 +346,15 @@ final class MouseNavigator {
             disposition = cursorEngine.handleKeyDown(
                 keyCode: keyCode,
                 flags: event.flags,
-                isRepeat: isRepeat
+                isRepeat: isRepeat,
+                proxy: proxy
             )
         case .keyUp:
-            disposition = cursorEngine.handleKeyUp(keyCode: keyCode)
+            disposition = cursorEngine.handleKeyUp(keyCode: keyCode, proxy: proxy)
         default:
             // Modifiers are observed for the speed tiers but always passed along, so
             // other apps keep seeing an accurate modifier state.
-            cursorEngine.handleFlagsChanged(flags: event.flags)
+            cursorEngine.handleFlagsChanged(flags: event.flags, proxy: proxy)
             disposition = .pass
         }
 
