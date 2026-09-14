@@ -4,7 +4,7 @@ import MouseNavigateCore
 /// Two-tab preferences: mouse button mapping per device profile, and keyboard cursor
 /// bindings plus speed tuning.
 final class PreferencesWindowController: NSObject {
-    private var panel: NSPanel?
+    private var window: NSWindow?
 
     private let detector: DeviceDetector
     private let engine: KeyboardCursorEngine
@@ -37,27 +37,26 @@ final class PreferencesWindowController: NSObject {
     // MARK: - Window
 
     func showOrFocus() {
-        if let panel {
+        if let window {
             refreshDeviceUI()
-            panel.makeKeyAndOrderFront(nil)
+            window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
-        let p = NSPanel(
+        // A standard titled window, not a utility panel: panels get a shrunken title bar,
+        // close button and title font that look out of place next to other apps. Not being
+        // resizable, it shows the zoom button disabled, as system settings windows do.
+        let w = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 480),
-            styleMask: [.titled, .closable, .utilityWindow],
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        p.title = "MouseNavigate Preferences"
-        p.isReleasedWhenClosed = false
-        p.standardWindowButton(.miniaturizeButton)?.isHidden = true
-        p.standardWindowButton(.zoomButton)?.isHidden = true
-        p.level = .floating
-        p.hidesOnDeactivate = false
+        w.title = "MouseNavigate Preferences"
+        w.isReleasedWhenClosed = false
 
-        let content = p.contentView!
+        let content = w.contentView!
 
         let tabView = NSTabView()
         tabView.translatesAutoresizingMaskIntoConstraints = false
@@ -90,20 +89,20 @@ final class PreferencesWindowController: NSObject {
         tabView.frame = probe
         let chromeWidth = probe.width - tabView.contentRect.width
         let chromeHeight = probe.height - tabView.contentRect.height
-        p.setContentSize(NSSize(
+        w.setContentSize(NSSize(
             width: (pages.map(\.width).max() ?? 0) + chromeWidth + margin * 2,
             height: (pages.map(\.height).max() ?? 0) + chromeHeight + margin * 2
         ))
 
-        p.center()
-        p.makeKeyAndOrderFront(nil)
+        w.center()
+        w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        panel = p
+        window = w
 
         refreshDeviceUI()
     }
 
-    var isVisible: Bool { panel?.isVisible ?? false }
+    var isVisible: Bool { window?.isVisible ?? false }
 
     // MARK: - Mouse tab
 
