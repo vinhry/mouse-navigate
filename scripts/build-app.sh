@@ -34,14 +34,23 @@ fi
 # Build each architecture on its own and merge them with lipo, so the app runs on both
 # Apple silicon and Intel Macs. Passing both --arch flags to one build would require
 # Xcode's build system instead of SwiftPM's own.
+#
+# Each build gets its own scratch path. Recent toolchains put every build in the same
+# output directory whatever --arch says, so sharing one would leave the second build
+# overwriting the first and lipo merging a binary with itself.
 ARCH_BINARIES=()
 for ARCH in arm64 x86_64; do
   echo "Building ${APP_NAME} (${BUILD_CONFIG}, ${ARCH})..."
-  swift build -c "$BUILD_CONFIG" --arch "$ARCH"
+  SCRATCH_PATH="$ROOT_DIR/.build/$ARCH"
+  swift build -c "$BUILD_CONFIG" --arch "$ARCH" --scratch-path "$SCRATCH_PATH"
 
-  ARCH_BINARY="$(swift build -c "$BUILD_CONFIG" --arch "$ARCH" --show-bin-path)/$APP_NAME"
+  ARCH_BINARY="$(swift build -c "$BUILD_CONFIG" --arch "$ARCH" --scratch-path "$SCRATCH_PATH" --show-bin-path)/$APP_NAME"
   if [[ ! -f "$ARCH_BINARY" ]]; then
     echo "Built binary not found: $ARCH_BINARY" >&2
+    exit 1
+  fi
+  if ! lipo -archs "$ARCH_BINARY" | tr ' ' '\n' | grep -qx "$ARCH"; then
+    echo "Build for $ARCH produced $(lipo -archs "$ARCH_BINARY") instead" >&2
     exit 1
   fi
   ARCH_BINARIES+=("$ARCH_BINARY")
@@ -90,13 +99,15 @@ cat >"$CONTENTS_DIR/Info.plist" <<EOF_PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.2.0</string>
+  <string>0.3.0</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>3</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>LSUIElement</key>
   <true/>
+  <key>NSHumanReadableCopyright</key>
+  <string>© 2026 Vinh Ry. Released under the MIT License.</string>
 </dict>
 </plist>
 EOF_PLIST

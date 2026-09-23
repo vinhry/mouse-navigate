@@ -84,13 +84,14 @@ final class DeviceDetector {
         let devices = enumerateDevices()
         let profile = DeviceMatcher.bestProfile(from: devices)
 
-        let name = devices.first(where: {
+        let candidates = devices.filter(DeviceMatcher.isMouseCandidate)
+        let name = candidates.first(where: {
             DeviceMatcher.match(
                 vendorID: $0.vendorID,
                 productID: $0.productID,
                 productName: $0.productName
             ) != nil
-        })?.productName ?? devices.first?.productName
+        })?.productName ?? candidates.first?.productName
 
         let changed = profile != detectedProfile || name != detectedName
         detectedProfile = profile
@@ -106,12 +107,17 @@ final class DeviceDetector {
     func deviceSummaries() -> [String] {
         enumerateDevices().map { device in
             let name = device.productName ?? "(unnamed)"
-            let profile = DeviceMatcher.match(
-                vendorID: device.vendorID,
-                productID: device.productID,
-                productName: device.productName
-            )
-            let resolved = profile.map { $0.displayName } ?? "unrecognised"
+            let resolved: String
+            if !DeviceMatcher.isMouseCandidate(device) {
+                resolved = "ignored (built-in / trackpad / keyboard)"
+            } else {
+                let profile = DeviceMatcher.match(
+                    vendorID: device.vendorID,
+                    productID: device.productID,
+                    productName: device.productName
+                )
+                resolved = profile.map { $0.displayName } ?? "unrecognised"
+            }
             return String(
                 format: "%@ [vendor 0x%04X, product 0x%04X] -> %@",
                 name, device.vendorID, device.productID, resolved
@@ -119,16 +125,18 @@ final class DeviceDetector {
         }
     }
 
-    private func enumerateDevices() -> [(vendorID: Int, productID: Int, productName: String?)] {
+    private func enumerateDevices() -> [HIDDeviceInfo] {
         guard let devices = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else {
             return []
         }
 
         return devices.map { device in
-            (
+            HIDDeviceInfo(
                 vendorID: intProperty(device, kIOHIDVendorIDKey) ?? 0,
                 productID: intProperty(device, kIOHIDProductIDKey) ?? 0,
-                productName: IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String
+                productName: IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String,
+                // The internal keyboard and trackpad carry this flag; external devices omit it.
+                isBuiltIn: intProperty(device, kIOHIDBuiltInKey).map { $0 != 0 } ?? false
             )
         }
         // Stable ordering keeps the reported device from flapping between refreshes.

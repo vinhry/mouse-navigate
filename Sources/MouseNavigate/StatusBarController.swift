@@ -6,9 +6,6 @@ import MouseNavigateCore
 import ServiceManagement
 
 final class StatusBarController: NSObject, NSMenuDelegate {
-    private static let appVersion: String =
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0"
-
     private var statusItem: NSStatusItem?
     private var pauseMenuItem: NSMenuItem?
     private var launchAtLoginMenuItem: NSMenuItem?
@@ -53,8 +50,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
 
-        addDisabledItem("MouseNavigate", to: menu)
-        addDisabledItem("v\(Self.appVersion)", to: menu)
+        addDisabledItem("MouseNavigate - v\(AppInfo.version)", to: menu)
 
         let device = NSMenuItem(title: "Detecting device…", action: nil, keyEquivalent: "")
         device.isEnabled = false

@@ -14,6 +14,20 @@ public enum KeyCode {
     public static let semicolon: UInt16 = 41
     public static let space: UInt16 = 49
     public static let escape: UInt16 = 53
+
+    public static let c: UInt16 = 8
+    public static let v: UInt16 = 9
+    public static let q: UInt16 = 12
+    public static let w: UInt16 = 13
+    public static let r: UInt16 = 15
+    public static let t: UInt16 = 17
+    public static let rightBracket: UInt16 = 30
+    public static let o: UInt16 = 31
+    public static let leftBracket: UInt16 = 33
+    public static let n: UInt16 = 45
+    public static let tab: UInt16 = 48
+    public static let leftArrow: UInt16 = 123
+    public static let rightArrow: UInt16 = 124
 }
 
 public enum KeyCodeNames {

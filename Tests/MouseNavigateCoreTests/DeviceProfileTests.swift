@@ -50,22 +50,51 @@ final class DeviceProfileTests: XCTestCase {
     }
 
     func testBestProfilePrefersRecognisedDevice() {
-        let devices: [(vendorID: Int, productID: Int, productName: String?)] = [
-            (0x05AC, 0x0001, "Apple Internal Keyboard / Trackpad"),
-            (0x046D, 0xB042, "MX Master 4"),
+        let devices = [
+            HIDDeviceInfo(vendorID: 0x046D, productID: 0x0001, productName: "MX Anywhere 2"),
+            HIDDeviceInfo(vendorID: 0x046D, productID: 0xB042, productName: "MX Master 4"),
         ]
         XCTAssertEqual(DeviceMatcher.bestProfile(from: devices), .mxMaster4)
     }
 
-    func testBestProfileFallsBackToGenericWhenSomethingIsAttached() {
-        let devices: [(vendorID: Int, productID: Int, productName: String?)] = [
-            (0x05AC, 0x0001, "Apple Internal Keyboard / Trackpad")
-        ]
+    func testBestProfileFallsBackToGenericForAnUnknownMouse() {
+        let devices = [HIDDeviceInfo(vendorID: 0x004C, productID: 0x0269, productName: "Magic Mouse")]
         XCTAssertEqual(DeviceMatcher.bestProfile(from: devices), .generic)
     }
 
     func testBestProfileIsNilWithNoDevices() {
         XCTAssertNil(DeviceMatcher.bestProfile(from: []))
+    }
+
+    func testBuiltInKeyboardAndTrackpadIsNotAMouse() {
+        // Observed on an Apple silicon MacBook: vendor and product are both 0.
+        let devices = [
+            HIDDeviceInfo(vendorID: 0, productID: 0, productName: "Apple Internal Keyboard / Trackpad", isBuiltIn: true)
+        ]
+        XCTAssertNil(DeviceMatcher.bestProfile(from: devices))
+    }
+
+    func testBuiltInFlagAloneExcludesADevice() {
+        let device = HIDDeviceInfo(vendorID: 0, productID: 0, productName: nil, isBuiltIn: true)
+        XCTAssertFalse(DeviceMatcher.isMouseCandidate(device))
+    }
+
+    func testExternalTrackpadIsNotAMouse() {
+        let devices = [HIDDeviceInfo(vendorID: 0x004C, productID: 0x0265, productName: "Magic Trackpad")]
+        XCTAssertNil(DeviceMatcher.bestProfile(from: devices))
+    }
+
+    func testExternalKeyboardIsNotAMouse() {
+        let devices = [HIDDeviceInfo(vendorID: 0x004C, productID: 0x029C, productName: "Magic Keyboard with Touch ID")]
+        XCTAssertNil(DeviceMatcher.bestProfile(from: devices))
+    }
+
+    func testRecognisedMouseWinsBesideTheBuiltInTrackpad() {
+        let devices = [
+            HIDDeviceInfo(vendorID: 0, productID: 0, productName: "Apple Internal Keyboard / Trackpad", isBuiltIn: true),
+            HIDDeviceInfo(vendorID: 0x046D, productID: 0xB042, productName: "MX Master 4"),
+        ]
+        XCTAssertEqual(DeviceMatcher.bestProfile(from: devices), .mxMaster4)
     }
 
     func testDefaultActionsPerProfile() {

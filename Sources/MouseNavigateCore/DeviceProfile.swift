@@ -27,6 +27,21 @@ public enum DeviceProfile: String, CaseIterable {
     }
 }
 
+/// The HID properties the detector reads from one attached pointing device.
+public struct HIDDeviceInfo: Equatable {
+    public var vendorID: Int
+    public var productID: Int
+    public var productName: String?
+    public var isBuiltIn: Bool
+
+    public init(vendorID: Int, productID: Int, productName: String?, isBuiltIn: Bool = false) {
+        self.vendorID = vendorID
+        self.productID = productID
+        self.productName = productName
+        self.isBuiltIn = isBuiltIn
+    }
+}
+
 public enum DeviceMatcher {
     public static let logitechVendorID = 0x046D
 
@@ -79,12 +94,23 @@ public enum DeviceMatcher {
         return collapsed
     }
 
+    /// Whether a pointing device could be a mouse at all. A MacBook's built-in keyboard and
+    /// trackpad report the generic Mouse usage too, as does a Magic Trackpad, so without this
+    /// a laptop with no mouse attached looks like one with a generic mouse.
+    public static func isMouseCandidate(_ device: HIDDeviceInfo) -> Bool {
+        guard !device.isBuiltIn else { return false }
+        guard let normalized = normalize(device.productName) else { return true }
+
+        if normalized.contains("trackpad") { return false }
+        if normalized.contains("keyboard") && !normalized.contains("mouse") { return false }
+        return true
+    }
+
     /// Pick one profile from every attached pointing device. A recognised model always
-    /// wins over an unrecognised one.
-    public static func bestProfile(
-        from devices: [(vendorID: Int, productID: Int, productName: String?)]
-    ) -> DeviceProfile? {
-        for device in devices {
+    /// wins over an unrecognised one; built-in and trackpad devices never count.
+    public static func bestProfile(from devices: [HIDDeviceInfo]) -> DeviceProfile? {
+        let candidates = devices.filter(isMouseCandidate)
+        for device in candidates {
             if let profile = match(
                 vendorID: device.vendorID,
                 productID: device.productID,
@@ -93,6 +119,6 @@ public enum DeviceMatcher {
                 return profile
             }
         }
-        return devices.isEmpty ? nil : .generic
+        return candidates.isEmpty ? nil : .generic
     }
 }

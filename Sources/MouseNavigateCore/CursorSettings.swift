@@ -83,7 +83,7 @@ public enum CursorSetting: String, CaseIterable {
 
     public var defaultValue: Double {
         switch self {
-        case .holdThreshold: return 0.25
+        case .holdThreshold: return 0.5
         case .baseSpeed: return 280
         case .maxSpeed: return 1400
         case .acceleration: return 0.45
@@ -96,7 +96,7 @@ public enum CursorSetting: String, CaseIterable {
 
     public var range: ClosedRange<Double> {
         switch self {
-        case .holdThreshold: return 0.10...0.60
+        case .holdThreshold: return 0.10...1.0
         case .baseSpeed: return 50...800
         case .maxSpeed: return 200...4000
         case .acceleration: return 0.05...2.0

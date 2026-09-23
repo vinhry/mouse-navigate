@@ -1,6 +1,7 @@
 import Foundation
 
 let navigator = MouseNavigator()
+navigator.isTouchDebugEnabled = CommandLine.arguments.contains("--touch-debug")
 let isAppBundleLaunch = Bundle.main.bundleURL.pathExtension == "app"
 let forceDaemon = CommandLine.arguments.contains("--daemon")
 

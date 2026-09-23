@@ -1,6 +1,27 @@
 import Foundation
 import MouseNavigateCore
 
+/// Where drawn characters can come from.
+enum CharacterSource: String, CaseIterable {
+    case trackpad
+    case magicMouseRightDrag
+    case middleButtonDrag
+
+    var displayName: String {
+        switch self {
+        case .trackpad: return "Draw with two spread fingers on the trackpad"
+        case .magicMouseRightDrag: return "Draw while holding the right button (Magic Mouse)"
+        case .middleButtonDrag: return "Draw while holding the middle button"
+        }
+    }
+
+    /// Button drags hold back the click until release, which delays context menus, so they
+    /// stay off until asked for.
+    var isEnabledByDefault: Bool {
+        self == .trackpad
+    }
+}
+
 /// UserDefaults-backed settings shared by the daemon and the preferences window.
 final class Preferences {
     static let shared = Preferences()
@@ -135,6 +156,105 @@ final class Preferences {
             store.removeObject(forKey: "cursor.\(setting.rawValue)")
         }
         store.removeObject(forKey: "cursorModeEnabled")
+        notifyChange()
+    }
+
+    // MARK: - Touch gestures
+
+    /// Off until the user opts in: the gestures run alongside macOS's own and can overlap.
+    var isTouchEnabled: Bool {
+        get { store.object(forKey: "touchEnabled") as? Bool ?? false }
+        set {
+            store.set(newValue, forKey: "touchEnabled")
+            notifyChange()
+        }
+    }
+
+    var isLeftHanded: Bool {
+        get { store.bool(forKey: "touchLeftHanded") }
+        set {
+            store.set(newValue, forKey: "touchLeftHanded")
+            notifyChange()
+        }
+    }
+
+    func touchAction(for gesture: TouchGesture) -> ButtonAction {
+        guard let raw = store.string(forKey: "touch.\(gesture.rawValue)"),
+              let action = ButtonAction(rawValue: raw),
+              gesture.allows(action)
+        else {
+            return gesture.defaultAction
+        }
+        return action
+    }
+
+    func setTouchAction(_ action: ButtonAction, for gesture: TouchGesture) {
+        store.set(action.rawValue, forKey: "touch.\(gesture.rawValue)")
+        notifyChange()
+    }
+
+    // MARK: - Character gestures
+
+    func characterAction(for gesture: CharacterGesture) -> ButtonAction {
+        guard let raw = store.string(forKey: "character.\(gesture.rawValue)"),
+              let action = ButtonAction(rawValue: raw),
+              action != .moveResizeWindow
+        else {
+            return gesture.defaultAction
+        }
+        return action
+    }
+
+    func setCharacterAction(_ action: ButtonAction, for gesture: CharacterGesture) {
+        store.set(action.rawValue, forKey: "character.\(gesture.rawValue)")
+        notifyChange()
+    }
+
+    /// Whether the stroke is drawn on screen as it is made.
+    var showsDrawingOverlay: Bool {
+        get { store.object(forKey: "touchShowsDrawing") as? Bool ?? true }
+        set {
+            store.set(newValue, forKey: "touchShowsDrawing")
+            notifyChange()
+        }
+    }
+
+    /// How far apart the two fingers must be to draw rather than scroll, as a fraction of
+    /// the trackpad's width.
+    var characterDrawSpread: Double {
+        get {
+            let stored = store.object(forKey: "touchDrawSpread") as? Double ?? TouchTuning().drawSpread
+            return TouchTuning.clampDrawSpread(stored)
+        }
+        set {
+            store.set(TouchTuning.clampDrawSpread(newValue), forKey: "touchDrawSpread")
+            notifyChange()
+        }
+    }
+
+    func isCharacterSourceEnabled(_ source: CharacterSource) -> Bool {
+        store.object(forKey: "characterSource.\(source.rawValue)") as? Bool ?? source.isEnabledByDefault
+    }
+
+    func setCharacterSource(_ source: CharacterSource, enabled: Bool) {
+        store.set(enabled, forKey: "characterSource.\(source.rawValue)")
+        notifyChange()
+    }
+
+    /// Reset every gesture binding and touch option; mouse buttons and cursor keys are untouched.
+    func restoreTouchDefaults() {
+        for gesture in TouchGesture.allCases {
+            store.removeObject(forKey: "touch.\(gesture.rawValue)")
+        }
+        for gesture in CharacterGesture.allCases {
+            store.removeObject(forKey: "character.\(gesture.rawValue)")
+        }
+        for source in CharacterSource.allCases {
+            store.removeObject(forKey: "characterSource.\(source.rawValue)")
+        }
+        store.removeObject(forKey: "touchLeftHanded")
+        store.removeObject(forKey: "touchShowsDrawing")
+        store.removeObject(forKey: "touchDrawSpread")
         notifyChange()
     }
 

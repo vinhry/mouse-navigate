@@ -2,6 +2,63 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-09-22
+
+### Added
+- **Touch tab** with jitouch-style gestures, off by default:
+  - Trackpad: tab switching by tapping beside a resting finger, three-finger tap and
+    one-fix two-tap to open links in new tabs, close / reopen tabs, click-slide to quit,
+    index double-tap to refresh, four-finger rolls to minimize and maximize, and a
+    move / resize window mode.
+  - Magic Mouse: near / far taps for tabs, slides for closing tabs, refreshing, minimizing,
+    maximizing and changing spaces, three-finger swipes for Show Desktop and Mission
+    Control, a middle click, and a corner hold to move / resize windows.
+  - Drawn letters A–Z and eight directions, from the trackpad, a right-button drag or a
+    middle-button drag.
+  - Drawn strokes appear on screen as they are made, around the pointer, followed in the
+    middle of the screen by the letter recognised and the action it ran, or "no match".
+    Switched off with **Show the drawing on screen**.
+  - **Finger spacing** for drawn letters, setting how far apart the two fingers must be
+    before a movement counts as drawing rather than scrolling.
+  - Hovering a character in Preferences traces its stroke beside the list, looping, with a
+    ring marking where the stroke starts.
+  - Left-handed mode, and `--touch-debug` for seeing what the recognizer sees.
+- **About tab** with the version, developer, GitHub and issue links, and license.
+- New actions for buttons and gestures: next / previous / new / close / reopen tab, refresh,
+  open link in new tab, copy, paste, new, open, save, quit, minimize, maximize, maximize
+  left / right (walking across displays), move / resize window, Show Desktop, move a space
+  left / right, launch Finder and launch the default browser.
+
+### Changed
+- Preferences now has four tabs: **Mouse**, **Keyboard Cursor**, **Touch** and **About**.
+- Action pickers are grouped by kind.
+- Clicks and scrolls pass through the event tap only while touch gestures are on.
+
+### Fixed
+- **The built-in keyboard and trackpad are no longer detected as a mouse.** A MacBook's
+  internal keyboard / trackpad reports the HID Mouse usage, so with no mouse attached it was
+  shown as the detected device and given the generic button profile. Built-in devices,
+  trackpads and keyboards are now skipped, and `--list-devices` marks them as ignored.
+- **Universal binary.** Recent toolchains put every `swift build` in the same output
+  directory whatever `--arch` asks for, so the Intel build overwrote the Apple silicon one
+  and `build-app.sh` shipped an Intel-only app. Each architecture now builds in its own
+  scratch path, and the script checks what it got before merging.
+- A retain cycle in the Characters preference pane kept the character list and its views
+  alive for the life of the process.
+- A long drawing thins its path instead of growing without limit, bounding both memory and
+  recognition cost while keeping the shape.
+- The overlay no longer resizes its window and rewrites layer scales on every frame of a
+  stroke, and scroll events check a cached flag instead of walking the recognizers.
+
+### Security
+- The single-instance lock file moved from `/tmp` to the per-user temporary directory, kept
+  at `0600`. Any account on the machine could create and hold the old path, which would stop
+  the daemon from ever starting.
+- Finger data from `MultitouchSupport` is checked before use: a finger count beyond what any
+  hand has is rejected rather than walked, and coordinates must be finite and on the surface.
+- The private frameworks the app loads are no longer unloaded on teardown, since they run
+  their own callback threads.
+
 ## [0.2.0] - 2026-09-12
 
 ### Added

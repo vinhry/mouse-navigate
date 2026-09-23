@@ -4,7 +4,7 @@
   <img src="./Assets/mouse-navigation-icon.png" alt="Mouse Navigation Icon" width="96" />
 </p>
 
-Global mouse side-button navigation and keyboard cursor control for macOS.
+Global mouse side-button navigation, touch gestures and keyboard cursor control for macOS.
 
 ## Why This Project
 
@@ -23,10 +23,13 @@ remapping.
 | Logitech MX Master 4 | Auto-detected |
 | Logitech MX Master 3 / 3S | Auto-detected |
 | Anything else | Falls back to a generic profile |
+| Built-in keyboard / trackpad, Magic Trackpad | Ignored — never treated as a mouse |
 
 Detection reads the HID product string first and falls back to a product-ID table, so the
-same mouse is recognised over Bluetooth, a Bolt receiver or a Unifying receiver. Override
-it manually in **Preferences → Mouse** if you prefer.
+same mouse is recognised over Bluetooth, a Bolt receiver or a Unifying receiver. A MacBook's
+built-in keyboard and trackpad report themselves as a pointing device too, so built-in
+devices, trackpads and keyboards are skipped; with no mouse attached the Mouse tab says
+**No mouse detected**. Override the profile manually in **Preferences → Mouse** if you prefer.
 
 To see what MouseNavigate detects:
 
@@ -38,6 +41,7 @@ To see what MouseNavigate detects:
 
 - Buttons `3`–`9` are individually configurable via **Preferences** (see [Button Mapping](#button-mapping) below).
 - Hold `A` to drive the pointer from the keyboard (see [Keyboard Cursor](#keyboard-cursor) below).
+- Opt-in trackpad, Magic Mouse and drawn-letter gestures (see [Touch Gestures](#touch-gestures) below).
 - Default mapping:
   - Button `3` → Back (`⌘[`) in supported browsers & Finder
   - Button `4` → Forward (`⌘]`) in supported browsers & Finder
@@ -78,7 +82,19 @@ their own layout.
 | 6 | Mission Control | — |
 | 7–9 | — | — |
 
-Available actions: Back, Forward, App Exposé, Mission Control, Toggle Keyboard Cursor, Disabled.
+Available actions, shared by mouse buttons, touch gestures and drawn letters:
+
+| Group | Actions |
+|-------|---------|
+| Browsing | Back, Forward, Next Tab (`⌃⇥`), Previous Tab (`⌃⇧⇥`), New Tab, Close Tab / Window, Reopen Closed Tab, Refresh, Open Link in New Tab (middle click) |
+| Editing | Copy, Paste, New, Open, Save, Quit App |
+| Windows | Minimize, Maximize (again to restore), Maximize Left, Maximize Right, Move / Resize (gestures only) |
+| System | App Exposé, Mission Control, Show Desktop, Move Left / Right a Space |
+| Launch | Finder, Default Browser |
+| App | Toggle Keyboard Cursor, Disabled |
+
+Maximize Left / Right on a window that already fills that half carries it on to the next
+display. Window actions use the Accessibility permission the app already has.
 
 Not sure which physical button is which? Open **Preferences → Mouse** and press a button —
 the panel reports the number it reported, so you can map it directly.
@@ -137,12 +153,118 @@ mid-hold.
 You can also bind a mouse button to **Toggle Keyboard Cursor** to latch the mode without
 using the keyboard at all.
 
+## Touch Gestures
+
+jitouch-style multitouch gestures for the trackpad and Magic Mouse, plus drawn letters.
+They are **off by default**: turn them on in **Preferences → Touch**, where every gesture
+can be bound to any action. Hover over a gesture's name there to see how to do it. Finger
+names assume the right hand; tick **Left-handed** to mirror them.
+
+Gestures run alongside the ones built into macOS rather than replacing them, so turn off
+any that overlap in `System Settings` → `Trackpad` (for example **Look up & data detectors**
+with a three-finger tap). While a gesture is using finger movement, MouseNavigate holds back
+the scrolling macOS would otherwise do.
+
+### Trackpad
+
+| Gesture | How | Default |
+|---------|-----|---------|
+| One-Fix Left-Tap / Right-Tap | Rest one finger, tap another beside it | Previous / Next Tab |
+| Three-Finger Tap | Tap with three fingers at once | Open Link in New Tab |
+| One-Fix Two-Tap | Rest one finger, tap two others together | Open Link in New Tab |
+| One-Fix Two-Slide Down / Up | Rest the index, slide middle and ring down / up | Close Tab / Reopen Closed Tab |
+| Click Two-Slide Down | Click and hold with the index, slide middle and ring down | Quit App |
+| Two-Fix Index Double-Tap | Rest middle and ring, double-tap the index | Refresh |
+| Index-to-Pinky / Pinky-to-Index | Roll four fingers down in order, lift together | Minimize / Maximize |
+| One-Fix One-Slide Down | Rest the index, slide the middle down, then move with the index; tap the middle to switch to resizing; lift to finish | Move / Resize Window |
+
+A finger resting in the bottom edge of the trackpad is taken for a thumb and never starts a
+gesture, so resting your thumb while tapping or scrolling stays safe.
+
+### Magic Mouse
+
+| Gesture | How | Default |
+|---------|-----|---------|
+| Middle-Fix Index Near-Tap / Far-Tap | Rest the middle finger, tap the index close by / further away | Next / Previous Tab |
+| Middle-Fix Index Slide Left / Right | Rest the middle finger, slide the index | Close Tab / Refresh |
+| Index-Fix Middle Slide Left / Right | Rest the index, slide the middle finger | Minimize / Maximize |
+| Two-Fix Index Slide Left / Right | Rest middle and ring, slide the index | Move Left / Right a Space |
+| Three-Finger Swipe Up / Down | Swipe along the mouse with three fingers | Show Desktop / Mission Control |
+| Middle Click | Rest the middle finger, click with the index held nearer the back | Open Link in New Tab |
+| Corner Hold | Hold index and middle on opposite corners, move the mouse; lift one finger to resize | Move / Resize Window |
+
+### Drawn letters
+
+Draw a letter or a straight line and it runs the bound action. Sources, each toggled in
+**Preferences → Touch → Characters**:
+
+- **Trackpad** (on): move two widely spread fingers, such as index and ring, together.
+  **Finger spacing** sets how far apart they must be, from 12% to 60% of the trackpad's
+  width (30% by default, about 47 mm on a MacBook Pro). Lower it to draw with index and
+  middle; raise it if ordinary two-finger scrolling is being taken for a drawing. The
+  slider reads in millimetres once a trackpad is connected.
+- **Right-button drag** (off): hold the right button — the right half of a Magic Mouse —
+  and draw.
+- **Middle-button drag** (off): hold the middle button of any mouse and draw.
+
+A button drag holds the click back until release; a short one is replayed as a normal
+click, so context menus open on release while this is on.
+
+The stroke is drawn on screen as you make it, so you can see the shape the app sees. It
+appears around the pointer, where you are already looking: a trackpad drawing in the
+trackpad's own proportions, a button drag along the path the pointer takes. When you
+finish, the ink gives way for half a second to what it was recognised as and the action it
+ran — "T" over "New Tab (⌘T)" — in the middle of the screen, or a "no match" when nothing
+fit. Untick **Show the drawing on screen** in the Characters section to work without it.
+
+Letters are single strokes, loosely after Graffiti. `I` is a straight line down. To see how
+one goes, hover it in **Preferences → Touch → Characters**: the stroke traces itself beside
+the list, over and over, with a ring showing where to start.
+
+| Drawn | Default |
+|-------|---------|
+| `B` | Launch Default Browser |
+| `F` | Launch Finder |
+| `N` / `O` / `S` | New / Open / Save |
+| `T` | New Tab |
+| Up / Down (`I`) | Copy / Paste |
+| Left / Right | Maximize Left / Right |
+
+Every other letter and the four diagonals start out unbound.
+
+### Not included
+
+Per-app gesture sets, custom keyboard-shortcut actions, and jitouch's Safari-only gestures.
+
+### How it works and tuning
+
+Raw finger positions come from Apple's private `MultitouchSupport` framework, the same
+source jitouch and BetterTouchTool read. It is loaded at runtime, so if a future macOS
+removes it the Touch tab says gestures are unavailable and nothing else is affected.
+Gesture recognition itself is plain Swift in `MouseNavigateCore`, covered by unit tests.
+
+To see what the recognizer sees, quit the app and run the daemon from a terminal:
+
+```bash
+dist/MouseNavigate.app/Contents/MacOS/MouseNavigate --daemon --touch-debug
+```
+
+It prints each surface, every change in finger count with positions, and every recognized
+gesture and drawn letter with its match score.
+
 ## Resource Usage
 
-- Designed for idle background use.
-- Typical idle usage: less than `30 MB` memory and around `0%` CPU most of the time.
-  - The daemon runs `NSApplication` with a status bar item, which loads AppKit — the primary baseline cost. The `ServiceManagement` framework (Launch at Login) adds a small fixed overhead on top.
-  - Opening Preferences for the first time allocates the mapping panel (~2 MB additional); it stays resident until the app quits.
+- Designed for idle background use, at around `0%` CPU most of the time.
+- Memory, measured as the footprint Activity Monitor reports:
+  - About `12 MB` sitting in the menu bar, before Preferences has ever been opened. The
+    daemon runs `NSApplication` with a status bar item, which loads AppKit — the baseline
+    cost. `ServiceManagement` (Launch at Login) adds a little on top.
+  - About `30 MB` once Preferences has been opened. The window and its four pages are kept
+    rather than rebuilt: reopening is then instant and costs nothing, where building a fresh
+    one each time would add roughly `10 MB` of AppKit caches that are never given back.
+  - Touch gestures add the drawing overlay, a window only as large as the drawing itself.
+- Drawn strokes are capped and thinned rather than kept whole, so a long one cannot grow
+  without bound.
 - No network activity required.
 
 ## Install
@@ -195,9 +317,9 @@ swift build
 swift test
 ```
 
-The pure logic — device matching, the movement curve, screen clamping and the activation
-state machine that protects normal typing — lives in the `MouseNavigateCore` target so it
-can be tested without any UI.
+The pure logic — device matching, the movement curve, screen clamping, the activation
+state machine that protects normal typing, window placement, and touch gesture and letter
+recognition — lives in the `MouseNavigateCore` target so it can be tested without any UI.
 
 ## Build .app Bundle
 
@@ -224,6 +346,11 @@ This creates:
 dist/MouseNavigate.app
 ```
 
+## About
+
+**Preferences → About** shows the version, links to this repository and the issue tracker,
+and the license. MouseNavigate is developed by Vinh Ry and released under the MIT License.
+
 ## Run from Source
 
 ```bash
@@ -241,6 +368,9 @@ Or run the built binary directly:
 - MouseNavigate listens to global side-button mouse events, and to key events when
   keyboard cursor control is enabled. Keystrokes are inspected only to match them against
   your configured bindings; nothing is recorded or stored.
+- With touch gestures on, it also reads finger positions from the trackpad and Magic
+  Mouse, and sees clicks and scrolls, only to recognize gestures. Nothing is recorded or
+  stored.
 - MouseNavigate sends local keyboard/system actions.
 - MouseNavigate requires macOS Accessibility/Input Monitoring permissions.
 - MouseNavigate does not require network access to function.
@@ -260,12 +390,12 @@ Or run the built binary directly:
 
 ## Versioning
 
-- Current release: `0.2.0`
+- Current release: `0.3.0`
 - Pushing a version tag builds, signs, notarizes and publishes the release
   (`.github/workflows/release.yml`):
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 ## Icon Attribution

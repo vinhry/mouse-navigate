@@ -1,15 +1,15 @@
 import AppKit
 import ApplicationServices
-import Carbon.HIToolbox
 import Darwin
 import Foundation
 import MouseNavigateCore
-import notify
 
 final class MouseNavigator {
-    private static let hiServicesPath =
-        "/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework/HIServices"
-    private static let lockFilePath = "/tmp/com.vinhry.MouseNavigate.lock"
+    /// In the per-user temporary directory rather than /tmp: anyone with an account on the
+    /// machine can create and hold a path in /tmp, and doing so would keep the daemon from
+    /// ever starting.
+    private static let lockFilePath =
+        NSTemporaryDirectory() + "com.vinhry.MouseNavigate.lock"
     private static let quitRequestNotification = "com.vinhry.MouseNavigate.quitRequest"
 
     private var eventTap: CFMachPort?
@@ -19,27 +19,18 @@ final class MouseNavigator {
     private var statusBarController: StatusBarController?
     private var preferencesController: PreferencesWindowController?
     private var isPaused = false
+    private var installedEventMask: CGEventMask = 0
+    /// Set when a Magic Mouse click became a gesture, so its release is swallowed too.
+    private var isSwallowingLeftMouseUp = false
 
     private let detector = DeviceDetector()
     private let cursorEngine = KeyboardCursorEngine()
+    private let strokeCapture = StrokeCapture()
+    private lazy var performer = ActionPerformer(cursorEngine: cursorEngine, windowManager: WindowManager())
+    private lazy var touchMonitor = TouchMonitor(performer: performer)
 
-    private typealias CoreDockSendNotificationFn = @convention(c) (CFString, UnsafeMutableRawPointer?) -> Void
-    private let hiServicesHandle = dlopen(MouseNavigator.hiServicesPath, RTLD_NOW)
-    private lazy var coreDockSendNotification: CoreDockSendNotificationFn? = {
-        guard
-            let hiServicesHandle,
-            let symbol = dlsym(hiServicesHandle, "CoreDockSendNotification")
-        else {
-            return nil
-        }
-        return unsafeBitCast(symbol, to: CoreDockSendNotificationFn.self)
-    }()
-
-    deinit {
-        if let handle = hiServicesHandle {
-            dlclose(handle)
-        }
-    }
+    /// Prints touch surfaces, contacts and recognized gestures. Set by `--touch-debug`.
+    var isTouchDebugEnabled = false
 
     /// Prints every attached pointing device and the profile it resolves to.
     func printDetectedDevices() {
@@ -77,7 +68,30 @@ final class MouseNavigator {
 
         detector.start()
 
-        let preferences = PreferencesWindowController(detector: detector, engine: cursorEngine)
+        strokeCapture.onStroke = { [weak self] points in
+            self?.touchMonitor.handleStroke(points, in: .screen)
+        }
+        strokeCapture.onProgress = { [weak self] points in
+            self?.touchMonitor.handleStrokeProgress(points, in: .screen)
+        }
+        strokeCapture.onCancelled = { [weak self] in
+            self?.touchMonitor.cancelStroke()
+        }
+        touchMonitor.isDebugLogging = isTouchDebugEnabled
+        touchMonitor.start()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(preferencesDidChange),
+            name: Preferences.didChangeNotification,
+            object: nil
+        )
+
+        let preferences = PreferencesWindowController(
+            detector: detector,
+            engine: cursorEngine,
+            touchMonitor: touchMonitor
+        )
         preferencesController = preferences
 
         let controller = StatusBarController(detector: detector, preferencesController: preferences)
@@ -87,8 +101,11 @@ final class MouseNavigator {
             NSApp.terminate(nil)
         }
         controller.onPauseToggle = { [weak self] paused in
-            self?.isPaused = paused
-            self?.cursorEngine.isSuspended = paused
+            guard let self else { return }
+            self.isPaused = paused
+            self.cursorEngine.isSuspended = paused
+            self.touchMonitor.isPaused = paused
+            self.releaseHeldMouseInput()
         }
         controller.setup()
         statusBarController = controller
@@ -149,27 +166,8 @@ final class MouseNavigator {
     }
 
     private func promptQuitRunningInstance() -> Bool {
-        let dialog = SecondaryLaunchDialogController(icon: loadMouseNavigateIcon())
+        let dialog = SecondaryLaunchDialogController(icon: AppInfo.icon())
         return dialog.run()
-    }
-
-    private func loadMouseNavigateIcon() -> NSImage? {
-        if let image = NSImage(named: "AppIcon") {
-            return image
-        }
-
-        if let path = Bundle.main.path(forResource: "AppIcon", ofType: "icns"),
-           let image = NSImage(contentsOfFile: path) {
-            return image
-        }
-
-        let fallbackPath =
-            FileManager.default.currentDirectoryPath + "/Assets/mouse-navigation-icon.png"
-        if let image = NSImage(contentsOfFile: fallbackPath) {
-            return image
-        }
-
-        return NSApp.applicationIconImage
     }
 
     private func requestExistingInstanceQuit() {
@@ -240,10 +238,7 @@ final class MouseNavigator {
     /// Returns false when the tap cannot be created, which is the normal state until
     /// Accessibility permission has been granted.
     private func installEventTap() -> Bool {
-        var mask = CGEventMask(1) << CGEventType.otherMouseDown.rawValue
-        mask |= CGEventMask(1) << CGEventType.keyDown.rawValue
-        mask |= CGEventMask(1) << CGEventType.keyUp.rawValue
-        mask |= CGEventMask(1) << CGEventType.flagsChanged.rawValue
+        let mask = desiredEventMask
 
         let callback: CGEventTapCallBack = { proxy, type, event, userInfo in
             guard let userInfo else {
@@ -277,7 +272,42 @@ final class MouseNavigator {
 
         CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: eventTap, enable: true)
+        installedEventMask = mask
         return true
+    }
+
+    /// Clicks and scrolls only pass through the tap while touch gestures need them, so with
+    /// gestures off the pointer never waits on this process.
+    private var desiredEventMask: CGEventMask {
+        var types: [CGEventType] = [.otherMouseDown, .keyDown, .keyUp, .flagsChanged]
+        if Preferences.shared.isTouchEnabled {
+            types += [
+                .scrollWheel, .leftMouseDown, .leftMouseUp,
+                .rightMouseDown, .rightMouseDragged, .rightMouseUp,
+                .otherMouseDragged, .otherMouseUp,
+            ]
+        }
+        return types.reduce(CGEventMask(0)) { $0 | CGEventMask(1) << $1.rawValue }
+    }
+
+    @objc private func preferencesDidChange() {
+        guard let eventTap, desiredEventMask != installedEventMask else { return }
+
+        releaseHeldMouseInput()
+        CGEvent.tapEnable(tap: eventTap, enable: false)
+        if let runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+        }
+        CFMachPortInvalidate(eventTap)
+        self.eventTap = nil
+        runLoopSource = nil
+        _ = installEventTap()
+    }
+
+    /// Lets go of anything held back mid-gesture, so no click is ever lost.
+    private func releaseHeldMouseInput() {
+        strokeCapture.cancel()
+        isSwallowingLeftMouseUp = false
     }
 
     /// Quitting here would leave a first-time user with no icon and no explanation, so stay
@@ -307,6 +337,7 @@ final class MouseNavigator {
             }
             // The tap went deaf, so a key-up may have been missed entirely.
             cursorEngine.forceExit()
+            releaseHeldMouseInput()
             return Unmanaged.passUnretained(event)
         }
 
@@ -325,11 +356,56 @@ final class MouseNavigator {
         case .otherMouseDown:
             let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
             preferencesController?.reportButtonPress(button)
+            if button == 2, isCharacterSourceActive(.middleButtonDrag),
+               strokeCapture.handleDown(.middle, at: event.location) {
+                return nil
+            }
             let action = Preferences.shared.action(forButton: button, profile: detector.activeProfile)
             return performAction(action, event: event)
+        case .otherMouseDragged:
+            return strokeCapture.handleDragged(.middle, at: event.location) ? nil : Unmanaged.passUnretained(event)
+        case .otherMouseUp:
+            return strokeCapture.handleUp(.middle, at: event.location) ? nil : Unmanaged.passUnretained(event)
+        case .rightMouseDown:
+            if isCharacterSourceActive(.magicMouseRightDrag), strokeCapture.handleDown(.right, at: event.location) {
+                return nil
+            }
+            return Unmanaged.passUnretained(event)
+        case .rightMouseDragged:
+            return strokeCapture.handleDragged(.right, at: event.location) ? nil : Unmanaged.passUnretained(event)
+        case .rightMouseUp:
+            return strokeCapture.handleUp(.right, at: event.location) ? nil : Unmanaged.passUnretained(event)
+        case .leftMouseDown:
+            return handleLeftMouseDown(event)
+        case .leftMouseUp:
+            guard isSwallowingLeftMouseUp else { return Unmanaged.passUnretained(event) }
+            isSwallowingLeftMouseUp = false
+            return nil
+        case .scrollWheel:
+            // Only trackpad and Magic Mouse scrolls are continuous; a wheel is never held back.
+            let isContinuous = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
+            return isContinuous && touchMonitor.shouldSuppressScroll ? nil : Unmanaged.passUnretained(event)
         default:
             return Unmanaged.passUnretained(event)
         }
+    }
+
+    /// A Magic Mouse click with the fingers in the middle-click pose runs that gesture's
+    /// action instead of clicking.
+    private func handleLeftMouseDown(_ event: CGEvent) -> Unmanaged<CGEvent>? {
+        guard Preferences.shared.isTouchEnabled, touchMonitor.isMagicMouseMiddleClickPose else {
+            return Unmanaged.passUnretained(event)
+        }
+        let action = Preferences.shared.touchAction(for: .mouseMiddleClick)
+        guard action != .disabled, performer.perform(action) else {
+            return Unmanaged.passUnretained(event)
+        }
+        isSwallowingLeftMouseUp = true
+        return nil
+    }
+
+    private func isCharacterSourceActive(_ source: CharacterSource) -> Bool {
+        Preferences.shared.isTouchEnabled && Preferences.shared.isCharacterSourceEnabled(source)
     }
 
     private func handleKeyboard(
@@ -361,125 +437,7 @@ final class MouseNavigator {
         return disposition == .consume ? nil : Unmanaged.passUnretained(event)
     }
 
-    private var isSupportedFrontmostApp: Bool {
-        SupportedApps.isSupported(bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
-    }
-
     private func performAction(_ action: ButtonAction, event: CGEvent) -> Unmanaged<CGEvent>? {
-        switch action {
-        case .back:
-            guard isSupportedFrontmostApp else { return Unmanaged.passUnretained(event) }
-            sendShortcut(keyCode: CGKeyCode(kVK_ANSI_LeftBracket), flags: .maskCommand)
-            return nil
-        case .forward:
-            guard isSupportedFrontmostApp else { return Unmanaged.passUnretained(event) }
-            sendShortcut(keyCode: CGKeyCode(kVK_ANSI_RightBracket), flags: .maskCommand)
-            return nil
-        case .appExpose:
-            triggerSystemAppExpose()
-            return nil
-        case .missionControl:
-            triggerSystemMissionControl()
-            return nil
-        case .toggleCursorMode:
-            cursorEngine.toggleFromMouseButton()
-            return nil
-        case .disabled:
-            return Unmanaged.passUnretained(event)
-        }
-    }
-
-    private func sendShortcut(keyCode: CGKeyCode, flags: CGEventFlags) {
-        guard let source = CGEventSource(stateID: .hidSystemState),
-              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
-            return
-        }
-
-        keyDown.flags = flags
-        keyUp.flags = flags
-        // Tagged so the keyboard path recognises these as ours and ignores them.
-        keyDown.setIntegerValueField(.eventSourceUserData, value: CursorOutput.syntheticTag)
-        keyUp.setIntegerValueField(.eventSourceUserData, value: CursorOutput.syntheticTag)
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
-    }
-
-    private func triggerSystemAppExpose() {
-        if sendCoreDockNotification("com.apple.expose.front.awake") {
-            return
-        }
-        if sendConfiguredMissionControlHotKey(id: 33) {
-            return
-        }
-        postDockNotification("com.apple.expose.front.awake")
-    }
-
-    private func triggerSystemMissionControl() {
-        if sendCoreDockNotification("com.apple.expose.awake") {
-            return
-        }
-        if sendConfiguredMissionControlHotKey(id: 32) {
-            return
-        }
-        postDockNotification("com.apple.expose.awake")
-        postDockNotification("com.apple.workspaces.awake")
-    }
-
-    private func sendConfiguredMissionControlHotKey(id: Int) -> Bool {
-        guard
-            let domain = UserDefaults.standard.persistentDomain(forName: "com.apple.symbolichotkeys"),
-            let allHotKeys = domain["AppleSymbolicHotKeys"] as? [String: Any],
-            let hotKey = allHotKeys[String(id)] as? [String: Any],
-            (hotKey["enabled"] as? Bool) == true,
-            let value = hotKey["value"] as? [String: Any],
-            let parameters = value["parameters"] as? [Any],
-            parameters.count >= 3,
-            let keyCodeInt = intValue(from: parameters[1]),
-            let flagsInt = intValue(from: parameters[2])
-        else {
-            return false
-        }
-
-        sendShortcut(
-            keyCode: CGKeyCode(keyCodeInt),
-            flags: CGEventFlags(rawValue: UInt64(flagsInt))
-        )
-        return true
-    }
-
-    private func intValue(from value: Any) -> Int? {
-        if let intValue = value as? Int {
-            return intValue
-        }
-        if let numberValue = value as? NSNumber {
-            return numberValue.intValue
-        }
-        if let stringValue = value as? String {
-            return Int(stringValue)
-        }
-        return nil
-    }
-
-    private func sendCoreDockNotification(_ name: String) -> Bool {
-        guard let coreDockSendNotification else {
-            return false
-        }
-        coreDockSendNotification(name as CFString, nil)
-        return true
-    }
-
-    private func postDockNotification(_ name: String) {
-        let notification = CFNotificationName(name as CFString)
-        CFNotificationCenterPostNotification(
-            CFNotificationCenterGetDistributedCenter(),
-            notification,
-            nil,
-            nil,
-            true
-        )
-        _ = name.withCString { cName in
-            notify_post(cName)
-        }
+        performer.perform(action) ? nil : Unmanaged.passUnretained(event)
     }
 }
