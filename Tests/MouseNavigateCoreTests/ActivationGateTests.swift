@@ -15,18 +15,25 @@ final class ActivationGateTests: XCTestCase {
         gate = ActivationGate()
     }
 
-    private func down(_ keyCode: UInt16, modifier: Bool = false, isRepeat: Bool = false)
-        -> ActivationGate.Outcome {
+    private func down(
+        _ keyCode: UInt16,
+        modifier: Bool = false,
+        isRepeat: Bool = false,
+        at time: TimeInterval = 0,
+        window: TimeInterval = 0.4
+    ) -> ActivationGate.Outcome {
         gate.keyDown(
             keyCode: keyCode,
             activationKey: activate,
             hasModifier: modifier,
-            isRepeat: isRepeat
+            isRepeat: isRepeat,
+            at: time,
+            retypeWindow: window
         )
     }
 
-    private func up(_ keyCode: UInt16) -> ActivationGate.Outcome {
-        gate.keyUp(keyCode: keyCode, activationKey: activate)
+    private func up(_ keyCode: UInt16, at time: TimeInterval = 0) -> ActivationGate.Outcome {
+        gate.keyUp(keyCode: keyCode, activationKey: activate, at: time)
     }
 
     // MARK: - Typing must survive
@@ -58,11 +65,12 @@ final class ActivationGateTests: XCTestCase {
     }
 
     func testRepeatedRollsNeverEngage() {
-        for _ in 0..<5 {
-            XCTAssertEqual(down(activate), .armHold)
-            XCTAssertEqual(down(s), .replayThenPass)
-            XCTAssertEqual(up(s), .pass)
-            XCTAssertEqual(up(activate), .pass)
+        for index in 0..<5 {
+            let time = Double(index)
+            XCTAssertEqual(down(activate, at: time), .armHold)
+            XCTAssertEqual(down(s, at: time), .replayThenPass)
+            XCTAssertEqual(up(s, at: time), .pass)
+            XCTAssertEqual(up(activate, at: time), .pass)
             XCTAssertFalse(gate.isEngaged)
         }
     }
@@ -108,6 +116,104 @@ final class ActivationGateTests: XCTestCase {
         XCTAssertEqual(down(s), .pass)
         XCTAssertEqual(up(s), .pass)
         XCTAssertEqual(gate.phase, .idle)
+    }
+
+    // MARK: - Typing the letter repeatedly
+
+    func testDoubleTapThenHoldTypesTheLetterRepeatedly() {
+        XCTAssertEqual(down(activate, at: 0), .armHold)
+        XCTAssertEqual(up(activate, at: 0.08), .replayThenConsume)
+
+        // Pressed again inside the window, so the key is handed over and the system
+        // autorepeats it instead of cursor mode taking the hold.
+        XCTAssertEqual(down(activate, at: 0.2), .pass)
+        XCTAssertEqual(gate.phase, .typing)
+        XCTAssertEqual(down(activate, isRepeat: true, at: 0.7), .pass)
+        XCTAssertEqual(down(activate, isRepeat: true, at: 0.75), .pass)
+        XCTAssertFalse(gate.isEngaged)
+
+        XCTAssertEqual(up(activate, at: 2), .pass)
+        XCTAssertEqual(gate.phase, .idle)
+    }
+
+    func testTypeThroughNeverEngages() {
+        _ = down(activate, at: 0)
+        _ = up(activate, at: 0.08)
+        _ = down(activate, at: 0.2)
+
+        // No hold timer is armed for it, and a stale one must not engage either.
+        XCTAssertFalse(gate.holdElapsed())
+        XCTAssertEqual(gate.phase, .typing)
+        XCTAssertFalse(gate.isEngaged)
+    }
+
+    func testTypeThroughChainsSoTheKeyCanBeHeldAgain() {
+        _ = down(activate, at: 0)
+        _ = up(activate, at: 0.08)
+        _ = down(activate, at: 0.2)
+
+        XCTAssertEqual(up(activate, at: 0.9), .pass)
+        // Letting go after a spray still counts as having typed the letter.
+        XCTAssertEqual(down(activate, at: 1.0), .pass)
+        XCTAssertEqual(gate.phase, .typing)
+    }
+
+    func testPressingAgainAfterTheWindowStillEngages() {
+        _ = down(activate, at: 0)
+        _ = up(activate, at: 0.08)
+
+        XCTAssertEqual(down(activate, at: 1.0), .armHold)
+        XCTAssertTrue(gate.holdElapsed())
+        XCTAssertTrue(gate.isEngaged)
+    }
+
+    func testOtherKeysKeepFlowingDuringTypeThrough() {
+        _ = down(activate, at: 0)
+        _ = up(activate, at: 0.08)
+        _ = down(activate, at: 0.2)
+
+        XCTAssertEqual(down(s, at: 0.3), .pass)
+        XCTAssertEqual(up(s, at: 0.4), .pass)
+        // Reaching for a shortcut mid-spray must not disturb it either.
+        XCTAssertEqual(gate.modifierJoined(), .pass)
+        XCTAssertEqual(gate.phase, .typing)
+    }
+
+    func testARollAlsoArmsTypeThrough() {
+        // "as" typed fast still put an "a" on screen, so holding A next means more a's.
+        _ = down(activate, at: 0)
+        _ = down(s, at: 0.05)
+        _ = up(s, at: 0.1)
+        XCTAssertEqual(up(activate, at: 0.12), .pass)
+
+        XCTAssertEqual(down(activate, at: 0.3), .pass)
+        XCTAssertEqual(gate.phase, .typing)
+    }
+
+    func testLeavingCursorModeDoesNotArmTypeThrough() {
+        _ = down(activate, at: 0)
+        _ = gate.holdElapsed()
+        XCTAssertEqual(up(activate, at: 1.0), .exitEngaged)
+
+        // No letter was typed, and holding again straight away is how people re-engage.
+        XCTAssertEqual(down(activate, at: 1.05), .armHold)
+    }
+
+    func testZeroWindowSwitchesTypeThroughOff() {
+        XCTAssertEqual(down(activate, at: 0, window: 0), .armHold)
+        XCTAssertEqual(up(activate, at: 0.08), .replayThenConsume)
+
+        XCTAssertEqual(down(activate, at: 0.2, window: 0), .armHold)
+        XCTAssertEqual(gate.phase, .pending)
+    }
+
+    func testResetClearsTheTypeThroughWindow() {
+        _ = down(activate, at: 0)
+        _ = up(activate, at: 0.08)
+        // A sleep or a lost tap between the two presses must not leave the window armed.
+        gate.reset()
+
+        XCTAssertEqual(down(activate, at: 0.2), .armHold)
     }
 
     // MARK: - Engaging

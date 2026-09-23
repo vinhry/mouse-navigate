@@ -8,6 +8,11 @@ import Foundation
 /// release, another key arriving mid-roll, a modifier joining in — replays the withheld
 /// letter and stands down.
 ///
+/// Holding the key is therefore spoken for, which would otherwise leave it as the one
+/// letter on the keyboard that cannot autorepeat. Pressing it again just after it was
+/// typed is the way back in: that press is handed straight over, so the system repeats
+/// the letter exactly as it would for any other key.
+///
 /// Kept free of AppKit so the behaviour that protects normal typing can be tested.
 public struct ActivationGate {
     public enum Phase: Equatable {
@@ -17,6 +22,9 @@ public struct ActivationGate {
         case pending
         /// Stood down and already replayed the letter; waiting for the key to come up.
         case aborted
+        /// Pressed again moments after being typed, so it is deliberately being typed:
+        /// passed through and left to the system to autorepeat.
+        case typing
         /// Cursor mode, held open by the activation key.
         case engaged
         /// Cursor mode, latched until explicitly exited.
@@ -42,6 +50,9 @@ public struct ActivationGate {
 
     public private(set) var phase: Phase = .idle
 
+    /// When the activation letter was last handed to whoever is typing.
+    private var lastTypedAt: TimeInterval?
+
     public init() {}
 
     public var isEngaged: Bool {
@@ -50,11 +61,17 @@ public struct ActivationGate {
 
     // MARK: - Input
 
+    /// - Parameters:
+    ///   - time: A monotonic clock reading for this event.
+    ///   - retypeWindow: How soon after the letter was typed a fresh press means the user
+    ///     wants to type it again rather than engage. Zero switches that off.
     public mutating func keyDown(
         keyCode: UInt16,
         activationKey: UInt16,
         hasModifier: Bool,
-        isRepeat: Bool
+        isRepeat: Bool,
+        at time: TimeInterval,
+        retypeWindow: TimeInterval
     ) -> Outcome {
         switch phase {
         case .idle:
@@ -62,6 +79,12 @@ public struct ActivationGate {
             // A modifier means this is a shortcut such as ⌘A, or a capital letter.
             // Leaving those alone is what keeps existing shortcuts working.
             guard !hasModifier else { return .pass }
+            // Pressed again right after it was typed: the letter is wanted, held down.
+            // Withholding it now is what would stop it repeating, so hand it over.
+            if isRetype(at: time, within: retypeWindow) {
+                phase = .typing
+                return .pass
+            }
             phase = .pending
             return .armHold
 
@@ -78,12 +101,20 @@ public struct ActivationGate {
         case .aborted:
             return .pass
 
+        case .typing:
+            // The autorepeats of the letter, and anything typed alongside it.
+            return .pass
+
         case .engaged, .locked:
             return .handleEngaged
         }
     }
 
-    public mutating func keyUp(keyCode: UInt16, activationKey: UInt16) -> Outcome {
+    public mutating func keyUp(
+        keyCode: UInt16,
+        activationKey: UInt16,
+        at time: TimeInterval
+    ) -> Outcome {
         switch phase {
         case .idle:
             return .pass
@@ -92,16 +123,26 @@ public struct ActivationGate {
             guard keyCode == activationKey else { return .pass }
             // Released before the threshold: it was a plain keystroke after all.
             phase = .idle
+            lastTypedAt = time
             return .replayThenConsume
 
         case .aborted:
             if keyCode == activationKey {
                 phase = .idle
+                lastTypedAt = time
             }
+            return .pass
+
+        case .typing:
+            guard keyCode == activationKey else { return .pass }
+            phase = .idle
+            lastTypedAt = time
             return .pass
 
         case .engaged:
             guard keyCode == activationKey else { return .handleEngaged }
+            // No letter was typed, and holding the key again straight away is how people
+            // re-engage, so leaving the retype window unarmed is the point.
             phase = .idle
             return .exitEngaged
 
@@ -117,6 +158,11 @@ public struct ActivationGate {
         guard phase == .pending else { return .pass }
         phase = .aborted
         return .replayThenPass
+    }
+
+    private func isRetype(at time: TimeInterval, within window: TimeInterval) -> Bool {
+        guard window > 0, let lastTypedAt else { return false }
+        return time >= lastTypedAt && time - lastTypedAt <= window
     }
 
     // MARK: - Transitions driven by the caller
@@ -157,5 +203,7 @@ public struct ActivationGate {
     /// Unconditional teardown for pause, sleep, tap loss and quit.
     public mutating func reset() {
         phase = .idle
+        // A window left armed across a teardown would spray the letter on the next hold.
+        lastTypedAt = nil
     }
 }

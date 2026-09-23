@@ -94,7 +94,9 @@ final class KeyboardCursorEngine {
             keyCode: keyCode,
             activationKey: activationKey,
             hasModifier: hasAnyModifier(flags),
-            isRepeat: isRepeat
+            isRepeat: isRepeat,
+            at: ProcessInfo.processInfo.systemUptime,
+            retypeWindow: retypeWindow
         )
 
         switch outcome {
@@ -111,7 +113,11 @@ final class KeyboardCursorEngine {
     func handleKeyUp(keyCode: UInt16, proxy: CGEventTapProxy) -> Disposition {
         guard isEnabled else { return .pass }
 
-        let outcome = gate.keyUp(keyCode: keyCode, activationKey: activationKey)
+        let outcome = gate.keyUp(
+            keyCode: keyCode,
+            activationKey: activationKey,
+            at: ProcessInfo.processInfo.systemUptime
+        )
 
         switch outcome {
         case .handleEngaged:
@@ -453,6 +459,12 @@ final class KeyboardCursorEngine {
 
     private var activationKey: UInt16 {
         preferences.keyCode(for: .activate)
+    }
+
+    /// How soon after the activation letter was typed a fresh press means the user wants
+    /// it again, held down, rather than cursor mode.
+    private var retypeWindow: TimeInterval {
+        preferences.value(for: .retypeWindow)
     }
 
     private func binding(for keyCode: UInt16) -> CursorBinding? {

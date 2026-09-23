@@ -51,6 +51,7 @@ public enum CursorBinding: String, CaseIterable {
 /// Numeric tunables, each with the range the preferences sliders expose.
 public enum CursorSetting: String, CaseIterable {
     case holdThreshold
+    case retypeWindow
     case baseSpeed
     case maxSpeed
     case acceleration
@@ -62,6 +63,7 @@ public enum CursorSetting: String, CaseIterable {
     public var displayName: String {
         switch self {
         case .holdThreshold: return "Hold to activate"
+        case .retypeWindow: return "Double-tap to repeat"
         case .baseSpeed: return "Start speed"
         case .maxSpeed: return "Top speed"
         case .acceleration: return "Ramp-up time"
@@ -74,7 +76,7 @@ public enum CursorSetting: String, CaseIterable {
 
     public var unit: String {
         switch self {
-        case .holdThreshold, .acceleration: return "s"
+        case .holdThreshold, .retypeWindow, .acceleration: return "s"
         case .baseSpeed, .maxSpeed: return "pt/s"
         case .fastMultiplier, .fasterMultiplier, .precisionMultiplier: return "×"
         case .scrollSpeed: return "px"
@@ -84,6 +86,7 @@ public enum CursorSetting: String, CaseIterable {
     public var defaultValue: Double {
         switch self {
         case .holdThreshold: return 0.5
+        case .retypeWindow: return 0.4
         case .baseSpeed: return 280
         case .maxSpeed: return 1400
         case .acceleration: return 0.45
@@ -97,6 +100,7 @@ public enum CursorSetting: String, CaseIterable {
     public var range: ClosedRange<Double> {
         switch self {
         case .holdThreshold: return 0.10...1.0
+        case .retypeWindow: return 0...1.0
         case .baseSpeed: return 50...800
         case .maxSpeed: return 200...4000
         case .acceleration: return 0.05...2.0

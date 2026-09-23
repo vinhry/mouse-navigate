@@ -135,7 +135,7 @@ Cursor**, along with the hold delay.
 ### Why it does not break typing
 
 `A` is an ordinary letter, so MouseNavigate never simply swallows it. The key is withheld
-for the hold delay (250 ms by default) and cursor mode engages only if it is *still* down
+for the hold delay (0.5 s by default) and cursor mode engages only if it is *still* down
 when that expires. Anything else hands the letter straight back:
 
 - **Released early** — a tap types `a` as usual.
@@ -152,6 +152,15 @@ mid-hold.
 
 You can also bind a mouse button to **Toggle Keyboard Cursor** to latch the mode without
 using the keyboard at all.
+
+### Typing the letter repeatedly
+
+Holding a key down is how every other letter repeats, and on `A` that is spoken for. The
+way back in is to **tap `A`, then press it again straight away and keep it down**: the
+second press is handed over untouched, so `aaaa…` comes out exactly as it would from any
+other key and cursor mode stays out of it. How soon that second press has to land is
+**Double-tap to repeat** in **Preferences → Keyboard Cursor** — 0.4 s by default, and
+`Off` at zero.
 
 ## Touch Gestures
 
@@ -390,12 +399,12 @@ Or run the built binary directly:
 
 ## Versioning
 
-- Current release: `0.3.0`
+- Current release: `0.3.1`
 - Pushing a version tag builds, signs, notarizes and publishes the release
   (`.github/workflows/release.yml`):
 ```bash
-git tag v0.3.0
-git push origin v0.3.0
+git tag v0.3.1
+git push origin v0.3.1
 ```
 
 ## Icon Attribution

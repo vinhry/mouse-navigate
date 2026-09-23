@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-09-22
+
+### Fixed
+- **The activate key can auto-repeat again.** Holding `A` is what engages cursor mode, so
+  `A` was the one letter on the keyboard that could not repeat while held down. Tapping it
+  and pressing it again straight away now hands the key straight over, so it repeats like
+  any other letter and cursor mode stays out of the way. How soon the second press has to
+  land is the new **Double-tap to repeat** setting in Preferences → Keyboard Cursor
+  (0.4 s by default, `Off` at zero).
+
 ## [0.3.0] - 2026-09-22
 
 ### Added

@@ -299,7 +299,8 @@ final class PreferencesWindowController: NSObject {
 
         let hint = NSTextField(
             labelWithString: "Hold the activate key, then use the movement keys. "
-                + "Shift is faster, Shift+Ctrl fastest, Option precise."
+                + "Shift is faster, Shift+Ctrl fastest, Option precise. "
+                + "Tap it and press again to type its letter instead."
         )
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
@@ -341,6 +342,11 @@ final class PreferencesWindowController: NSObject {
             slider.tag = CursorSetting.allCases.firstIndex(of: setting) ?? 0
             slider.translatesAutoresizingMaskIntoConstraints = false
             slider.widthAnchor.constraint(equalToConstant: 160).isActive = true
+            if setting == .retypeWindow {
+                slider.toolTip = "Holding the activate key is taken by cursor mode. "
+                    + "Tap it and press it again within this time to type its letter "
+                    + "instead, repeating for as long as it is held."
+            }
             sliders[setting] = slider
 
             let valueLabel = NSTextField(labelWithString: "")
@@ -926,7 +932,10 @@ final class PreferencesWindowController: NSObject {
         let value = Preferences.shared.value(for: setting)
         let formatted: String
         switch setting {
-        case .holdThreshold, .acceleration:
+        case .retypeWindow where value == 0:
+            // The one tunable with an off position; "0.00 s" would not say so.
+            formatted = "Off"
+        case .holdThreshold, .retypeWindow, .acceleration:
             formatted = String(format: "%.2f %@", value, setting.unit)
         case .fastMultiplier, .fasterMultiplier, .precisionMultiplier:
             formatted = String(format: "%.2f%@", value, setting.unit)
