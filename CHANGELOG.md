@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.2] - 2026-09-23
+
+### Fixed
+- **MouseNavigate now starts properly on a Mac that has never run it before.** It appeared
+  in Activity Monitor as a live process with no menu bar icon, no permission prompt and no
+  way to quit it. Opening the `.app` started a launcher that spawned a detached copy of
+  itself and exited, so the process that survived was never registered with macOS:
+  permission prompts were attributed to a process that had already gone, and the menu bar
+  icon was created only after the Accessibility check, the event tap, device enumeration
+  and two private-framework loads had all completed. It worked only on machines that had
+  already granted Accessibility to an earlier build.
+  - The app is now a single process that macOS knows about, and the menu bar icon is
+    created before anything that can stall or ask for permission.
+  - Launching it again opens Preferences instead of a dialog offering to quit it.
+  - Startup now goes to the unified log, so a machine where it misbehaves can say why:
+    `log show --last 10m --predicate 'subsystem == "com.vinhry.MouseNavigate"' --info`.
+  - A lock file that cannot be created is no longer mistaken for "already running", which
+    used to stop the app from starting at all, in silence.
+  - A failed run loop source no longer exits the app, and a menu bar icon whose image is
+    missing now falls back to text rather than an invisible square.
+
+### Removed
+- The "already running" dialog, and with it the distributed notification it used to quit
+  the other copy — any process on the machine could post that notification and terminate
+  MouseNavigate.
+
 ## [0.3.1] - 2026-09-22
 
 ### Fixed

@@ -12,7 +12,7 @@ enum AppInfo {
     static let issuesURL = URL(string: "https://github.com/vinhry/mouse-navigate/issues/new/choose")!
 
     static let version: String =
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.3.1"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.3.2"
 
     static let build: String? = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
 

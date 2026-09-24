@@ -36,7 +36,11 @@ final class Preferences {
     private let currentConfigVersion = 2
 
     private init() {
-        store = UserDefaults(suiteName: "com.vinhry.MouseNavigate") ?? .standard
+        // Not a suite: the app's own bundle identifier is not a valid suite name, so
+        // `UserDefaults(suiteName:)` returned nil here and logged "does not make sense and
+        // will not work" on every terminal run. The fallback was already what ran, and it
+        // reads the same ~/Library/Preferences/com.vinhry.MouseNavigate.plist.
+        store = .standard
         migrateIfNeeded()
     }
 

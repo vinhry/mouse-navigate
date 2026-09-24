@@ -15,7 +15,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private var deviceMenuItem: NSMenuItem?
 
     private let detector: DeviceDetector
-    let preferencesController: PreferencesWindowController
+
+    /// Assigned once startup has built it. The icon goes up before this exists, because
+    /// nothing that can stall is allowed to run ahead of the menu bar item.
+    var preferencesController: PreferencesWindowController?
 
     var onQuit: (() -> Void)?
     var onPauseToggle: ((Bool) -> Void)?
@@ -37,9 +40,8 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         didSet { updateIcon() }
     }
 
-    init(detector: DeviceDetector, preferencesController: PreferencesWindowController) {
+    init(detector: DeviceDetector) {
         self.detector = detector
-        self.preferencesController = preferencesController
         super.init()
     }
 
@@ -144,6 +146,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             ?? NSImage(systemSymbolName: "computermouse.fill", accessibilityDescription: nil)
         image?.isTemplate = true
         statusItem?.button?.image = image
+        // A nil image leaves an invisible but clickable square, which reads to anyone
+        // looking at their menu bar as "the app did not start". Say something instead.
+        statusItem?.button?.title = image == nil ? "MN" : ""
+        statusItem?.isVisible = true
 
         if isAwaitingPermission {
             statusItem?.button?.toolTip = "MouseNavigate – Needs Accessibility permission"
@@ -211,7 +217,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     // MARK: - Preferences
 
     @objc private func preferencesTapped() {
-        preferencesController.showOrFocus()
+        preferencesController?.showOrFocus()
     }
 
     // MARK: - Quit

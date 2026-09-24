@@ -10,7 +10,6 @@ final class MouseNavigator {
     /// ever starting.
     private static let lockFilePath =
         NSTemporaryDirectory() + "com.vinhry.MouseNavigate.lock"
-    private static let quitRequestNotification = "com.vinhry.MouseNavigate.quitRequest"
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -22,6 +21,9 @@ final class MouseNavigator {
     private var installedEventMask: CGEventMask = 0
     /// Set when a Magic Mouse click became a gesture, so its release is swallowed too.
     private var isSwallowingLeftMouseUp = false
+
+    /// NSApplication holds its delegate weakly, so it lives here.
+    private lazy var appDelegate = AppDelegate(navigator: self)
 
     private let detector = DeviceDetector()
     private let cursorEngine = KeyboardCursorEngine()
@@ -42,27 +44,70 @@ final class MouseNavigator {
         }
     }
 
-    func runLauncher() {
-        if tryAcquireSingleInstanceLock() {
-            releaseSingleInstanceLock()
-            launchDaemon()
+    /// Become an application, put the icon up, and only then start anything that can stall
+    /// or ask for permission.
+    ///
+    /// The order is the whole point. Earlier versions spawned a detached copy of
+    /// themselves and let the process LaunchServices started exit, which left the survivor
+    /// unregistered: macOS attributed its permission prompts to a process that no longer
+    /// existed, so on a Mac with no existing grant no dialog ever appeared. The icon was
+    /// also created after the permission check, the event tap, IOKit enumeration and two
+    /// dlopens of private frameworks — so anything slow or stuck among those left a
+    /// running process with no icon, no permission and no way to quit it.
+    func run() {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.accessory)
+        app.delegate = appDelegate
+
+        Log.launch.info(
+            """
+            MouseNavigate \(AppInfo.version, privacy: .public) starting from \
+            \(Bundle.main.bundleURL.path, privacy: .public)
+            """
+        )
+
+        guard claimSingleInstance() else {
+            Log.launch.info("Another copy is already running; bringing it forward instead.")
+            activateRunningInstance()
             return
         }
 
-        if promptQuitRunningInstance() {
-            requestExistingInstanceQuit()
+        let controller = StatusBarController(detector: detector)
+        controller.onQuit = { [weak self] in
+            // Never leave a synthetic mouse button held down after quitting.
+            self?.cursorEngine.forceExit()
+            NSApp.terminate(nil)
         }
+        controller.onPauseToggle = { [weak self] paused in
+            guard let self else { return }
+            self.isPaused = paused
+            self.cursorEngine.isSuspended = paused
+            self.touchMonitor.isPaused = paused
+            self.releaseHeldMouseInput()
+        }
+        controller.setup()
+        statusBarController = controller
+
+        cursorEngine.onModeChange = { [weak controller] active in
+            controller?.isCursorModeActive = active
+        }
+        Log.launch.info("Menu bar item created.")
+
+        // Left to the first turn of the run loop, which is spinning by then: whatever
+        // these calls do — wait on a TCC round trip, dlopen a private framework, walk
+        // IOKit — the icon is already on screen and its menu already works.
+        DispatchQueue.main.async { [weak self] in
+            self?.startServices()
+        }
+
+        app.run()
+
+        releaseSingleInstanceLock()
     }
 
-    func runDaemon() {
-        guard tryAcquireSingleInstanceLock() else {
-            return
-        }
-
-        registerQuitRequestObserver()
-
-        setbuf(stdout, nil)
-        setbuf(stderr, nil)
+    /// Everything that needs permission, hardware or a private framework. None of it is
+    /// allowed to run before the icon exists.
+    private func startServices() {
         requestAccessibilityPermission()
         let tapInstalled = installEventTap()
 
@@ -93,47 +138,56 @@ final class MouseNavigator {
             touchMonitor: touchMonitor
         )
         preferencesController = preferences
-
-        let controller = StatusBarController(detector: detector, preferencesController: preferences)
-        controller.onQuit = { [weak self] in
-            // Never leave a synthetic mouse button held down after quitting.
-            self?.cursorEngine.forceExit()
-            NSApp.terminate(nil)
-        }
-        controller.onPauseToggle = { [weak self] paused in
-            guard let self else { return }
-            self.isPaused = paused
-            self.cursorEngine.isSuspended = paused
-            self.touchMonitor.isPaused = paused
-            self.releaseHeldMouseInput()
-        }
-        controller.setup()
-        statusBarController = controller
-
-        cursorEngine.onModeChange = { [weak controller] active in
-            controller?.isCursorModeActive = active
-        }
+        statusBarController?.preferencesController = preferences
 
         if !tapInstalled {
             waitForAccessibilityPermission()
         }
 
-        NSApplication.shared.setActivationPolicy(.accessory)
-        print("mouse-navigate daemon is running. Listening for side buttons and keyboard cursor keys.")
-        NSApplication.shared.run()
-
-        // Reached only when NSApp.stop() is used instead of terminate
-        teardownSingleInstanceResources()
+        Log.launch.info(
+            "Services started; device: \(self.detector.statusDescription, privacy: .public)."
+        )
     }
 
-    private func tryAcquireSingleInstanceLock() -> Bool {
+    /// What a second launch does, by way of the app delegate, and the Preferences menu
+    /// item with it.
+    func showPreferences() {
+        guard let preferencesController else {
+            // Only reachable in the moment between the icon appearing and the first turn
+            // of the run loop.
+            Log.launch.notice("Preferences asked for before startup finished; ignoring.")
+            return
+        }
+        preferencesController.showOrFocus()
+    }
+
+    /// Only a lock another process is holding means "already running".
+    ///
+    /// This used to give the same answer when `open()` itself failed — a symlinked or
+    /// foreign-owned lock file, a purged temporary directory, no free descriptors — and
+    /// the caller then exited in silence. Refusing to start because a lock file could not
+    /// be created is far worse than starting without the lock.
+    private func claimSingleInstance() -> Bool {
         // O_NOFOLLOW prevents a symlink attack where an adversary replaces the lock
         // file with a symlink to a sensitive path before this process creates it.
         lockFileDescriptor = open(MouseNavigator.lockFilePath, O_CREAT | O_RDWR | O_NOFOLLOW, S_IRUSR | S_IWUSR)
         guard lockFileDescriptor >= 0 else {
+            let reason = String(cString: strerror(errno))
+            Log.launch.error(
+                """
+                Could not open \(MouseNavigator.lockFilePath, privacy: .public): \
+                \(reason, privacy: .public). Starting without single-instance protection.
+                """
+            )
+            return true
+        }
+
+        guard flock(lockFileDescriptor, LOCK_EX | LOCK_NB) == 0 else {
+            _ = close(lockFileDescriptor)
+            lockFileDescriptor = -1
             return false
         }
-        return flock(lockFileDescriptor, LOCK_EX | LOCK_NB) == 0
+        return true
     }
 
     private func releaseSingleInstanceLock() {
@@ -144,83 +198,22 @@ final class MouseNavigator {
         }
     }
 
-    private func launchDaemon() {
-        // Use Bundle.main.executableURL rather than CommandLine.arguments[0].
-        // argv[0] is caller-controlled and could be spoofed or contain a crafted path.
-        guard let executableURL = Bundle.main.executableURL else {
-            fputs("Failed to determine executable path.\n", stderr)
+    /// The running copy is a registered application, so it can simply be brought forward;
+    /// it answers reopen by showing its preferences. This is only reachable from a second
+    /// command-line launch, since Finder never starts a second process for a running app.
+    private func activateRunningInstance() {
+        guard let identifier = Bundle.main.bundleIdentifier else { return }
+
+        let mine = ProcessInfo.processInfo.processIdentifier
+        for app in NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
+        where app.processIdentifier != mine {
+            if #available(macOS 14.0, *) {
+                app.activate()
+            } else {
+                app.activate(options: [])
+            }
             return
         }
-        let daemon = Process()
-        daemon.executableURL = executableURL
-        daemon.arguments = ["--daemon"]
-        daemon.standardInput = nil
-        daemon.standardOutput = FileHandle.nullDevice
-        daemon.standardError = FileHandle.nullDevice
-
-        do {
-            try daemon.run()
-        } catch {
-            fputs("Failed to launch daemon: \(error)\n", stderr)
-        }
-    }
-
-    private func promptQuitRunningInstance() -> Bool {
-        let dialog = SecondaryLaunchDialogController(icon: AppInfo.icon())
-        return dialog.run()
-    }
-
-    private func requestExistingInstanceQuit() {
-        let name = CFNotificationName(MouseNavigator.quitRequestNotification as CFString)
-        CFNotificationCenterPostNotification(
-            CFNotificationCenterGetDistributedCenter(),
-            name,
-            nil,
-            nil,
-            true
-        )
-    }
-
-    private func registerQuitRequestObserver() {
-        let observer = Unmanaged.passUnretained(self).toOpaque()
-
-        CFNotificationCenterAddObserver(
-            CFNotificationCenterGetDistributedCenter(),
-            observer,
-            { _, observer, name, _, _ in
-                guard let observer, let name else {
-                    return
-                }
-
-                let receivedName = name.rawValue as String
-                guard receivedName == MouseNavigator.quitRequestNotification else {
-                    return
-                }
-
-                let navigator = Unmanaged<MouseNavigator>.fromOpaque(observer).takeUnretainedValue()
-                navigator.handleQuitRequest()
-            },
-            MouseNavigator.quitRequestNotification as CFString,
-            nil,
-            .deliverImmediately
-        )
-    }
-
-    private func handleQuitRequest() {
-        print("Received quit request. Exiting running daemon.")
-        cursorEngine.forceExit()
-        NSApp.terminate(nil)
-    }
-
-    private func teardownSingleInstanceResources() {
-        let observer = Unmanaged.passUnretained(self).toOpaque()
-        CFNotificationCenterRemoveObserver(
-            CFNotificationCenterGetDistributedCenter(),
-            observer,
-            CFNotificationName(MouseNavigator.quitRequestNotification as CFString),
-            nil
-        )
-        releaseSingleInstanceLock()
     }
 
     private func requestAccessibilityPermission() {
@@ -230,8 +223,15 @@ final class MouseNavigator {
         let options: NSDictionary = [
             kAXTrustedCheckOptionPrompt.takeUnretainedValue() as NSString: true
         ]
-        if !AXIsProcessTrustedWithOptions(options) {
-            print("Accessibility permission is required. Grant access in System Settings > Privacy & Security > Accessibility.")
+        if AXIsProcessTrustedWithOptions(options) {
+            Log.permissions.info("Accessibility already granted.")
+        } else {
+            Log.permissions.notice(
+                """
+                Accessibility not granted; the system was asked to prompt. Grant it in \
+                System Settings > Privacy & Security > Accessibility.
+                """
+            )
         }
     }
 
@@ -260,19 +260,27 @@ final class MouseNavigator {
         )
 
         guard let eventTap else {
-            fputs("Failed to create event tap. Check Accessibility/Input Monitoring permissions.\n", stderr)
+            Log.permissions.notice(
+                "Event tap refused; waiting on Accessibility and Input Monitoring."
+            )
             return false
         }
 
         runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
         guard let runLoopSource else {
-            fputs("Failed to create run loop source.\n", stderr)
-            exit(1)
+            // Quitting here would leave someone with a process and no explanation, which
+            // is the failure this whole startup path was rewritten to avoid. Fall back to
+            // the same waiting behaviour a refused tap already uses.
+            Log.launch.error("Could not create the run loop source for the event tap.")
+            CFMachPortInvalidate(eventTap)
+            self.eventTap = nil
+            return false
         }
 
         CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: eventTap, enable: true)
         installedEventMask = mask
+        Log.permissions.info("Event tap installed.")
         return true
     }
 
@@ -324,7 +332,7 @@ final class MouseNavigator {
             self.permissionTimer?.cancel()
             self.permissionTimer = nil
             self.statusBarController?.isAwaitingPermission = false
-            print("Accessibility permission granted. Listening for side buttons and keyboard cursor keys.")
+            Log.permissions.info("Accessibility granted; now listening.")
         }
         timer.resume()
         permissionTimer = timer

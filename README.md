@@ -47,8 +47,10 @@ To see what MouseNavigate detects:
   - Button `4` → Forward (`⌘]`) in supported browsers & Finder
   - Button `5` → App Exposé system-wide (uses your configured Mission Control shortcut if enabled)
   - Button `6` → Mission Control system-wide (uses your configured Mission Control shortcut if enabled)
-- Single-instance guard: launching again shows `MouseNavigate is already running.`
-- Background daemon architecture: `.app` launch starts a lightweight background daemon, keeping the main process footprint minimal.
+- Single-instance: one process, registered with macOS. Launching it again opens Preferences
+  rather than starting a second copy.
+- The menu bar icon appears first, before permissions, device detection and gesture support
+  are started, so the app can always be seen and quit even when something below it stalls.
 
 ## Status Bar
 
@@ -65,7 +67,7 @@ To see what MouseNavigate detects:
   - **Launch at Login** ✓ — toggle to start MouseNavigate automatically at login
   - **⚠ Grant Input Monitoring…** — shown only when keyboard events are blocked
   - **Preferences…** — open the Preferences window
-  - **Quit MouseNavigate** — stops the daemon
+  - **Quit MouseNavigate** — quits the app
 
 ## Button Mapping
 
@@ -252,10 +254,10 @@ source jitouch and BetterTouchTool read. It is loaded at runtime, so if a future
 removes it the Touch tab says gestures are unavailable and nothing else is affected.
 Gesture recognition itself is plain Swift in `MouseNavigateCore`, covered by unit tests.
 
-To see what the recognizer sees, quit the app and run the daemon from a terminal:
+To see what the recognizer sees, quit the app and run it from a terminal:
 
 ```bash
-dist/MouseNavigate.app/Contents/MacOS/MouseNavigate --daemon --touch-debug
+dist/MouseNavigate.app/Contents/MacOS/MouseNavigate --touch-debug
 ```
 
 It prints each surface, every change in finger count with positions, and every recognized
@@ -266,7 +268,7 @@ gesture and drawn letter with its match score.
 - Designed for idle background use, at around `0%` CPU most of the time.
 - Memory, measured as the footprint Activity Monitor reports:
   - About `12 MB` sitting in the menu bar, before Preferences has ever been opened. The
-    daemon runs `NSApplication` with a status bar item, which loads AppKit — the baseline
+    app runs `NSApplication` with a status bar item, which loads AppKit — the baseline
     cost. `ServiceManagement` (Launch at Login) adds a little on top.
   - About `30 MB` once Preferences has been opened. The window and its four pages are kept
     rather than rebuilt: reopening is then instant and costs nothing, where building a fresh
@@ -284,8 +286,10 @@ Requires macOS 13 Ventura or later, on Apple silicon or Intel.
 2. Move **MouseNavigate.app** into your **Applications** folder. Run it from there rather
    than from Downloads: macOS launches apps left in Downloads from a temporary read-only
    location, which can break **Launch at Login**.
-3. Open it. macOS confirms that it was downloaded from the internet — click **Open**.
-   Releases are signed with a Developer ID and notarized by Apple.
+3. Open it. A notarized release only asks you to confirm that it was downloaded from the
+   internet — click **Open**. A release that has not been notarized is refused on first
+   open: allow it under `System Settings` → `Privacy & Security` → **Open Anyway**. Every
+   release is signed with a Developer ID either way; the release notes say which it is.
 4. When asked, allow Accessibility access: `System Settings` → `Privacy & Security` →
    `Accessibility` → turn on **MouseNavigate**. The menu bar icon shows a warning triangle
    until you do, then switches to a mouse — no relaunch needed.
@@ -386,8 +390,10 @@ Or run the built binary directly:
 
 ## Gatekeeper Notes
 
-- Release builds are signed with a Developer ID, notarized and stapled, so they open with
-  only the standard downloaded-from-the-internet confirmation.
+- Releases built by the tag workflow are signed with a Developer ID, notarized and
+  stapled, so they open with only the standard downloaded-from-the-internet confirmation.
+  A release published by hand from a local build is signed but **not** notarized and needs
+  **Open Anyway** once.
 - A local build is signed but not notarized. macOS 15 and later block it when it arrives
   from another Mac; allow it under `System Settings` → `Privacy & Security` → **Open Anyway**.
 - An ad-hoc signed build loses its Accessibility permission on every rebuild. Sign with a
@@ -399,12 +405,12 @@ Or run the built binary directly:
 
 ## Versioning
 
-- Current release: `0.3.1`
+- Current release: `0.3.2`
 - Pushing a version tag builds, signs, notarizes and publishes the release
   (`.github/workflows/release.yml`):
 ```bash
-git tag v0.3.1
-git push origin v0.3.1
+git tag v0.3.2
+git push origin v0.3.2
 ```
 
 ## Icon Attribution
