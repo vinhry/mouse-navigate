@@ -2,7 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.4.0] - 2026-09-27
+
+Copies of 0.3.x cannot update themselves, so install this version by hand once. From here
+on, MouseNavigate offers updates itself.
 
 ### Added
 - **Custom actions** for buttons, gestures and drawn letters, at the foot of every picker:

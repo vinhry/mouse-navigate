@@ -6,6 +6,14 @@ APP_NAME="MouseNavigate"
 BUNDLE_ID="com.vinhry.MouseNavigate"
 BUILD_CONFIG="${1:-release}"
 
+# The one place the version lives. A release tag must be v$VERSION: the release workflow
+# refuses any other, and the app's updater refuses a download whose version differs from
+# its tag.
+VERSION="0.4.0"
+# Must only ever grow. The count of commits on main does, and needs full history, which is
+# why the release workflow checks out with fetch-depth 0.
+BUILD_NUMBER="${BUILD_NUMBER:-$(git -C "$ROOT_DIR" rev-list --count HEAD 2>/dev/null || echo 0)}"
+
 # A persistent signing identity keeps Accessibility permission stable across rebuilds.
 # Left empty, the first Developer ID Application or Apple Development identity in the
 # keychain is used. To pick one explicitly:
@@ -99,9 +107,9 @@ cat >"$CONTENTS_DIR/Info.plist" <<EOF_PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.3.2</string>
+  <string>${VERSION}</string>
   <key>CFBundleVersion</key>
-  <string>5</string>
+  <string>${BUILD_NUMBER}</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>LSUIElement</key>

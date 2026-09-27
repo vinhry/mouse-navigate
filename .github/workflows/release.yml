@@ -14,6 +14,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          # The build number counts commits, so the whole history is needed.
+          fetch-depth: 0
+
+      # Fail in seconds rather than after hours of notarization: an app whose version
+      # differs from its tag is refused by every installed copy's updater.
+      - name: Check the tag matches the app version
+        run: |
+          VERSION="$(sed -n 's/^VERSION="\(.*\)"$/\1/p' scripts/build-app.sh)"
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match VERSION=$VERSION in scripts/build-app.sh" >&2
+            exit 1
+          fi
 
       # Import the Developer ID Application certificate into a short-lived keychain
       # so codesign can use it without touching the system keychain.
