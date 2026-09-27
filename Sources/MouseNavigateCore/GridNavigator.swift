@@ -35,18 +35,20 @@ public struct GridNavigator {
 
     /// The nine cells of the current region, row by row from the top left.
     public var cells: [Rect] {
-        let width = (region.maxX - region.minX) / Double(Self.columns)
-        let height = (region.maxY - region.minY) / Double(Self.rows)
-        return (0..<Self.rows).flatMap { row in
-            (0..<Self.columns).map { column in
-                Rect(
-                    minX: region.minX + Double(column) * width,
-                    minY: region.minY + Double(row) * height,
-                    maxX: region.minX + Double(column + 1) * width,
-                    maxY: region.minY + Double(row + 1) * height
-                )
+        // Plain loops with typed steps: written as nested closures, this was more than the
+        // Xcode 26 type checker would take on.
+        let width: Double = (region.maxX - region.minX) / Double(Self.columns)
+        let height: Double = (region.maxY - region.minY) / Double(Self.rows)
+        var cells: [Rect] = []
+        cells.reserveCapacity(Self.rows * Self.columns)
+        for row in 0..<Self.rows {
+            let top: Double = region.minY + Double(row) * height
+            for column in 0..<Self.columns {
+                let left: Double = region.minX + Double(column) * width
+                cells.append(Rect(minX: left, minY: top, maxX: left + width, maxY: top + height))
             }
         }
+        return cells
     }
 
     public var canNarrow: Bool {
