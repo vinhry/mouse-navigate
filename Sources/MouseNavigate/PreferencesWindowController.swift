@@ -67,6 +67,13 @@ final class PreferencesWindowController: NSObject {
     private var selectedApp: String?
     private var scopeControls: [(popup: NSPopUpButton, remove: NSButton, disable: NSButton)] = []
     private var testerLabel: NSTextField?
+    /// Which press of each button the Mouse tab's pickers are showing.
+    private var buttonPress: ButtonPress = .click
+
+    private var reverseScrollCheckbox: NSButton?
+    private var scrollSpeedSlider: NSSlider?
+    private var scrollSpeedLabel: NSTextField?
+    private var smoothScrollCheckbox: NSButton?
 
     private var recorders: [CursorBinding: KeyRecorderButton] = [:]
     private var sliders: [CursorSetting: NSSlider] = [:]
@@ -218,7 +225,19 @@ final class PreferencesWindowController: NSObject {
         popup.widthAnchor.constraint(greaterThanOrEqualToConstant: 240).isActive = true
         overridePopup = popup
 
-        var rows: [[NSView]] = [[overrideLabel, popup]]
+        let pressLabel = NSTextField(labelWithString: "Press:")
+        pressLabel.alignment = .right
+        let pressPicker = NSSegmentedControl(
+            labels: ButtonPress.allCases.map(\.displayName),
+            trackingMode: .selectOne,
+            target: self,
+            action: #selector(buttonPressChanged(_:))
+        )
+        pressPicker.selectedSegment = 0
+        pressPicker.toolTip = "A button with a hold or double-click binding waits to see which "
+            + "it was before acting, so bind those only where you want them."
+
+        var rows: [[NSView]] = [[overrideLabel, popup], [pressLabel, pressPicker]]
 
         for button in Preferences.configurableButtons {
             let buttonLabel = NSTextField(labelWithString: "Button \(button):")
@@ -232,21 +251,97 @@ final class PreferencesWindowController: NSObject {
         let grid = makeFormGrid(rows, rowSpacing: 8)
         // Every picker takes the width of the widest, so the column reads as one edge.
         grid.column(at: 1).xPlacement = .fill
-        // Keep the profile picker visually apart from the per-button rows.
-        grid.row(at: 0).bottomPadding = 8
+        // Keep the profile and press pickers visually apart from the per-button rows.
+        grid.row(at: 1).bottomPadding = 8
+        grid.cell(for: pressPicker)?.xPlacement = .leading
 
         let tester = NSTextField(labelWithString: "Press a mouse button to identify it…")
         tester.font = .systemFont(ofSize: 11)
         tester.textColor = .secondaryLabelColor
         testerLabel = tester
 
-        let stack = NSStackView(views: [label, makeScopeRow(), grid, tester])
+        let stack = NSStackView(views: [label, makeScopeRow(), grid, tester, makeScrollSection()])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
         stack.setCustomSpacing(18, after: grid)
+        stack.setCustomSpacing(22, after: tester)
 
         return makePage(stack)
+    }
+
+    /// Wheel options for all apps. Trackpads and the Magic Mouse are never affected.
+    private func makeScrollSection() -> NSView {
+        let reverse = NSButton(
+            checkboxWithTitle: "Reverse scrolling direction",
+            target: self,
+            action: #selector(scrollSettingChanged(_:))
+        )
+        reverse.toolTip = "Only the mouse wheel changes, so a trackpad can keep natural scrolling."
+        reverseScrollCheckbox = reverse
+
+        let speedLabel = NSTextField(labelWithString: "Speed:")
+        let slider = NSSlider(
+            value: 1,
+            minValue: ScrollSettings.speedRange.lowerBound,
+            maxValue: ScrollSettings.speedRange.upperBound,
+            target: self,
+            action: #selector(scrollSettingChanged(_:))
+        )
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        slider.widthAnchor.constraint(equalToConstant: 180).isActive = true
+        scrollSpeedSlider = slider
+
+        let value = NSTextField(labelWithString: "")
+        value.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        value.textColor = .secondaryLabelColor
+        value.translatesAutoresizingMaskIntoConstraints = false
+        value.widthAnchor.constraint(equalToConstant: 40).isActive = true
+        scrollSpeedLabel = value
+
+        let speedRow = NSStackView(views: [speedLabel, slider, value])
+        speedRow.orientation = .horizontal
+        speedRow.spacing = 8
+
+        let smooth = NSButton(
+            checkboxWithTitle: "Smooth scrolling (experimental)",
+            target: self,
+            action: #selector(scrollSettingChanged(_:))
+        )
+        smooth.toolTip = "Spreads each notch of the wheel over a few frames instead of jumping."
+        smoothScrollCheckbox = smooth
+
+        let content = NSStackView(views: [reverse, speedRow, smooth])
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 8
+        return makeSection(title: "Scroll Wheel", content: content)
+    }
+
+    private func refreshScrollUI() {
+        let settings = Preferences.shared.scrollSettings
+        reverseScrollCheckbox?.state = settings.isReversed ? .on : .off
+        scrollSpeedSlider?.doubleValue = settings.speed
+        scrollSpeedLabel?.stringValue = String(format: "%.1f×", settings.speed)
+        smoothScrollCheckbox?.state = settings.isSmooth ? .on : .off
+    }
+
+    @objc private func scrollSettingChanged(_ sender: NSControl) {
+        Preferences.shared.scrollSettings = ScrollSettings(
+            isReversed: reverseScrollCheckbox?.state == .on,
+            speed: scrollSpeedSlider?.doubleValue ?? 1,
+            isSmooth: smoothScrollCheckbox?.state == .on
+        )
+        refreshScrollUI()
+    }
+
+    @objc private func buttonPressChanged(_ sender: NSSegmentedControl) {
+        guard ButtonPress.allCases.indices.contains(sender.selectedSegment) else { return }
+        buttonPress = ButtonPress.allCases[sender.selectedSegment]
+        refreshBindings { slot in
+            if case .button = slot { return true }
+            return false
+        }
     }
 
     // MARK: - Layout helpers
@@ -340,7 +435,7 @@ final class PreferencesWindowController: NSObject {
 
     private func trigger(for slot: BindingSlot) -> BindingTrigger {
         switch slot {
-        case .button(let number): return .button(number, detector.activeProfile)
+        case .button(let number): return .button(number, detector.activeProfile, buttonPress)
         case .touch(let gesture): return .touch(gesture)
         case .character(let gesture): return .character(gesture)
         }
@@ -1170,6 +1265,7 @@ final class PreferencesWindowController: NSObject {
 
     private func refreshDeviceUI() {
         deviceLabel?.stringValue = detector.statusDescription
+        refreshScrollUI()
 
         if let override = Preferences.shared.deviceOverride,
            let index = DeviceProfile.allCases.firstIndex(of: override) {

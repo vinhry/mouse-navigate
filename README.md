@@ -113,6 +113,20 @@ The custom actions each take a value of their own:
 Maximize Left / Right on a window that already fills that half carries it on to the next
 display. Window actions use the Accessibility permission the app already has.
 
+### Hold and double-click
+
+Each button can also do something else when held or double-clicked. Switch **Press** on the
+Mouse tab to **Hold** or **Double-click** to bind those; both start as **Disabled**.
+
+A button bound only to a click acts the moment it goes down, exactly as before. Once it has
+a hold or double-click too, it has to wait to see which you meant:
+
+- **Hold** fires after about a third of a second while the button is still down.
+- **Double-click** fires on the second press, if it comes within 0.3 s of the first
+  release. Because of that, a single click on such a button runs 0.3 s after release.
+- A click the binding does not handle, such as Back outside a browser, is passed on as the
+  button's own click.
+
 Not sure which physical button is which? Open **Preferences → Mouse** and press a button —
 the panel reports the number it reported, so you can map it directly.
 
@@ -120,6 +134,22 @@ Changes apply immediately and persist across restarts (stored in `UserDefaults` 
 
 **Back / Forward — supported apps:**
 Safari, Finder, Chrome, Chrome Canary, Firefox, Firefox Developer Edition, Arc, Brave, Edge, Opera, Vivaldi, Orion
+
+## Scroll Wheel
+
+**Preferences → Mouse → Scroll Wheel** reshapes a mouse wheel and nothing else: trackpads
+and the Magic Mouse scroll continuously and are never touched, so a trackpad can keep
+natural scrolling while the wheel goes the other way.
+
+- **Reverse scrolling direction** flips both axes, including a horizontal thumb wheel.
+- **Speed** scales each notch from 0.5× to 4×. Slowing down never makes a notch do nothing.
+- **Smooth scrolling (experimental)** spreads each notch over a few frames instead of
+  jumping. It covers the same distance a notch does in standard Mac apps; browsers pick their
+  own distance per notch, so use **Speed** if it feels slower there.
+
+With all three at their defaults, wheel events never pass through MouseNavigate. Logi
+Options+ smooth scrolling makes a Logitech wheel scroll continuously, like a trackpad, so
+turn that off to use these.
 
 ## Per-App Bindings
 
@@ -410,8 +440,8 @@ Or run the built binary directly:
 
 ## Security & Privacy
 
-- MouseNavigate listens to global side-button mouse events, and to key events when
-  keyboard cursor control is enabled. Keystrokes are inspected only to match them against
+- MouseNavigate listens to global side-button mouse events, to mouse wheel events when a
+  scroll option is on, and to key events when keyboard cursor control is enabled. Keystrokes are inspected only to match them against
   your configured bindings; nothing is recorded or stored.
 - With touch gestures on, it also reads finger positions from the trackpad and Magic
   Mouse, and sees clicks and scrolls, only to recognize gestures. Nothing is recorded or

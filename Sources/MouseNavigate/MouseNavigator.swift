@@ -34,6 +34,13 @@ final class MouseNavigator {
     private let strokeCapture = StrokeCapture()
     private lazy var performer = ActionPerformer(cursorEngine: cursorEngine, windowManager: WindowManager())
     private lazy var touchMonitor = TouchMonitor(performer: performer)
+    private lazy var buttons = ButtonPressController(performer: performer) { [unowned self] button, press in
+        Preferences.shared.binding(
+            for: .button(button, self.detector.activeProfile, press),
+            app: FrontmostApp.shared.bundleID
+        )
+    }
+    private let wheel = WheelScroller()
 
     /// Prints touch surfaces, contacts and recognized gestures. Set by `--touch-debug`.
     var isTouchDebugEnabled = false
@@ -291,16 +298,19 @@ final class MouseNavigator {
         return true
     }
 
-    /// Clicks and scrolls only pass through the tap while touch gestures need them, so with
-    /// gestures off the pointer never waits on this process.
+    /// Clicks and scrolls only pass through the tap while something needs them, so with
+    /// gestures and scroll options off the pointer never waits on this process. Side-button
+    /// releases are rare enough to take always: a hold or double-click needs them.
     private var desiredEventMask: CGEventMask {
-        var types: [CGEventType] = [.otherMouseDown, .keyDown, .keyUp, .flagsChanged]
+        var types: [CGEventType] = [.otherMouseDown, .otherMouseUp, .keyDown, .keyUp, .flagsChanged]
         if Preferences.shared.isTouchEnabled {
             types += [
                 .scrollWheel, .leftMouseDown, .leftMouseUp,
                 .rightMouseDown, .rightMouseDragged, .rightMouseUp,
-                .otherMouseDragged, .otherMouseUp,
+                .otherMouseDragged,
             ]
+        } else if Preferences.shared.scrollSettings.isActive {
+            types.append(.scrollWheel)
         }
         return types.reduce(CGEventMask(0)) { $0 | CGEventMask(1) << $1.rawValue }
     }
@@ -339,6 +349,8 @@ final class MouseNavigator {
     private func releaseHeldMouseInput() {
         strokeCapture.cancel()
         isSwallowingLeftMouseUp = false
+        buttons.reset()
+        wheel.stop()
     }
 
     /// Quitting here would leave a first-time user with no icon and no explanation, so stay
@@ -391,15 +403,18 @@ final class MouseNavigator {
                strokeCapture.handleDown(.middle, at: event.location) {
                 return nil
             }
-            let binding = Preferences.shared.binding(
-                for: .button(button, detector.activeProfile),
-                app: FrontmostApp.shared.bundleID
-            )
-            return performAction(binding, event: event)
+            guard Preferences.configurableButtons.contains(button) else {
+                return Unmanaged.passUnretained(event)
+            }
+            return buttons.buttonDown(button) ? nil : Unmanaged.passUnretained(event)
         case .otherMouseDragged:
             return strokeCapture.handleDragged(.middle, at: event.location) ? nil : Unmanaged.passUnretained(event)
         case .otherMouseUp:
-            return strokeCapture.handleUp(.middle, at: event.location) ? nil : Unmanaged.passUnretained(event)
+            if strokeCapture.handleUp(.middle, at: event.location) {
+                return nil
+            }
+            let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
+            return buttons.buttonUp(button) ? nil : Unmanaged.passUnretained(event)
         case .rightMouseDown:
             if isCharacterSourceActive(.magicMouseRightDrag), strokeCapture.handleDown(.right, at: event.location) {
                 return nil
@@ -418,7 +433,12 @@ final class MouseNavigator {
         case .scrollWheel:
             // Only trackpad and Magic Mouse scrolls are continuous; a wheel is never held back.
             let isContinuous = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
-            return isContinuous && touchMonitor.shouldSuppressScroll ? nil : Unmanaged.passUnretained(event)
+            if isContinuous {
+                return touchMonitor.shouldSuppressScroll ? nil : Unmanaged.passUnretained(event)
+            }
+            let settings = Preferences.shared.scrollSettings
+            guard settings.isActive else { return Unmanaged.passUnretained(event) }
+            return wheel.handle(event, settings: settings) ? nil : Unmanaged.passUnretained(event)
         default:
             return Unmanaged.passUnretained(event)
         }
@@ -469,9 +489,5 @@ final class MouseNavigator {
         }
 
         return disposition == .consume ? nil : Unmanaged.passUnretained(event)
-    }
-
-    private func performAction(_ binding: ActionBinding, event: CGEvent) -> Unmanaged<CGEvent>? {
-        performer.perform(binding) ? nil : Unmanaged.passUnretained(event)
     }
 }

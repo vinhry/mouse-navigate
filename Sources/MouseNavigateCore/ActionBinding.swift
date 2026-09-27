@@ -144,17 +144,34 @@ public enum ActionBinding: Equatable {
     }
 }
 
-/// Something that can be bound: a mouse button on one device profile, a touch gesture or a
-/// drawn character.
+/// The ways one mouse button can be pressed, each with a binding of its own.
+public enum ButtonPress: String, CaseIterable {
+    case click
+    case hold
+    case doubleClick
+
+    public var displayName: String {
+        switch self {
+        case .click: return "Click"
+        case .hold: return "Hold"
+        case .doubleClick: return "Double-click"
+        }
+    }
+}
+
+/// Something that can be bound: a mouse button press on one device profile, a touch
+/// gesture or a drawn character.
 public enum BindingTrigger: Hashable {
-    case button(Int, DeviceProfile)
+    case button(Int, DeviceProfile, ButtonPress = .click)
     case touch(TouchGesture)
     case character(CharacterGesture)
 
-    /// The settings key, unchanged from before bindings existed.
+    /// The settings key. A plain click keeps the key it had before bindings existed.
     public var storageKey: String {
         switch self {
-        case .button(let number, let profile): return "button.\(profile.rawValue).\(number)"
+        case .button(let number, let profile, .click): return "button.\(profile.rawValue).\(number)"
+        case .button(let number, let profile, .hold): return "buttonHold.\(profile.rawValue).\(number)"
+        case .button(let number, let profile, .doubleClick): return "buttonDouble.\(profile.rawValue).\(number)"
         case .touch(let gesture): return "touch.\(gesture.rawValue)"
         case .character(let gesture): return "character.\(gesture.rawValue)"
         }
@@ -162,7 +179,8 @@ public enum BindingTrigger: Hashable {
 
     public var defaultBinding: ActionBinding {
         switch self {
-        case .button(let number, let profile): return .builtin(profile.defaultActions[number] ?? .disabled)
+        case .button(let number, let profile, .click): return .builtin(profile.defaultActions[number] ?? .disabled)
+        case .button: return .disabled
         case .touch(let gesture): return .builtin(gesture.defaultAction)
         case .character(let gesture): return .builtin(gesture.defaultAction)
         }

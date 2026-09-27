@@ -179,6 +179,24 @@ final class Preferences {
         saveAppOverrides(overrides)
     }
 
+    // MARK: - Scroll wheel
+
+    var scrollSettings: ScrollSettings {
+        get {
+            ScrollSettings(
+                isReversed: store.bool(forKey: "scroll.reversed"),
+                speed: store.object(forKey: "scroll.speed") as? Double ?? 1,
+                isSmooth: store.bool(forKey: "scroll.smooth")
+            )
+        }
+        set {
+            store.set(newValue.isReversed, forKey: "scroll.reversed")
+            store.set(newValue.speed, forKey: "scroll.speed")
+            store.set(newValue.isSmooth, forKey: "scroll.smooth")
+            notifyChange()
+        }
+    }
+
     // MARK: - Keyboard cursor
 
     var isCursorModeEnabled: Bool {

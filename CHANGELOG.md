@@ -16,9 +16,15 @@ All notable changes to this project will be documented in this file.
   virtual machines and remote desktops.
 - New built-in actions: Play / Pause, Next / Previous Track, Volume Up / Down, Mute, Lock
   Screen and Screenshot Selection.
+- **Hold and double-click** bindings for every mouse button, under **Press** on the Mouse
+  tab. A button bound only to a click still acts the moment it goes down.
+- **Scroll Wheel** options for mice: reverse the direction, change the speed, and an
+  experimental smooth scrolling mode. Trackpads and the Magic Mouse are never affected.
 
 ### Changed
 - Existing settings carry over unchanged: built-in actions are stored exactly as before.
+- A side button whose press ran an action now swallows its release too, rather than handing
+  apps a release for a press they never saw.
 
 ## [0.3.2] - 2026-09-23
 
