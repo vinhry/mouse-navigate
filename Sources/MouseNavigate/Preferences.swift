@@ -197,6 +197,23 @@ final class Preferences {
         }
     }
 
+    // MARK: - Updates
+
+    /// nil until the user has been asked, which happens once.
+    var automaticUpdates: Bool? {
+        get { store.object(forKey: "update.automatic") as? Bool }
+        set {
+            store.set(newValue, forKey: "update.automatic")
+            notifyChange()
+        }
+    }
+
+    /// Not a setting, so it changes without telling anyone.
+    var lastUpdateCheck: Date? {
+        get { store.object(forKey: "update.lastCheck") as? Date }
+        set { store.set(newValue, forKey: "update.lastCheck") }
+    }
+
     // MARK: - Keyboard cursor
 
     var isCursorModeEnabled: Bool {

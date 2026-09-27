@@ -20,4 +20,6 @@ enum Log {
     static let permissions = Logger(subsystem: subsystem, category: "permissions")
     /// A bound action that could not be carried out, such as an app that is gone.
     static let actions = Logger(subsystem: subsystem, category: "actions")
+    /// Checking for, downloading, verifying and installing updates.
+    static let update = Logger(subsystem: subsystem, category: "update")
 }

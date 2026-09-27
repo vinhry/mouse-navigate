@@ -13,12 +13,16 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private var permissionSeparator: NSMenuItem?
     private var inputMonitoringMenuItem: NSMenuItem?
     private var deviceMenuItem: NSMenuItem?
+    private var installUpdateMenuItem: NSMenuItem?
+    private var installUpdateSeparator: NSMenuItem?
 
     private let detector: DeviceDetector
 
     /// Assigned once startup has built it. The icon goes up before this exists, because
     /// nothing that can stall is allowed to run ahead of the menu bar item.
     var preferencesController: PreferencesWindowController?
+    /// Assigned with the preferences, for the same reason.
+    var updater: Updater?
 
     var onQuit: (() -> Void)?
     var onPauseToggle: ((Bool) -> Void)?
@@ -60,6 +64,18 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         deviceMenuItem = device
 
         menu.addItem(.separator())
+
+        // Shown only once an update has been downloaded and verified.
+        let installItem = NSMenuItem(title: "Install Update and Relaunch", action: #selector(installUpdateTapped), keyEquivalent: "")
+        installItem.target = self
+        installItem.isHidden = true
+        menu.addItem(installItem)
+        installUpdateMenuItem = installItem
+
+        let installSeparator = NSMenuItem.separator()
+        installSeparator.isHidden = true
+        menu.addItem(installSeparator)
+        installUpdateSeparator = installSeparator
 
         // Accessibility permission warning — shown only when not trusted
         let permItem = NSMenuItem(
@@ -104,6 +120,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let updatesItem = NSMenuItem(title: "Check for Updates\u{2026}", action: #selector(checkForUpdatesTapped), keyEquivalent: "")
+        updatesItem.target = self
+        menu.addItem(updatesItem)
+
         // Preferences
         let prefsItem = NSMenuItem(title: "Preferences\u{2026}", action: #selector(preferencesTapped), keyEquivalent: "")
         prefsItem.target = self
@@ -126,6 +146,13 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         updateLaunchAtLoginState()
         detector.refresh()
         deviceMenuItem?.title = detector.statusDescription
+
+        let ready = updater?.readyVersion
+        installUpdateMenuItem?.isHidden = ready == nil
+        installUpdateSeparator?.isHidden = ready == nil
+        if let ready {
+            installUpdateMenuItem?.title = "Install MouseNavigate \(ready) and Relaunch"
+        }
     }
 
     // MARK: - Icon
@@ -212,6 +239,16 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    // MARK: - Updates
+
+    @objc private func installUpdateTapped() {
+        updater?.installAndRelaunch()
+    }
+
+    @objc private func checkForUpdatesTapped() {
+        updater?.check(userInitiated: true)
     }
 
     // MARK: - Preferences

@@ -41,6 +41,7 @@ final class MouseNavigator {
         )
     }
     private let wheel = WheelScroller()
+    private let updater = Updater()
 
     /// Prints touch surfaces, contacts and recognized gestures. Set by `--touch-debug`.
     var isTouchDebugEnabled = false
@@ -149,10 +150,17 @@ final class MouseNavigator {
         let preferences = PreferencesWindowController(
             detector: detector,
             engine: cursorEngine,
-            touchMonitor: touchMonitor
+            touchMonitor: touchMonitor,
+            updater: updater
         )
         preferencesController = preferences
         statusBarController?.preferencesController = preferences
+        statusBarController?.updater = updater
+
+        updater.onQuit = { [weak self] in
+            self?.statusBarController?.onQuit?()
+        }
+        updater.start()
 
         if !tapInstalled {
             waitForAccessibilityPermission()

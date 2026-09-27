@@ -27,6 +27,11 @@ All notable changes to this project will be documented in this file.
 - **Click hints** (`H` in cursor mode): everything clickable in the frontmost window gets a
   short label; type it to click, with Shift for a right-click and Option to only move there.
 - **Click Hints** and **Grid Jump** as actions for mouse buttons and gestures.
+- **Updates from GitHub Releases.** MouseNavigate asks once whether to check daily, then
+  downloads a newer release in the background and offers **Install and Relaunch** in the
+  menu bar menu. An update must be signed by the same developer as the running copy and
+  notarized by Apple before it replaces anything. **Check for Updates…** is in the menu
+  and in Preferences → About.
 
 ### Changed
 - Existing settings carry over unchanged: built-in actions are stored exactly as before.

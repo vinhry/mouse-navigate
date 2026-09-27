@@ -57,6 +57,10 @@ final class PreferencesWindowController: NSObject {
     private let detector: DeviceDetector
     private let engine: KeyboardCursorEngine
     private let touchMonitor: TouchMonitor
+    private let updater: Updater
+
+    private var automaticUpdatesCheckbox: NSButton?
+    private var updateStatusLabel: NSTextField?
 
     private var deviceLabel: NSTextField?
     private var overridePopup: NSPopUpButton?
@@ -96,11 +100,19 @@ final class PreferencesWindowController: NSObject {
 
     private var lastButtonPressed: Int?
 
-    init(detector: DeviceDetector, engine: KeyboardCursorEngine, touchMonitor: TouchMonitor) {
+    init(detector: DeviceDetector, engine: KeyboardCursorEngine, touchMonitor: TouchMonitor, updater: Updater) {
         self.detector = detector
         self.engine = engine
         self.touchMonitor = touchMonitor
+        self.updater = updater
         super.init()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(updaterDidChange),
+            name: Updater.didChangeNotification,
+            object: nil
+        )
 
         NotificationCenter.default.addObserver(
             self,
@@ -120,6 +132,7 @@ final class PreferencesWindowController: NSObject {
 
     func showOrFocus() {
         if let window {
+            refreshUpdatesUI()
             refreshScopeUI()
             refreshDeviceUI()
             refreshTouchUI()
@@ -1216,7 +1229,7 @@ final class PreferencesWindowController: NSObject {
         legal.font = .systemFont(ofSize: 11)
         legal.textColor = .secondaryLabelColor
 
-        let stack = NSStackView(views: [iconView, name, version, tagline, developer, links, legal])
+        let stack = NSStackView(views: [iconView, name, version, tagline, developer, links, legal, makeUpdatesSection()])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 6
@@ -1225,8 +1238,83 @@ final class PreferencesWindowController: NSObject {
         stack.setCustomSpacing(14, after: tagline)
         stack.setCustomSpacing(12, after: developer)
         stack.setCustomSpacing(18, after: links)
+        stack.setCustomSpacing(28, after: legal)
 
         return makePage(stack)
+    }
+
+    private func makeUpdatesSection() -> NSView {
+        let automatic = NSButton(
+            checkboxWithTitle: "Check for updates automatically",
+            target: self,
+            action: #selector(automaticUpdatesChanged(_:))
+        )
+        automatic.toolTip = "Once a day, from GitHub. Updates are downloaded and checked in the "
+            + "background, and installed only when you choose to."
+        automaticUpdatesCheckbox = automatic
+
+        let checkNow = NSButton(title: "Check Now", target: self, action: #selector(checkForUpdatesTapped))
+        checkNow.bezelStyle = .rounded
+
+        let row = NSStackView(views: [automatic, checkNow])
+        row.orientation = .horizontal
+        row.spacing = 16
+
+        let status = NSTextField(labelWithString: "")
+        status.font = .systemFont(ofSize: 11)
+        status.textColor = .secondaryLabelColor
+        status.alignment = .center
+        status.lineBreakMode = .byTruncatingTail
+        status.translatesAutoresizingMaskIntoConstraints = false
+        status.widthAnchor.constraint(lessThanOrEqualToConstant: 420).isActive = true
+        updateStatusLabel = status
+
+        let section = NSStackView(views: [row, status])
+        section.orientation = .vertical
+        section.alignment = .centerX
+        section.spacing = 6
+        refreshUpdatesUI()
+        return section
+    }
+
+    private func refreshUpdatesUI() {
+        automaticUpdatesCheckbox?.state = Preferences.shared.automaticUpdates == true ? .on : .off
+
+        let text: String
+        switch updater.state {
+        case .checking:
+            text = "Checking for updates…"
+        case .downloading(let version):
+            text = "Downloading version \(version)…"
+        case .ready(let staged):
+            text = "Version \(staged.version) is ready — Install and Relaunch is in the menu bar menu."
+        case .failed(let message):
+            text = message
+        case .upToDate, .idle:
+            if let last = Preferences.shared.lastUpdateCheck {
+                let formatter = RelativeDateTimeFormatter()
+                text = "Up to date. Last checked \(formatter.localizedString(for: last, relativeTo: Date()))."
+            } else {
+                text = "Not checked yet."
+            }
+        }
+        updateStatusLabel?.stringValue = text
+        updateStatusLabel?.toolTip = text
+    }
+
+    @objc private func updaterDidChange() {
+        refreshUpdatesUI()
+    }
+
+    @objc private func automaticUpdatesChanged(_ sender: NSButton) {
+        Preferences.shared.automaticUpdates = sender.state == .on
+        if sender.state == .on, UpdateSchedule.isDue(lastCheck: Preferences.shared.lastUpdateCheck, now: Date()) {
+            updater.check(userInitiated: false)
+        }
+    }
+
+    @objc private func checkForUpdatesTapped() {
+        updater.check(userInitiated: true)
     }
 
     private func makeLinkButton(title: String, url: URL) -> NSButton {

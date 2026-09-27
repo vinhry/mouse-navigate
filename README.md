@@ -380,7 +380,7 @@ gesture and drawn letter with its match score.
   - Touch gestures add the drawing overlay, a window only as large as the drawing itself.
 - Drawn strokes are capped and thinned rather than kept whole, so a long one cannot grow
   without bound.
-- No network activity required.
+- No network activity, apart from a daily update check if you turn that on.
 
 ## Install
 
@@ -399,7 +399,32 @@ Requires macOS 13 Ventura or later, on Apple silicon or Intel.
    until you do, then switches to a mouse — no relaunch needed.
 5. If keyboard cursor keys do nothing, also allow `Input Monitoring` in the same place.
 
-Permissions survive updates: download the new release and replace the app.
+Permissions survive updates, whether MouseNavigate installs them itself (see
+[Updates](#updates)) or you download the new release and replace the app.
+
+## Updates
+
+MouseNavigate can keep itself up to date from this repository's GitHub Releases. The first
+time it runs with Accessibility granted, it asks whether to check automatically; change
+that later in **Preferences → About**, where **Check Now** also lives, as does **Check for
+Updates…** in the menu bar menu.
+
+- **Checking** asks GitHub for the latest release once a day. Drafts and pre-releases are
+  never offered.
+- **A newer release is downloaded and verified in the background**, then offered as
+  **Install MouseNavigate X and Relaunch** at the top of the menu bar menu. Nothing is
+  installed until you choose it, because relaunching drops cursor mode and anything held.
+- **Before anything is replaced**, the download has to be signed by the same developer
+  identity as the running copy — the one macOS ties the Accessibility permission to — and
+  notarized by Apple, and has to be the version the release says it is. A download the app
+  makes itself is never checked by Gatekeeper, so these checks stand in for it. Anything
+  that fails is refused and the reason shown.
+- **Installing** swaps the new app into place in one step and reopens it. Permissions carry
+  over.
+
+Where it cannot replace itself — running straight from Downloads, or from a folder this
+account cannot change — it shows the verified new version in Finder to move by hand. A
+build signed ad hoc, such as a local one without a Developer ID, never updates itself.
 
 ## Build from Source
 
@@ -489,10 +514,13 @@ Or run the built binary directly:
   Mouse, and sees clicks and scrolls, only to recognize gestures. Nothing is recorded or
   stored.
 - MouseNavigate sends local keyboard/system actions. **Open URL…** hands the address to
-  whichever app opens it, and **Run Shortcut…** runs `/usr/bin/shortcuts`; MouseNavigate
-  itself makes no network requests.
+  whichever app opens it, and **Run Shortcut…** runs `/usr/bin/shortcuts`; neither makes a
+  network request of MouseNavigate's own.
 - MouseNavigate requires macOS Accessibility/Input Monitoring permissions.
-- MouseNavigate does not require network access to function.
+- The only network requests MouseNavigate makes are for updates, to `api.github.com` and
+  GitHub's release downloads, and only when automatic checks are on or you choose **Check
+  for Updates…**. Nothing about you or your settings is sent. Everything else works
+  offline.
 
 ## Gatekeeper Notes
 

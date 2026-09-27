@@ -10,6 +10,9 @@ enum AppInfo {
 
     static let repositoryURL = URL(string: "https://github.com/vinhry/mouse-navigate")!
     static let issuesURL = URL(string: "https://github.com/vinhry/mouse-navigate/issues/new/choose")!
+    /// GitHub's answer for the newest published release, which drafts and pre-releases
+    /// never are.
+    static let latestReleaseURL = URL(string: "https://api.github.com/repos/vinhry/mouse-navigate/releases/latest")!
 
     static let version: String =
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.3.2"
