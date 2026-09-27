@@ -55,7 +55,7 @@ final class Preferences {
             let legacyKey = "button\(button)"
             guard let raw = store.string(forKey: legacyKey) else { continue }
 
-            let newKey = buttonKey(profile: .mxMaster4, button: button)
+            let newKey = BindingTrigger.button(button, .mxMaster4).storageKey
             if store.string(forKey: newKey) == nil {
                 store.set(raw, forKey: newKey)
             }
@@ -66,10 +66,6 @@ final class Preferences {
     }
 
     // MARK: - Device profile
-
-    private func buttonKey(profile: DeviceProfile, button: Int) -> String {
-        "button.\(profile.rawValue).\(button)"
-    }
 
     /// nil means "auto" — follow whatever the detector reports.
     var deviceOverride: DeviceProfile? {
@@ -87,20 +83,100 @@ final class Preferences {
         }
     }
 
-    // MARK: - Button mapping
+    // MARK: - Bindings
 
-    func action(forButton button: Int, profile: DeviceProfile) -> ButtonAction {
-        guard let raw = store.string(forKey: buttonKey(profile: profile, button: button)),
-              let action = ButtonAction(rawValue: raw)
-        else {
-            return profile.defaultActions[button] ?? .disabled
-        }
-        return action
+    /// What `trigger` runs with `bundleID` in front: that app's own binding, then the one
+    /// for all apps.
+    func binding(for trigger: BindingTrigger, app bundleID: String?) -> ActionBinding {
+        BindingResolver.resolve(
+            trigger,
+            frontmost: bundleID,
+            overrides: appOverrides,
+            global: globalBinding(for:)
+        )
     }
 
-    func setAction(_ action: ButtonAction, forButton button: Int, profile: DeviceProfile) {
-        store.set(action.rawValue, forKey: buttonKey(profile: profile, button: button))
+    /// The binding for all apps, or the trigger's default when none is stored or the
+    /// stored one cannot be read.
+    func globalBinding(for trigger: BindingTrigger) -> ActionBinding {
+        guard let raw = store.string(forKey: trigger.storageKey),
+              let binding = ActionBinding(storageValue: raw),
+              trigger.allows(binding)
+        else {
+            return trigger.defaultBinding
+        }
+        return binding
+    }
+
+    func setGlobalBinding(_ binding: ActionBinding, for trigger: BindingTrigger) {
+        store.set(binding.storageValue, forKey: trigger.storageKey)
         notifyChange()
+    }
+
+    // MARK: - Per-app bindings
+
+    private static let appOverridesKey = "appOverrides"
+
+    /// Keyed by bundle identifier.
+    var appOverrides: [String: AppOverride] {
+        AppOverride.decodeAll(store.dictionary(forKey: Preferences.appOverridesKey))
+    }
+
+    private func saveAppOverrides(_ overrides: [String: AppOverride]) {
+        store.set(AppOverride.encodeAll(overrides), forKey: Preferences.appOverridesKey)
+        notifyChange()
+    }
+
+    /// Apps with bindings of their own, by name.
+    var overriddenApps: [AppOverride] {
+        appOverrides.values.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
+    func addApp(bundleID: String, name: String) {
+        var overrides = appOverrides
+        guard overrides[bundleID] == nil else { return }
+        overrides[bundleID] = AppOverride(bundleID: bundleID, name: name)
+        saveAppOverrides(overrides)
+    }
+
+    func removeApp(bundleID: String) {
+        var overrides = appOverrides
+        overrides[bundleID] = nil
+        saveAppOverrides(overrides)
+    }
+
+    func isAppDisabled(_ bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return appOverrides[bundleID]?.isDisabled ?? false
+    }
+
+    func setApp(_ bundleID: String, disabled: Bool) {
+        var overrides = appOverrides
+        guard overrides[bundleID] != nil else { return }
+        overrides[bundleID]?.isDisabled = disabled
+        saveAppOverrides(overrides)
+    }
+
+    /// nil means the app follows the binding for all apps.
+    func appBinding(for trigger: BindingTrigger, app bundleID: String) -> ActionBinding? {
+        appOverrides[bundleID]?.binding(for: trigger)
+    }
+
+    /// Hands every trigger whose key passes `matching` back to the binding for all apps.
+    func clearAppBindings(app bundleID: String, matching: (String) -> Bool) {
+        var overrides = appOverrides
+        guard let bindings = overrides[bundleID]?.bindings else { return }
+        overrides[bundleID]?.bindings = bindings.filter { !matching($0.key) }
+        saveAppOverrides(overrides)
+    }
+
+    func setAppBinding(_ binding: ActionBinding?, for trigger: BindingTrigger, app bundleID: String) {
+        var overrides = appOverrides
+        guard overrides[bundleID] != nil else { return }
+        overrides[bundleID]?.bindings[trigger.storageKey] = binding?.storageValue
+        saveAppOverrides(overrides)
     }
 
     // MARK: - Keyboard cursor
@@ -182,37 +258,7 @@ final class Preferences {
         }
     }
 
-    func touchAction(for gesture: TouchGesture) -> ButtonAction {
-        guard let raw = store.string(forKey: "touch.\(gesture.rawValue)"),
-              let action = ButtonAction(rawValue: raw),
-              gesture.allows(action)
-        else {
-            return gesture.defaultAction
-        }
-        return action
-    }
-
-    func setTouchAction(_ action: ButtonAction, for gesture: TouchGesture) {
-        store.set(action.rawValue, forKey: "touch.\(gesture.rawValue)")
-        notifyChange()
-    }
-
     // MARK: - Character gestures
-
-    func characterAction(for gesture: CharacterGesture) -> ButtonAction {
-        guard let raw = store.string(forKey: "character.\(gesture.rawValue)"),
-              let action = ButtonAction(rawValue: raw),
-              action != .moveResizeWindow
-        else {
-            return gesture.defaultAction
-        }
-        return action
-    }
-
-    func setCharacterAction(_ action: ButtonAction, for gesture: CharacterGesture) {
-        store.set(action.rawValue, forKey: "character.\(gesture.rawValue)")
-        notifyChange()
-    }
 
     /// Whether the stroke is drawn on screen as it is made.
     var showsDrawingOverlay: Bool {
@@ -248,10 +294,10 @@ final class Preferences {
     /// Reset every gesture binding and touch option; mouse buttons and cursor keys are untouched.
     func restoreTouchDefaults() {
         for gesture in TouchGesture.allCases {
-            store.removeObject(forKey: "touch.\(gesture.rawValue)")
+            store.removeObject(forKey: BindingTrigger.touch(gesture).storageKey)
         }
         for gesture in CharacterGesture.allCases {
-            store.removeObject(forKey: "character.\(gesture.rawValue)")
+            store.removeObject(forKey: BindingTrigger.character(gesture).storageKey)
         }
         for source in CharacterSource.allCases {
             store.removeObject(forKey: "characterSource.\(source.rawValue)")

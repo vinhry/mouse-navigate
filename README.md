@@ -42,6 +42,8 @@ To see what MouseNavigate detects:
 - Buttons `3`–`9` are individually configurable via **Preferences** (see [Button Mapping](#button-mapping) below).
 - Hold `A` to drive the pointer from the keyboard (see [Keyboard Cursor](#keyboard-cursor) below).
 - Opt-in trackpad, Magic Mouse and drawn-letter gestures (see [Touch Gestures](#touch-gestures) below).
+- Bind anything to a keyboard shortcut, an app, a URL or a Shortcuts shortcut, for all apps
+  or per app (see [Per-App Bindings](#per-app-bindings) below).
 - Default mapping:
   - Button `3` → Back (`⌘[`) in supported browsers & Finder
   - Button `4` → Forward (`⌘]`) in supported browsers & Finder
@@ -91,9 +93,22 @@ Available actions, shared by mouse buttons, touch gestures and drawn letters:
 | Browsing | Back, Forward, Next Tab (`⌃⇥`), Previous Tab (`⌃⇧⇥`), New Tab, Close Tab / Window, Reopen Closed Tab, Refresh, Open Link in New Tab (middle click) |
 | Editing | Copy, Paste, New, Open, Save, Quit App |
 | Windows | Minimize, Maximize (again to restore), Maximize Left, Maximize Right, Move / Resize (gestures only) |
-| System | App Exposé, Mission Control, Show Desktop, Move Left / Right a Space |
+| System | App Exposé, Mission Control, Show Desktop, Move Left / Right a Space, Lock Screen (`⌃⌘Q`), Screenshot Selection (`⌘⇧4`, or your own shortcut for it) |
+| Media | Play / Pause, Next / Previous Track, Volume Up / Down, Mute |
 | Launch | Finder, Default Browser |
 | App | Toggle Keyboard Cursor, Disabled |
+| Custom | Keyboard Shortcut…, Launch App…, Open URL…, Run Shortcut… |
+
+The custom actions each take a value of their own:
+
+- **Keyboard Shortcut…** records any key combination and sends it to the frontmost app.
+  Unlike the built-in Back / Forward, it works in every app, so `⌘[` recorded here goes back
+  in apps outside the supported list too.
+- **Launch App…** opens, or brings forward, an app you choose.
+- **Open URL…** opens a web address or any link an app on the Mac handles, such as
+  `mailto:` or an app's own scheme.
+- **Run Shortcut…** runs a shortcut from the Shortcuts app by name, without bringing
+  Shortcuts forward. This is the way to anything MouseNavigate does not do itself.
 
 Maximize Left / Right on a window that already fills that half carries it on to the next
 display. Window actions use the Accessibility permission the app already has.
@@ -105,6 +120,23 @@ Changes apply immediately and persist across restarts (stored in `UserDefaults` 
 
 **Back / Forward — supported apps:**
 Safari, Finder, Chrome, Chrome Canary, Firefox, Firefox Developer Edition, Arc, Brave, Edge, Opera, Vivaldi, Orion
+
+## Per-App Bindings
+
+Buttons, gestures and drawn letters can be bound differently in one app. Choose
+**Applies to → Add App…** at the top of **Preferences → Mouse** or **Touch**, pick the app,
+and the pickers switch to that app's bindings. Each starts as **Same as All Apps**, showing
+what that is; change only the ones you want different. **Applies to → All Apps** goes back.
+
+Per-app bindings follow the frontmost app, the one your keystrokes go to.
+
+**Turn off MouseNavigate in this app** stands everything aside while that app is in front:
+buttons, gestures and the keyboard cursor, so `A` types with no hold delay. That is for
+games, virtual machines and remote desktops, which want every key and button as it is.
+Switching to such an app mid-hold lets go of anything held, as **Pause** does.
+
+**Remove App** deletes that app's bindings. In an app's scope, **Restore Defaults** on the
+Touch tab hands its gestures back to the ones for all apps.
 
 ## Keyboard Cursor
 
@@ -245,7 +277,7 @@ Every other letter and the four diagonals start out unbound.
 
 ### Not included
 
-Per-app gesture sets, custom keyboard-shortcut actions, and jitouch's Safari-only gestures.
+jitouch's Safari-only gestures.
 
 ### How it works and tuning
 
@@ -384,7 +416,9 @@ Or run the built binary directly:
 - With touch gestures on, it also reads finger positions from the trackpad and Magic
   Mouse, and sees clicks and scrolls, only to recognize gestures. Nothing is recorded or
   stored.
-- MouseNavigate sends local keyboard/system actions.
+- MouseNavigate sends local keyboard/system actions. **Open URL…** hands the address to
+  whichever app opens it, and **Run Shortcut…** runs `/usr/bin/shortcuts`; MouseNavigate
+  itself makes no network requests.
 - MouseNavigate requires macOS Accessibility/Input Monitoring permissions.
 - MouseNavigate does not require network access to function.
 

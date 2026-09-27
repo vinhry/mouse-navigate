@@ -122,12 +122,14 @@ final class TouchMonitor {
             print("[touch] stroke of \(points.count) points -> \(described)\(character == nil ? ", rejected" : "")")
         }
 
-        let action = character.map { Preferences.shared.characterAction(for: $0) }
+        let binding = character.map {
+            Preferences.shared.binding(for: .character($0), app: FrontmostApp.shared.bundleID)
+        }
         overlay.show(points, in: space)
-        overlay.finish(character: character, action: action)
+        overlay.finish(character: character, binding: binding)
 
-        guard let action else { return }
-        performer.perform(action)
+        guard let binding else { return }
+        performer.perform(binding)
     }
 
     /// Draws a stroke from a mouse-button drag while it is being made.
@@ -314,14 +316,14 @@ final class TouchMonitor {
         for event in events {
             switch event {
             case .gesture(let gesture):
-                let action = Preferences.shared.touchAction(for: gesture)
+                let binding = Preferences.shared.binding(for: .touch(gesture), app: FrontmostApp.shared.bundleID)
                 if isDebugLogging {
-                    print("[touch] \(gesture.displayName) -> \(action.displayName)")
+                    print("[touch] \(gesture.displayName) -> \(binding.displayName)")
                 }
-                if action == .moveResizeWindow {
+                if binding == .builtin(.moveResizeWindow) {
                     performer.windowManager.beginDrag()
                 } else {
-                    performer.perform(action)
+                    performer.perform(binding)
                 }
             case .dragToggleMode:
                 performer.windowManager.toggleDragMode()

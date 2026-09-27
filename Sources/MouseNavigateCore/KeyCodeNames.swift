@@ -25,6 +25,7 @@ public enum KeyCode {
     public static let o: UInt16 = 31
     public static let leftBracket: UInt16 = 33
     public static let n: UInt16 = 45
+    public static let four: UInt16 = 21
     public static let tab: UInt16 = 48
     public static let leftArrow: UInt16 = 123
     public static let rightArrow: UInt16 = 124

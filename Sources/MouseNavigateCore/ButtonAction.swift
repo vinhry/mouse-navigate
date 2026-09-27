@@ -31,6 +31,15 @@ public enum ButtonAction: String, CaseIterable {
     case showDesktop = "showDesktop"
     case spaceLeft = "spaceLeft"
     case spaceRight = "spaceRight"
+    case lockScreen = "lockScreen"
+    case screenshot = "screenshot"
+
+    case playPause = "playPause"
+    case nextTrack = "nextTrack"
+    case previousTrack = "previousTrack"
+    case volumeUp = "volumeUp"
+    case volumeDown = "volumeDown"
+    case mute = "mute"
 
     case launchFinder = "launchFinder"
     case launchBrowser = "launchBrowser"
@@ -39,7 +48,7 @@ public enum ButtonAction: String, CaseIterable {
     case disabled = "disabled"
 
     public enum Category: CaseIterable {
-        case browsing, editing, window, system, launch, app, none
+        case browsing, editing, window, system, media, launch, app, none
     }
 
     public var category: Category {
@@ -51,8 +60,11 @@ public enum ButtonAction: String, CaseIterable {
             return .editing
         case .minimize, .zoom, .maximizeLeft, .maximizeRight, .moveResizeWindow:
             return .window
-        case .appExpose, .missionControl, .showDesktop, .spaceLeft, .spaceRight:
+        case .appExpose, .missionControl, .showDesktop, .spaceLeft, .spaceRight, .lockScreen,
+             .screenshot:
             return .system
+        case .playPause, .nextTrack, .previousTrack, .volumeUp, .volumeDown, .mute:
+            return .media
         case .launchFinder, .launchBrowser:
             return .launch
         case .toggleCursorMode:
@@ -89,6 +101,14 @@ public enum ButtonAction: String, CaseIterable {
         case .showDesktop: return "Show Desktop"
         case .spaceLeft: return "Move Left a Space"
         case .spaceRight: return "Move Right a Space"
+        case .lockScreen: return "Lock Screen (⌃⌘Q)"
+        case .screenshot: return "Screenshot Selection (⌘⇧4)"
+        case .playPause: return "Play / Pause"
+        case .nextTrack: return "Next Track"
+        case .previousTrack: return "Previous Track"
+        case .volumeUp: return "Volume Up"
+        case .volumeDown: return "Volume Down"
+        case .mute: return "Mute"
         case .launchFinder: return "Launch Finder"
         case .launchBrowser: return "Launch Default Browser"
         case .toggleCursorMode: return "Toggle Keyboard Cursor"
@@ -119,6 +139,7 @@ public enum ButtonAction: String, CaseIterable {
         case .open: return Shortcut(KeyCode.o, [.command])
         case .save: return Shortcut(KeyCode.s, [.command])
         case .quit: return Shortcut(KeyCode.q, [.command])
+        case .lockScreen: return Shortcut(KeyCode.q, [.control, .command])
         default: return nil
         }
     }
@@ -134,6 +155,16 @@ public struct Shortcut: Equatable {
         public static let shift = Modifiers(rawValue: 1 << 1)
         public static let control = Modifiers(rawValue: 1 << 2)
         public static let option = Modifiers(rawValue: 1 << 3)
+
+        /// ⌃⌥⇧⌘, in the order menus use.
+        public var symbols: String {
+            var symbols = ""
+            if contains(.control) { symbols += "⌃" }
+            if contains(.option) { symbols += "⌥" }
+            if contains(.shift) { symbols += "⇧" }
+            if contains(.command) { symbols += "⌘" }
+            return symbols
+        }
     }
 
     public var keyCode: UInt16
@@ -142,5 +173,10 @@ public struct Shortcut: Equatable {
     public init(_ keyCode: UInt16, _ modifiers: Modifiers) {
         self.keyCode = keyCode
         self.modifiers = modifiers
+    }
+
+    /// As menus write it: ⌃⌥⇧⌘ in that order, then the key.
+    public var displayString: String {
+        modifiers.symbols + KeyCodeNames.name(for: keyCode)
     }
 }

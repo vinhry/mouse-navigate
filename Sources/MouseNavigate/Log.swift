@@ -18,4 +18,6 @@ enum Log {
     static let launch = Logger(subsystem: subsystem, category: "launch")
     /// Accessibility and Input Monitoring, which is where a new install usually stalls.
     static let permissions = Logger(subsystem: subsystem, category: "permissions")
+    /// A bound action that could not be carried out, such as an app that is gone.
+    static let actions = Logger(subsystem: subsystem, category: "actions")
 }

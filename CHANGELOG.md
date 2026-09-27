@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Custom actions** for buttons, gestures and drawn letters, at the foot of every picker:
+  - **Keyboard Shortcut…** records any key combination and sends it to the frontmost app.
+  - **Launch App…** opens an app you choose.
+  - **Open URL…** opens a web address or any other link.
+  - **Run Shortcut…** runs a shortcut from the Shortcuts app by name.
+- **Per-app bindings.** **Applies to** on the Mouse and Touch tabs switches the pickers to
+  one app's own bindings, which win over the ones for all apps while that app is in front.
+  Each app can also turn MouseNavigate off entirely, keyboard cursor included, for games,
+  virtual machines and remote desktops.
+- New built-in actions: Play / Pause, Next / Previous Track, Volume Up / Down, Mute, Lock
+  Screen and Screenshot Selection.
+
+### Changed
+- Existing settings carry over unchanged: built-in actions are stored exactly as before.
+
 ## [0.3.2] - 2026-09-23
 
 ### Fixed

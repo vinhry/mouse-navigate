@@ -2,8 +2,56 @@ import AppKit
 import MouseNavigateCore
 
 /// Tabbed preferences: mouse button mapping per device profile, keyboard cursor bindings
-/// plus speed tuning, touch and drawn-character gestures, and an About page.
+/// plus speed tuning, touch and drawn-character gestures, and an About page. Buttons and
+/// gestures can be bound for all apps or for one app at a time.
 final class PreferencesWindowController: NSObject {
+    /// Something a picker binds. Buttons are numbers alone: the profile they belong to is
+    /// whichever one is active when the picker is read.
+    private enum BindingSlot: Hashable {
+        case button(Int)
+        case touch(TouchGesture)
+        case character(CharacterGesture)
+
+        var identifier: String {
+            switch self {
+            case .button(let number): return "button:\(number)"
+            case .touch(let gesture): return "touch:\(gesture.rawValue)"
+            case .character(let gesture): return "character:\(gesture.rawValue)"
+            }
+        }
+
+        init?(identifier: String) {
+            let parts = identifier.split(separator: ":", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { return nil }
+            switch parts[0] {
+            case "button":
+                guard let number = Int(parts[1]) else { return nil }
+                self = .button(number)
+            case "touch":
+                guard let gesture = TouchGesture(rawValue: parts[1]) else { return nil }
+                self = .touch(gesture)
+            case "character":
+                guard let gesture = CharacterGesture(rawValue: parts[1]) else { return nil }
+                self = .character(gesture)
+            default:
+                return nil
+            }
+        }
+    }
+
+    /// Picker items that open something rather than name a binding. The "#" can begin
+    /// neither an action's raw value nor a stored binding's JSON.
+    private enum PickerCommand {
+        static let inherit = "#inherit"
+        static let shortcut = "#shortcut"
+        static let launchApp = "#launchApp"
+        static let openURL = "#openURL"
+        static let runShortcut = "#runShortcut"
+        static let addApp = "#addApp"
+    }
+
+    /// Marks the one item in a picker that shows its current custom binding.
+    private static let customItemTag = 1
     private var window: NSWindow?
 
     private let detector: DeviceDetector
@@ -12,7 +60,12 @@ final class PreferencesWindowController: NSObject {
 
     private var deviceLabel: NSTextField?
     private var overridePopup: NSPopUpButton?
-    private var buttonPopups: [Int: NSPopUpButton] = [:]
+    private var bindingPopups: [BindingSlot: NSPopUpButton] = [:]
+    private lazy var editor = BindingEditor(engine: engine)
+
+    /// nil edits the bindings for all apps; otherwise the app whose own bindings are shown.
+    private var selectedApp: String?
+    private var scopeControls: [(popup: NSPopUpButton, remove: NSButton, disable: NSButton)] = []
     private var testerLabel: NSTextField?
 
     private var recorders: [CursorBinding: KeyRecorderButton] = [:]
@@ -24,8 +77,6 @@ final class PreferencesWindowController: NSObject {
     private var leftHandedCheckbox: NSButton?
     private var touchStatusLabel: NSTextField?
     private var touchPanes: [NSView] = []
-    private var touchPopups: [TouchGesture: NSPopUpButton] = [:]
-    private var characterPopups: [CharacterGesture: NSPopUpButton] = [:]
     private var characterSourceCheckboxes: [CharacterSource: NSButton] = [:]
     private var showDrawingCheckbox: NSButton?
     private var drawSpreadSlider: NSSlider?
@@ -62,6 +113,7 @@ final class PreferencesWindowController: NSObject {
 
     func showOrFocus() {
         if let window {
+            refreshScopeUI()
             refreshDeviceUI()
             refreshTouchUI()
             window.makeKeyAndOrderFront(nil)
@@ -139,6 +191,7 @@ final class PreferencesWindowController: NSObject {
         NSApp.activate(ignoringOtherApps: true)
         window = w
 
+        refreshScopeUI()
         refreshDeviceUI()
         refreshTouchUI()
     }
@@ -171,12 +224,7 @@ final class PreferencesWindowController: NSObject {
             let buttonLabel = NSTextField(labelWithString: "Button \(button):")
             buttonLabel.alignment = .right
 
-            let actionPopup = makeActionPopup(
-                action: #selector(buttonActionChanged(_:)),
-                include: { $0.isAvailableForButtons }
-            )
-            actionPopup.tag = button
-            buttonPopups[button] = actionPopup
+            let actionPopup = makeBindingPopup(for: .button(button))
 
             rows.append([buttonLabel, actionPopup])
         }
@@ -192,7 +240,7 @@ final class PreferencesWindowController: NSObject {
         tester.textColor = .secondaryLabelColor
         testerLabel = tester
 
-        let stack = NSStackView(views: [label, grid, tester])
+        let stack = NSStackView(views: [label, makeScopeRow(), grid, tester])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -240,18 +288,25 @@ final class PreferencesWindowController: NSObject {
         return grid
     }
 
-    /// Every assignable action, grouped by category. Items carry the action's raw value, so
-    /// selection never depends on item positions, which separators would throw off.
-    private func makeActionPopup(
-        action selector: Selector,
-        include: (ButtonAction) -> Bool = { _ in true }
-    ) -> NSPopUpButton {
+    /// Every action the slot can take, grouped by category, then the custom kinds. Items
+    /// carry a binding's storage value or a `PickerCommand`, so selection never depends on
+    /// item positions, which separators would throw off.
+    private func makeBindingPopup(for slot: BindingSlot) -> NSPopUpButton {
         let popup = NSPopUpButton(frame: .zero, pullsDown: false)
         popup.target = self
-        popup.action = selector
+        popup.action = #selector(bindingChanged(_:))
+        popup.identifier = NSUserInterfaceItemIdentifier(slot.identifier)
+        // A long custom binding is cut short rather than widening the window.
+        popup.cell?.lineBreakMode = .byTruncatingTail
 
+        // Shown only while one app's bindings are being edited.
+        popup.addItem(withTitle: "Same as All Apps")
+        popup.lastItem?.representedObject = PickerCommand.inherit
+        popup.menu?.addItem(.separator())
+
+        let trigger = self.trigger(for: slot)
         var previousCategory: ButtonAction.Category?
-        for action in ButtonAction.allCases where include(action) {
+        for action in ButtonAction.allCases where trigger.allows(.builtin(action)) {
             if let previousCategory, previousCategory != action.category {
                 popup.menu?.addItem(.separator())
             }
@@ -260,18 +315,271 @@ final class PreferencesWindowController: NSObject {
             popup.addItem(withTitle: action.displayName)
             popup.lastItem?.representedObject = action.rawValue
         }
+
+        popup.menu?.addItem(.separator())
+        for (title, command) in [
+            ("Keyboard Shortcut…", PickerCommand.shortcut),
+            ("Launch App…", PickerCommand.launchApp),
+            ("Open URL…", PickerCommand.openURL),
+            ("Run Shortcut…", PickerCommand.runShortcut),
+        ] {
+            popup.addItem(withTitle: title)
+            popup.lastItem?.representedObject = command
+        }
+
+        // Fixed at the width the built-in actions need, so a picker never grows past its
+        // column when it later shows a custom binding.
+        popup.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let width = popup.widthAnchor.constraint(equalToConstant: popup.intrinsicContentSize.width)
+        width.priority = .init(700)
+        width.isActive = true
+
+        bindingPopups[slot] = popup
         return popup
     }
 
-    private func select(_ action: ButtonAction, in popup: NSPopUpButton) {
-        let index = popup.indexOfItem(withRepresentedObject: action.rawValue)
+    private func trigger(for slot: BindingSlot) -> BindingTrigger {
+        switch slot {
+        case .button(let number): return .button(number, detector.activeProfile)
+        case .touch(let gesture): return .touch(gesture)
+        case .character(let gesture): return .character(gesture)
+        }
+    }
+
+    /// Shows the slot's binding in the current scope. A custom binding gets an item of its
+    /// own at the head of the custom group, replacing whichever one was there.
+    private func refreshBinding(_ slot: BindingSlot) {
+        guard let popup = bindingPopups[slot], let menu = popup.menu else { return }
+        let trigger = self.trigger(for: slot)
+        let preferences = Preferences.shared
+
+        if let item = menu.items.first(where: { $0.tag == Self.customItemTag }) {
+            menu.removeItem(item)
+        }
+
+        let inherit = popup.item(at: 0)
+        let inheritSeparator = popup.item(at: 1)
+        inherit?.isHidden = selectedApp == nil
+        inheritSeparator?.isHidden = selectedApp == nil
+        popup.isEnabled = !preferences.isAppDisabled(selectedApp)
+
+        let binding: ActionBinding
+        if let selectedApp {
+            let global = preferences.globalBinding(for: trigger)
+            inherit?.title = "Same as All Apps (\(global.displayName))"
+            guard let own = preferences.appBinding(for: trigger, app: selectedApp) else {
+                popup.selectItem(at: 0)
+                return
+            }
+            binding = own
+        } else {
+            binding = preferences.globalBinding(for: trigger)
+        }
+
+        if binding.builtinAction == nil {
+            let index = popup.indexOfItem(withRepresentedObject: PickerCommand.shortcut)
+            let item = NSMenuItem(title: binding.displayName, action: nil, keyEquivalent: "")
+            item.representedObject = binding.storageValue
+            item.tag = Self.customItemTag
+            menu.insertItem(item, at: max(index, 0))
+            popup.select(item)
+            return
+        }
+
+        let index = popup.indexOfItem(withRepresentedObject: binding.storageValue)
         if index >= 0 {
             popup.selectItem(at: index)
         }
     }
 
-    private func selectedAction(of popup: NSPopUpButton) -> ButtonAction? {
-        (popup.selectedItem?.representedObject as? String).flatMap(ButtonAction.init(rawValue:))
+    private func refreshBindings(where include: (BindingSlot) -> Bool = { _ in true }) {
+        for slot in bindingPopups.keys where include(slot) {
+            refreshBinding(slot)
+        }
+    }
+
+    @objc private func bindingChanged(_ sender: NSPopUpButton) {
+        guard let raw = sender.identifier?.rawValue,
+              let slot = BindingSlot(identifier: raw),
+              let value = sender.selectedItem?.representedObject as? String
+        else {
+            return
+        }
+        let trigger = self.trigger(for: slot)
+        let current = currentBinding(for: trigger)
+
+        switch value {
+        case PickerCommand.inherit:
+            store(nil, for: slot)
+        case PickerCommand.shortcut:
+            guard let window else { return }
+            var existing: Shortcut?
+            if case .shortcut(let shortcut) = current { existing = shortcut }
+            editor.editShortcut(current: existing, in: window) { [weak self] shortcut in
+                self?.store(shortcut.map(ActionBinding.shortcut), for: slot, cancelled: shortcut == nil)
+            }
+        case PickerCommand.launchApp:
+            guard let window else { return }
+            editor.chooseApp(in: window) { [weak self] app in
+                self?.store(app.map { .launchApp(bundleID: $0.bundleID, name: $0.name) }, for: slot, cancelled: app == nil)
+            }
+        case PickerCommand.openURL:
+            guard let window else { return }
+            var existing: URL?
+            if case .openURL(let url) = current { existing = url }
+            editor.editURL(current: existing, in: window) { [weak self] url in
+                self?.store(url.map(ActionBinding.openURL), for: slot, cancelled: url == nil)
+            }
+        case PickerCommand.runShortcut:
+            guard let window else { return }
+            var existing: String?
+            if case .runShortcut(let name) = current { existing = name }
+            editor.editShortcutName(current: existing, in: window) { [weak self] name in
+                self?.store(name.map { .runShortcut(name: $0) }, for: slot, cancelled: name == nil)
+            }
+        default:
+            store(ActionBinding(storageValue: value), for: slot)
+        }
+    }
+
+    /// The binding the picker shows now, for pre-filling an editor.
+    private func currentBinding(for trigger: BindingTrigger) -> ActionBinding? {
+        if let selectedApp {
+            return Preferences.shared.appBinding(for: trigger, app: selectedApp)
+        }
+        return Preferences.shared.globalBinding(for: trigger)
+    }
+
+    /// nil in an app's scope hands the slot back to the binding for all apps. A cancelled
+    /// editor stores nothing and puts the picker back as it was.
+    private func store(_ binding: ActionBinding?, for slot: BindingSlot, cancelled: Bool = false) {
+        defer { refreshBinding(slot) }
+        guard !cancelled else { return }
+
+        let trigger = self.trigger(for: slot)
+        if let selectedApp {
+            Preferences.shared.setAppBinding(binding, for: trigger, app: selectedApp)
+        } else if let binding {
+            Preferences.shared.setGlobalBinding(binding, for: trigger)
+        }
+    }
+
+    // MARK: - App scope
+
+    /// "Applies to" with the apps that have bindings of their own. Built once per tab that
+    /// binds anything; every copy shows the same scope.
+    private func makeScopeRow() -> NSView {
+        let label = NSTextField(labelWithString: "Applies to:")
+
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        popup.target = self
+        popup.action = #selector(scopeChanged(_:))
+        popup.translatesAutoresizingMaskIntoConstraints = false
+        popup.widthAnchor.constraint(equalToConstant: 200).isActive = true
+        popup.cell?.lineBreakMode = .byTruncatingTail
+
+        let remove = NSButton(title: "Remove App", target: self, action: #selector(removeAppTapped))
+        remove.bezelStyle = .rounded
+
+        let disable = NSButton(
+            checkboxWithTitle: "Turn off MouseNavigate in this app",
+            target: self,
+            action: #selector(appDisabledChanged(_:))
+        )
+        disable.toolTip = "Buttons, gestures and the keyboard cursor all stand aside while this app is in front."
+
+        let row = NSStackView(views: [label, popup, remove])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+
+        let stack = NSStackView(views: [row, disable])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 6
+        // Hidden views keep their room, so choosing an app never changes the page's height.
+        stack.detachesHiddenViews = false
+        row.detachesHiddenViews = false
+
+        scopeControls.append((popup, remove, disable))
+        return stack
+    }
+
+    private func refreshScopeUI() {
+        let apps = Preferences.shared.overriddenApps
+        if let selectedApp, !apps.contains(where: { $0.bundleID == selectedApp }) {
+            self.selectedApp = nil
+        }
+
+        for control in scopeControls {
+            let popup = control.popup
+            popup.removeAllItems()
+            popup.addItem(withTitle: "All Apps")
+            popup.lastItem?.representedObject = ""
+            if !apps.isEmpty {
+                popup.menu?.addItem(.separator())
+                for app in apps {
+                    popup.addItem(withTitle: app.name)
+                    popup.lastItem?.representedObject = app.bundleID
+                    popup.lastItem?.toolTip = app.bundleID
+                }
+            }
+            popup.menu?.addItem(.separator())
+            popup.addItem(withTitle: "Add App…")
+            popup.lastItem?.representedObject = PickerCommand.addApp
+
+            popup.selectItem(at: max(popup.indexOfItem(withRepresentedObject: selectedApp ?? ""), 0))
+
+            control.remove.isHidden = selectedApp == nil
+            control.disable.isHidden = selectedApp == nil
+            control.disable.state = Preferences.shared.isAppDisabled(selectedApp) ? .on : .off
+        }
+        refreshBindings()
+    }
+
+    @objc private func scopeChanged(_ sender: NSPopUpButton) {
+        guard let value = sender.selectedItem?.representedObject as? String else { return }
+        guard value == PickerCommand.addApp else {
+            selectedApp = value.isEmpty ? nil : value
+            refreshScopeUI()
+            return
+        }
+
+        guard let window else { return }
+        editor.chooseApp(in: window) { [weak self] app in
+            guard let self else { return }
+            if let app {
+                Preferences.shared.addApp(bundleID: app.bundleID, name: app.name)
+                self.selectedApp = app.bundleID
+            }
+            self.refreshScopeUI()
+        }
+    }
+
+    @objc private func removeAppTapped() {
+        guard let window, let selectedApp,
+              let app = Preferences.shared.appOverrides[selectedApp]
+        else {
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Remove \(app.name)?"
+        alert.informativeText = "Its own bindings are deleted, and it goes back to the ones for all apps."
+        alert.addButton(withTitle: "Remove")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            Preferences.shared.removeApp(bundleID: selectedApp)
+            self?.selectedApp = nil
+            self?.refreshScopeUI()
+        }
+    }
+
+    @objc private func appDisabledChanged(_ sender: NSButton) {
+        guard let selectedApp else { return }
+        Preferences.shared.setApp(selectedApp, disabled: sender.state == .on)
+        refreshScopeUI()
     }
 
     private func makeSection(title: String, content: NSView) -> NSStackView {
@@ -468,11 +776,13 @@ final class PreferencesWindowController: NSObject {
         let footer = NSStackView(views: [spacer, restore])
         footer.orientation = .horizontal
 
-        let stack = NSStackView(views: [toggles, hint, status, panePicker, paneContainer, footer])
+        let scopeRow = makeScopeRow()
+        let stack = NSStackView(views: [toggles, hint, status, scopeRow, panePicker, paneContainer, footer])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
         stack.setCustomSpacing(14, after: status)
+        stack.setCustomSpacing(14, after: scopeRow)
         stack.setCustomSpacing(12, after: panePicker)
         stack.setCustomSpacing(12, after: paneContainer)
         footer.widthAnchor.constraint(equalTo: hint.widthAnchor).isActive = true
@@ -487,13 +797,8 @@ final class PreferencesWindowController: NSObject {
             label.alignment = .right
             label.toolTip = gesture.hint
 
-            let popup = makeActionPopup(
-                action: #selector(touchActionChanged(_:)),
-                include: { gesture.allows($0) }
-            )
-            popup.identifier = NSUserInterfaceItemIdentifier(gesture.rawValue)
+            let popup = makeBindingPopup(for: .touch(gesture))
             popup.toolTip = gesture.hint
-            touchPopups[gesture] = popup
             return [label, popup]
         }
 
@@ -531,12 +836,7 @@ final class PreferencesWindowController: NSObject {
             let label = NSTextField(labelWithString: "\(gesture.displayName):")
             label.alignment = .right
 
-            let popup = makeActionPopup(
-                action: #selector(characterActionChanged(_:)),
-                include: { $0 != .moveResizeWindow }
-            )
-            popup.identifier = NSUserInterfaceItemIdentifier(gesture.rawValue)
-            characterPopups[gesture] = popup
+            let popup = makeBindingPopup(for: .character(gesture))
             characterRows.append((gesture, popup))
             return [label, popup]
         }
@@ -693,11 +993,9 @@ final class PreferencesWindowController: NSObject {
         touchEnableCheckbox?.state = preferences.isTouchEnabled ? .on : .off
         leftHandedCheckbox?.state = preferences.isLeftHanded ? .on : .off
 
-        for (gesture, popup) in touchPopups {
-            select(preferences.touchAction(for: gesture), in: popup)
-        }
-        for (gesture, popup) in characterPopups {
-            select(preferences.characterAction(for: gesture), in: popup)
+        refreshBindings { slot in
+            if case .button = slot { return false }
+            return true
         }
         for (source, checkbox) in characterSourceCheckboxes {
             checkbox.state = preferences.isCharacterSourceEnabled(source) ? .on : .off
@@ -753,26 +1051,6 @@ final class PreferencesWindowController: NSObject {
         strokePreview?.isAnimating = touchPanes.last?.isHidden == false
     }
 
-    @objc private func touchActionChanged(_ sender: NSPopUpButton) {
-        guard let raw = sender.identifier?.rawValue,
-              let gesture = TouchGesture(rawValue: raw),
-              let action = selectedAction(of: sender)
-        else {
-            return
-        }
-        Preferences.shared.setTouchAction(action, for: gesture)
-    }
-
-    @objc private func characterActionChanged(_ sender: NSPopUpButton) {
-        guard let raw = sender.identifier?.rawValue,
-              let gesture = CharacterGesture(rawValue: raw),
-              let action = selectedAction(of: sender)
-        else {
-            return
-        }
-        Preferences.shared.setCharacterAction(action, for: gesture)
-    }
-
     @objc private func showDrawingChanged(_ sender: NSButton) {
         Preferences.shared.showsDrawingOverlay = sender.state == .on
     }
@@ -790,8 +1068,16 @@ final class PreferencesWindowController: NSObject {
         }
     }
 
+    /// In one app's scope this hands its gestures back to the ones for all apps rather than
+    /// resetting those.
     @objc private func restoreTouchDefaultsTapped() {
-        Preferences.shared.restoreTouchDefaults()
+        if let selectedApp {
+            Preferences.shared.clearAppBindings(app: selectedApp) {
+                $0.hasPrefix("touch.") || $0.hasPrefix("character.")
+            }
+        } else {
+            Preferences.shared.restoreTouchDefaults()
+        }
         refreshTouchUI()
     }
 
@@ -892,9 +1178,9 @@ final class PreferencesWindowController: NSObject {
             overridePopup?.selectItem(at: 0)
         }
 
-        let profile = detector.activeProfile
-        for (button, popup) in buttonPopups {
-            select(Preferences.shared.action(forButton: button, profile: profile), in: popup)
+        refreshBindings { slot in
+            if case .button = slot { return true }
+            return false
         }
     }
 
@@ -908,11 +1194,6 @@ final class PreferencesWindowController: NSObject {
             Preferences.shared.deviceOverride = profiles[index - 1]
         }
         refreshDeviceUI()
-    }
-
-    @objc private func buttonActionChanged(_ sender: NSPopUpButton) {
-        guard let action = selectedAction(of: sender) else { return }
-        Preferences.shared.setAction(action, forButton: sender.tag, profile: detector.activeProfile)
     }
 
     @objc private func enabledChanged(_ sender: NSButton) {

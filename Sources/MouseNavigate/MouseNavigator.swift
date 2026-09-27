@@ -17,7 +17,11 @@ final class MouseNavigator {
     private var lockFileDescriptor: CInt = -1
     private var statusBarController: StatusBarController?
     private var preferencesController: PreferencesWindowController?
-    private var isPaused = false
+    /// Paused from the menu bar.
+    private var isUserPaused = false
+    /// The frontmost app has MouseNavigate turned off in its per-app settings.
+    private var isFrontmostDisabled = false
+    private var isPaused: Bool { isUserPaused || isFrontmostDisabled }
     private var installedEventMask: CGEventMask = 0
     /// Set when a Magic Mouse click became a gesture, so its release is swallowed too.
     private var isSwallowingLeftMouseUp = false
@@ -80,10 +84,8 @@ final class MouseNavigator {
         }
         controller.onPauseToggle = { [weak self] paused in
             guard let self else { return }
-            self.isPaused = paused
-            self.cursorEngine.isSuspended = paused
-            self.touchMonitor.isPaused = paused
-            self.releaseHeldMouseInput()
+            self.isUserPaused = paused
+            self.applyPauseState()
         }
         controller.setup()
         statusBarController = controller
@@ -124,6 +126,11 @@ final class MouseNavigator {
         }
         touchMonitor.isDebugLogging = isTouchDebugEnabled
         touchMonitor.start()
+
+        FrontmostApp.shared.onChange = { [weak self] _ in
+            self?.updateFrontmostDisabled()
+        }
+        updateFrontmostDisabled()
 
         NotificationCenter.default.addObserver(
             self,
@@ -298,7 +305,23 @@ final class MouseNavigator {
         return types.reduce(CGEventMask(0)) { $0 | CGEventMask(1) << $1.rawValue }
     }
 
+    /// Pausing and an app with MouseNavigate turned off stand everything down the same way:
+    /// whatever is held is let go, so switching apps mid-hold never strands a key or click.
+    private func applyPauseState() {
+        cursorEngine.isSuspended = isPaused
+        touchMonitor.isPaused = isPaused
+        releaseHeldMouseInput()
+    }
+
+    private func updateFrontmostDisabled() {
+        let disabled = Preferences.shared.isAppDisabled(FrontmostApp.shared.bundleID)
+        guard disabled != isFrontmostDisabled else { return }
+        isFrontmostDisabled = disabled
+        applyPauseState()
+    }
+
     @objc private func preferencesDidChange() {
+        updateFrontmostDisabled()
         guard let eventTap, desiredEventMask != installedEventMask else { return }
 
         releaseHeldMouseInput()
@@ -368,8 +391,11 @@ final class MouseNavigator {
                strokeCapture.handleDown(.middle, at: event.location) {
                 return nil
             }
-            let action = Preferences.shared.action(forButton: button, profile: detector.activeProfile)
-            return performAction(action, event: event)
+            let binding = Preferences.shared.binding(
+                for: .button(button, detector.activeProfile),
+                app: FrontmostApp.shared.bundleID
+            )
+            return performAction(binding, event: event)
         case .otherMouseDragged:
             return strokeCapture.handleDragged(.middle, at: event.location) ? nil : Unmanaged.passUnretained(event)
         case .otherMouseUp:
@@ -404,8 +430,8 @@ final class MouseNavigator {
         guard Preferences.shared.isTouchEnabled, touchMonitor.isMagicMouseMiddleClickPose else {
             return Unmanaged.passUnretained(event)
         }
-        let action = Preferences.shared.touchAction(for: .mouseMiddleClick)
-        guard action != .disabled, performer.perform(action) else {
+        let binding = Preferences.shared.binding(for: .touch(.mouseMiddleClick), app: FrontmostApp.shared.bundleID)
+        guard binding != .disabled, performer.perform(binding) else {
             return Unmanaged.passUnretained(event)
         }
         isSwallowingLeftMouseUp = true
@@ -445,7 +471,7 @@ final class MouseNavigator {
         return disposition == .consume ? nil : Unmanaged.passUnretained(event)
     }
 
-    private func performAction(_ action: ButtonAction, event: CGEvent) -> Unmanaged<CGEvent>? {
-        performer.perform(action) ? nil : Unmanaged.passUnretained(event)
+    private func performAction(_ binding: ActionBinding, event: CGEvent) -> Unmanaged<CGEvent>? {
+        performer.perform(binding) ? nil : Unmanaged.passUnretained(event)
     }
 }
