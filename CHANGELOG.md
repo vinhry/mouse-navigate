@@ -21,6 +21,13 @@ All notable changes to this project will be documented in this file.
 - **Scroll Wheel** options for mice: reverse the direction, change the speed, and an
   experimental smooth scrolling mode. Trackpads and the Magic Mouse are never affected.
 
+- **Grid jump** (`G` in cursor mode): pick cells of a 3×3 grid, each pick splitting the
+  last, to bring the pointer anywhere in three keystrokes. Delete goes back, 1–9 change
+  display, Escape puts the pointer back.
+- **Click hints** (`H` in cursor mode): everything clickable in the frontmost window gets a
+  short label; type it to click, with Shift for a right-click and Option to only move there.
+- **Click Hints** and **Grid Jump** as actions for mouse buttons and gestures.
+
 ### Changed
 - Existing settings carry over unchanged: built-in actions are stored exactly as before.
 - A side button whose press ran an action now swallows its release too, rather than handing

@@ -135,6 +135,24 @@ final class CursorOutput {
         post(event)
     }
 
+    /// A whole click at `position`, for when the pointer has only just been sent there and
+    /// the system may not report it at its new location yet.
+    func click(_ button: MouseButton, at position: Vector2) {
+        let point = CGPoint(x: position.x, y: position.y)
+        for type in [button.downType, button.upType] {
+            guard let event = CGEvent(
+                mouseEventSource: source,
+                mouseType: type,
+                mouseCursorPosition: point,
+                mouseButton: button.cgButton
+            ) else {
+                return
+            }
+            event.setIntegerValueField(.mouseEventClickState, value: 1)
+            post(event)
+        }
+    }
+
     /// Release everything still held. Called on every exit path so a synthetic button
     /// can never be left stuck down.
     func releaseAllButtons() {

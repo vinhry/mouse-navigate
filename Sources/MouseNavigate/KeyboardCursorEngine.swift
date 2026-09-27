@@ -34,6 +34,17 @@ final class KeyboardCursorEngine {
     private var speedProfile = CursorSpeedProfile()
     private var screens: [Rect] = []
 
+    /// The grid or the click hints, while one has the keyboard.
+    private var modal: CursorModal?
+    /// Keys whose press the modal took, so their releases go nowhere either.
+    private var modalKeysDown: Set<UInt16> = []
+    /// The activation key came up while a modal was open. Its release is held over until
+    /// the modal closes, so letting go of it mid-pick does not snatch the grid away.
+    private var activationReleasedDuringModal = false
+    /// Cursor mode was switched on only to show a modal, from a mouse button, and goes off
+    /// again with it.
+    private var exitsWithModal = false
+
     private let keyEventSource = CGEventSource(stateID: .hidSystemState)
     /// Modifier flags (Caps Lock, in practice) on the activation key-down being withheld.
     private var withheldFlags: CGEventFlags = []
@@ -90,6 +101,10 @@ final class KeyboardCursorEngine {
     ) -> Disposition {
         guard isEnabled else { return .pass }
 
+        if modal != nil, gate.isEngaged {
+            return handleKeyDownModal(keyCode: keyCode, flags: flags, isRepeat: isRepeat)
+        }
+
         let outcome = gate.keyDown(
             keyCode: keyCode,
             activationKey: activationKey,
@@ -112,6 +127,14 @@ final class KeyboardCursorEngine {
 
     func handleKeyUp(keyCode: UInt16, proxy: CGEventTapProxy) -> Disposition {
         guard isEnabled else { return .pass }
+
+        if modalKeysDown.remove(keyCode) != nil {
+            return .consume
+        }
+        if modal != nil, keyCode == activationKey, gate.phase == .engaged {
+            activationReleasedDuringModal = true
+            return .consume
+        }
 
         let outcome = gate.keyUp(
             keyCode: keyCode,
@@ -253,11 +276,148 @@ final class KeyboardCursorEngine {
                 restartMotionRamp()
                 startMotionTimer()
             }
+        case .grid:
+            openGrid()
+        case .hints:
+            openHints()
         case .activate:
             break
         }
 
         return .consume
+    }
+
+    // MARK: - Modals
+
+    private func handleKeyDownModal(keyCode: UInt16, flags: CGEventFlags, isRepeat: Bool) -> Disposition {
+        // The activation key autorepeating while it is still held.
+        if keyCode == activationKey {
+            return .consume
+        }
+        // ⌘-shortcuts still reach the frontmost app; the modal gives way to them.
+        if flags.contains(.maskCommand) {
+            closeModal()
+            return handleKeyDownEngaged(keyCode: keyCode, flags: flags, isRepeat: isRepeat)
+        }
+        guard !isRepeat, let modal else { return .consume }
+
+        switch modal.keyDown(keyCode, flags: flags) {
+        case .consume:
+            modalKeysDown.insert(keyCode)
+            return .consume
+        case .finish:
+            modalKeysDown.insert(keyCode)
+            closeModal()
+            return .consume
+        case .finishAndForward:
+            // The key does its job before cursor mode might end with the modal, so a click
+            // key still clicks where a grid opened from a mouse button led.
+            dismissModal()
+            let disposition = handleKeyDownEngaged(keyCode: keyCode, flags: flags, isRepeat: isRepeat)
+            settleAfterModal()
+            if !gate.isEngaged, disposition == .consume {
+                // Cursor mode is gone, so nothing else will claim the key's release.
+                modalKeysDown.insert(keyCode)
+            }
+            return disposition
+        }
+    }
+
+    private func openGrid() {
+        let exitKey = preferences.keyCode(for: .exit)
+        let gridKey = preferences.keyCode(for: .grid)
+        present(GridMode(pointer: output.location, exitKey: exitKey, gridKey: gridKey) { [weak self] point in
+            self?.jump(to: point)
+        })
+    }
+
+    private func openHints() {
+        let hints = HintMode(
+            excluding: [activationKey],
+            exitKey: preferences.keyCode(for: .exit),
+            hintsKey: preferences.keyCode(for: .hints)
+        ) { [weak self] point, click in
+            guard let self else { return }
+            let target = Vector2(x: Double(point.x), y: Double(point.y))
+            self.jump(to: target)
+            switch click {
+            case .left: self.output.click(.left, at: target)
+            case .right: self.output.click(.right, at: target)
+            case .none: break
+            }
+        }
+        present(hints)
+    }
+
+    private func present(_ newModal: CursorModal) {
+        dismissModal()
+        // Movement stops while the keys belong to the modal.
+        heldDirections.removeAll()
+        isScrollModifierHeld = false
+        stopMotionTimer()
+
+        newModal.onFinish = { [weak self, weak newModal] in
+            guard let self, let newModal, self.modal === newModal else { return }
+            self.closeModal()
+        }
+        modal = newModal
+    }
+
+    private func jump(to point: Vector2) {
+        let clamped = CursorMotion.clamp(point: point, previous: output.location, screens: output.screenRects())
+        lastPosition = clamped
+        output.move(to: clamped)
+    }
+
+    /// Ends the modal and settles what was held over while it was open.
+    private func closeModal() {
+        dismissModal()
+        settleAfterModal()
+    }
+
+    private func settleAfterModal() {
+        if exitsWithModal {
+            exitsWithModal = false
+            activationReleasedDuringModal = false
+            gate.reset()
+            tearDownCursorMode()
+            return
+        }
+        if activationReleasedDuringModal {
+            activationReleasedDuringModal = false
+            let stillDown = CGEventSource.keyState(.hidSystemState, key: CGKeyCode(activationKey))
+            if gate.phase == .engaged, !stillDown {
+                gate.reset()
+                tearDownCursorMode()
+            }
+        }
+    }
+
+    /// Takes the modal down without deciding anything about cursor mode itself.
+    private func dismissModal() {
+        modal?.close()
+        modal = nil
+    }
+
+    /// For the Click Hints and Grid Jump actions on a mouse button or gesture: switches
+    /// cursor mode on for as long as the modal is up, if it was not on already.
+    func showFromMouseButton(hints: Bool) {
+        guard preferences.isCursorModeEnabled, !isSuspended else { return }
+
+        if !gate.isEngaged {
+            _ = gate.toggleExternally()
+            cancelHoldTimer()
+            speedProfile = preferences.speedProfile()
+            screens = output.screenRects()
+            lastPosition = output.location
+            onModeChange?(true)
+            exitsWithModal = true
+        }
+        if hints {
+            openHints()
+        } else {
+            openGrid()
+        }
     }
 
     private func handleKeyUpEngaged(keyCode: UInt16) -> Disposition {
@@ -280,7 +440,7 @@ final class KeyboardCursorEngine {
             } else {
                 restartMotionRamp()
             }
-        case .activate, .exit, .lock:
+        case .activate, .exit, .lock, .grid, .hints:
             break
         }
 
@@ -307,6 +467,10 @@ final class KeyboardCursorEngine {
     /// Release everything cursor mode was holding. The gate's phase is assumed to have
     /// been settled already by whoever called this.
     private func tearDownCursorMode() {
+        dismissModal()
+        modalKeysDown.removeAll()
+        activationReleasedDuringModal = false
+        exitsWithModal = false
         cancelHoldTimer()
         stopMotionTimer()
         stopWatchdog()
@@ -323,6 +487,10 @@ final class KeyboardCursorEngine {
     /// Unconditional teardown for pause, sleep, tap loss and quit.
     func forceExit() {
         let wasEngaged = gate.isEngaged
+        dismissModal()
+        modalKeysDown.removeAll()
+        activationReleasedDuringModal = false
+        exitsWithModal = false
         gate.reset()
         cancelHoldTimer()
         stopMotionTimer()
@@ -429,7 +597,8 @@ final class KeyboardCursorEngine {
             guard let self else { return }
             // Only the held phase depends on the key still being down; a latched
             // mode is meant to outlive it.
-            guard self.gate.phase == .engaged else { return }
+            // A modal holds the activation key's release over until it closes.
+            guard self.gate.phase == .engaged, self.modal == nil else { return }
 
             // Read the hardware state: the tap consumes the activation key, so the
             // session state never sees it go down and would always report it released.

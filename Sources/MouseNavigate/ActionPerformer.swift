@@ -155,6 +155,12 @@ final class ActionPerformer {
         case .toggleCursorMode:
             cursorEngine.toggleFromMouseButton()
             return true
+        case .showHints:
+            cursorEngine.showFromMouseButton(hints: true)
+            return true
+        case .showGrid:
+            cursorEngine.showFromMouseButton(hints: false)
+            return true
         case .disabled:
             return false
         case .nextTab, .previousTab, .newTab, .closeTab, .reopenClosedTab, .refresh,

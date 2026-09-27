@@ -26,6 +26,22 @@ public enum KeyCode {
     public static let leftBracket: UInt16 = 33
     public static let n: UInt16 = 45
     public static let four: UInt16 = 21
+    public static let h: UInt16 = 4
+    public static let g: UInt16 = 5
+    public static let z: UInt16 = 6
+    public static let x: UInt16 = 7
+    public static let b: UInt16 = 11
+    public static let e: UInt16 = 14
+    public static let y: UInt16 = 16
+    public static let u: UInt16 = 32
+    public static let p: UInt16 = 35
+    public static let m: UInt16 = 46
+    public static let comma: UInt16 = 43
+    public static let period: UInt16 = 47
+    public static let returnKey: UInt16 = 36
+    public static let delete: UInt16 = 51
+    /// The digits along the top row, 1 through 9.
+    public static let digits: [UInt16] = [18, 19, 20, 21, 23, 22, 26, 28, 25]
     public static let tab: UInt16 = 48
     public static let leftArrow: UInt16 = 123
     public static let rightArrow: UInt16 = 124

@@ -96,7 +96,7 @@ Available actions, shared by mouse buttons, touch gestures and drawn letters:
 | System | App Exposé, Mission Control, Show Desktop, Move Left / Right a Space, Lock Screen (`⌃⌘Q`), Screenshot Selection (`⌘⇧4`, or your own shortcut for it) |
 | Media | Play / Pause, Next / Previous Track, Volume Up / Down, Mute |
 | Launch | Finder, Default Browser |
-| App | Toggle Keyboard Cursor, Disabled |
+| App | Toggle Keyboard Cursor, Click Hints, Grid Jump, Disabled |
 | Custom | Keyboard Shortcut…, Launch App…, Open URL…, Run Shortcut… |
 
 The custom actions each take a value of their own:
@@ -180,6 +180,8 @@ to engage, then:
 | `D` | Right click |
 | `F` | Middle click |
 | `Space` (hold) | `IJKL` scrolls instead of moving |
+| `G` | Grid jump (see below) |
+| `H` | Click hints (see below) |
 | `;` | Lock cursor mode so it stays on after releasing `A` |
 | `Esc` | Exit, releasing anything still held |
 
@@ -195,6 +197,46 @@ Speed tiers, held alongside `A`:
 Movement eases in rather than starting at full speed, and diagonals travel at the same
 rate as the axes. Every key and every speed is rebindable in **Preferences → Keyboard
 Cursor**, along with the hold delay.
+
+### Grid jump
+
+Press `G` in cursor mode and the display under the pointer splits into a 3×3 grid, each cell
+labelled with the key that picks it — `U I O / J K L / M , .`, the block under the right
+hand. Each pick brings the pointer to the middle of that cell and splits it again, so three
+picks land within a few dozen points of anywhere.
+
+| Key | Action |
+|-----|--------|
+| `U I O J K L M , .` | Pick a cell |
+| `Delete` | Go back one pick |
+| `1`–`9` | Move the grid to that display, counted left to right |
+| `Return` or `G` | Close the grid, leaving the pointer there |
+| `Esc` | Close the grid and put the pointer back where it started |
+| `S` / `D` / `F` | Close the grid and click there |
+
+The grid keys go by position rather than letter, so they sit in the same place on any
+keyboard layout.
+
+### Click hints
+
+Press `H` in cursor mode and everything clickable in the frontmost window gets a short
+label. Type a label to click it:
+
+- **Shift** on the last letter right-clicks instead.
+- **Option** on the last letter only brings the pointer there.
+- `Delete` takes back a letter; `Esc` or `H` closes the hints.
+
+Labels are one letter when there are few targets and two when there are many, home row
+first, and never use the activation key, which is usually still held. Letting go of `A`
+while the hints are up keeps them open; cursor mode ends once they close.
+
+The targets come from the window's Accessibility information, read with the permission the
+app already has: buttons, links, checkboxes, text fields, pop-up menus, table rows and the
+like. Apps that expose little to Accessibility get few hints. Electron apps are asked to
+build theirs first. A very large page gets the targets found within about half a second.
+
+**Click Hints** and **Grid Jump** are also actions for a mouse button or gesture: they switch
+cursor mode on for as long as they are up.
 
 ### Why it does not break typing
 

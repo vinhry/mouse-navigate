@@ -45,6 +45,8 @@ public enum ButtonAction: String, CaseIterable {
     case launchBrowser = "launchBrowser"
 
     case toggleCursorMode = "toggleCursorMode"
+    case showHints = "showHints"
+    case showGrid = "showGrid"
     case disabled = "disabled"
 
     public enum Category: CaseIterable {
@@ -67,7 +69,7 @@ public enum ButtonAction: String, CaseIterable {
             return .media
         case .launchFinder, .launchBrowser:
             return .launch
-        case .toggleCursorMode:
+        case .toggleCursorMode, .showHints, .showGrid:
             return .app
         case .disabled:
             return .none
@@ -112,6 +114,8 @@ public enum ButtonAction: String, CaseIterable {
         case .launchFinder: return "Launch Finder"
         case .launchBrowser: return "Launch Default Browser"
         case .toggleCursorMode: return "Toggle Keyboard Cursor"
+        case .showHints: return "Click Hints"
+        case .showGrid: return "Grid Jump"
         case .disabled: return "Disabled"
         }
     }

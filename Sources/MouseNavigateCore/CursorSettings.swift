@@ -12,6 +12,8 @@ public enum CursorBinding: String, CaseIterable {
     case rightClick
     case middleClick
     case scrollModifier
+    case grid
+    case hints
     case lock
     case exit
 
@@ -26,6 +28,8 @@ public enum CursorBinding: String, CaseIterable {
         case .rightClick: return "Right Click"
         case .middleClick: return "Middle Click"
         case .scrollModifier: return "Scroll (hold)"
+        case .grid: return "Grid Jump"
+        case .hints: return "Click Hints"
         case .lock: return "Toggle Lock"
         case .exit: return "Exit"
         }
@@ -42,6 +46,8 @@ public enum CursorBinding: String, CaseIterable {
         case .rightClick: return KeyCode.d
         case .middleClick: return KeyCode.f
         case .scrollModifier: return KeyCode.space
+        case .grid: return KeyCode.g
+        case .hints: return KeyCode.h
         case .lock: return KeyCode.semicolon
         case .exit: return KeyCode.escape
         }
