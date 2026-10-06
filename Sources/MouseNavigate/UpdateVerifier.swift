@@ -30,9 +30,15 @@ enum UpdateVerifier {
         }
     }
 
+    /// Marks a leaf certificate as Developer ID Application, in its extensions.
+    private static let developerIDLeafOID = "1.2.840.113635.100.6.1.13"
+
     /// This app's designated requirement, when it has one worth holding an update to. An
     /// ad-hoc build has no team, and its requirement names only its own exact code, which
-    /// no update could ever meet; such a copy does not update itself.
+    /// no update could ever meet; a build signed with an Apple Development certificate has
+    /// a team, but its requirement names that certificate's chain, which a Developer ID
+    /// release can never satisfy either. Neither copy updates itself, rather than
+    /// downloading every release only to refuse it.
     static func ownRequirement() -> SecRequirement? {
         var code: SecCode?
         var staticCode: SecStaticCode?
@@ -45,7 +51,9 @@ enum UpdateVerifier {
         var info: CFDictionary?
         guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
               let dictionary = info as? [String: Any],
-              let team = dictionary[kSecCodeInfoTeamIdentifier as String] as? String, !team.isEmpty
+              let team = dictionary[kSecCodeInfoTeamIdentifier as String] as? String, !team.isEmpty,
+              let certificates = dictionary[kSecCodeInfoCertificates as String] as? [SecCertificate],
+              let leaf = certificates.first, isDeveloperID(leaf)
         else {
             return nil
         }
@@ -53,6 +61,13 @@ enum UpdateVerifier {
         var requirement: SecRequirement?
         guard SecCodeCopyDesignatedRequirement(staticCode, [], &requirement) == errSecSuccess else { return nil }
         return requirement
+    }
+
+    private static func isDeveloperID(_ certificate: SecCertificate) -> Bool {
+        guard let values = SecCertificateCopyValues(certificate, [developerIDLeafOID] as CFArray, nil) as? [String: Any] else {
+            return false
+        }
+        return values[developerIDLeafOID] != nil
     }
 
     /// Throws the first reason `app` may not be installed. Slow — it runs `spctl`, which

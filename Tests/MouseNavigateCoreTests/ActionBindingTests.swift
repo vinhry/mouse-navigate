@@ -171,4 +171,26 @@ final class BindingResolverTests: XCTestCase {
         XCTAssertEqual(Array(decoded.keys), ["good"])
         XCTAssertEqual(AppOverride.decodeAll(nil), [:])
     }
+
+    func testBuiltInShortcutsNameTheirLetter() {
+        // Sent by letter on the layout in use; the key code is only the US position.
+        XCTAssertEqual(ButtonAction.closeTab.shortcut, Shortcut(KeyCode.w, [.command], character: "w"))
+        XCTAssertEqual(ButtonAction.back.shortcut?.character, "[")
+        // Tab is the same key everywhere, so it has no letter to look up.
+        XCTAssertNil(ButtonAction.nextTab.shortcut?.character)
+        for action in ButtonAction.allCases {
+            guard let shortcut = action.shortcut, let character = shortcut.character else { continue }
+            XCTAssertEqual(KeyCodeNames.name(for: shortcut.keyCode).lowercased(), String(character), "\(action)")
+        }
+    }
+
+    func testOneUnreadableBindingValueDoesNotDropTheOthers() {
+        let decoded = AppOverride.decodeAll([
+            "com.figma.Desktop": [
+                "name": "Figma",
+                "bindings": ["character.t": "newTab", "button.generic.3": 42] as [String: Any],
+            ] as [String: Any],
+        ])
+        XCTAssertEqual(decoded["com.figma.Desktop"]?.bindings, ["character.t": "newTab"])
+    }
 }

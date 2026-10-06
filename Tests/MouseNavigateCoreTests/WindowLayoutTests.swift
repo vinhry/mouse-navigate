@@ -58,6 +58,27 @@ final class WindowLayoutTests: XCTestCase {
         )
     }
 
+    func testADisplayBelowIsNotANeighbourSideways() {
+        // A laptop centred a little left of a wide external display above it.
+        let above = Rect(x: 0, y: 0, width: 2560, height: 1415)
+        let below = Rect(x: 400, y: 1415, width: 1440, height: 875)
+        XCTAssertNil(WindowLayout.neighbourIndex(of: 0, toward: .left, in: [above, below]))
+        XCTAssertNil(WindowLayout.neighbourIndex(of: 0, toward: .right, in: [above, below]))
+        XCTAssertEqual(
+            WindowLayout.halfTarget(.left, window: WindowLayout.half(.left, of: above), screens: [above, below]),
+            WindowLayout.half(.left, of: above)
+        )
+    }
+
+    func testALevelNeighbourWinsOverADiagonalOne() {
+        let origin = Rect(x: 2000, y: 0, width: 1920, height: 1080)
+        let diagonal = Rect(x: 0, y: 1500, width: 1440, height: 900)
+        let level = Rect(x: 560, y: 100, width: 1440, height: 900)
+        XCTAssertEqual(WindowLayout.neighbourIndex(of: 0, toward: .left, in: [origin, diagonal, level]), 2)
+        // With nothing level, a display placed diagonally still counts as beside.
+        XCTAssertEqual(WindowLayout.neighbourIndex(of: 0, toward: .left, in: [origin, diagonal]), 1)
+    }
+
     func testResizeRespectsMinimumSize() {
         let frame = Rect(x: 10, y: 10, width: 300, height: 200)
         let resized = WindowLayout.resized(frame, by: Vector2(x: -1000, y: -1000))

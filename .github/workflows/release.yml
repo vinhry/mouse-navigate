@@ -61,15 +61,16 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           cd dist
-          zip -r MouseNavigate-unsigned.zip MouseNavigate.app
-          xcrun notarytool submit MouseNavigate-unsigned.zip \
+          # The build script's zip is of the unstapled app; submit it, then staple and
+          # zip again with ditto, which keeps the signature and the ticket intact.
+          xcrun notarytool submit MouseNavigate.zip \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_APP_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
             --wait
           xcrun stapler staple MouseNavigate.app
-          rm MouseNavigate-unsigned.zip
-          zip -r MouseNavigate.zip MouseNavigate.app
+          rm MouseNavigate.zip
+          ditto -c -k --keepParent MouseNavigate.app MouseNavigate.zip
 
       - name: Create GitHub Release
         env:

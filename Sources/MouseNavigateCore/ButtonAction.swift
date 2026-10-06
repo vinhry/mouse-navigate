@@ -126,24 +126,27 @@ public enum ButtonAction: String, CaseIterable {
         self != .moveResizeWindow
     }
 
-    /// The key combination for actions that are nothing more than a shortcut.
+    /// The key combination for actions that are nothing more than a shortcut. These mean
+    /// a letter, not a key position: ⌘W closes a tab because of the W, which sits on key
+    /// 13 on a US keyboard and elsewhere on others. The key code is the US position, for
+    /// a layout that has no such letter.
     public var shortcut: Shortcut? {
         switch self {
-        case .back: return Shortcut(KeyCode.leftBracket, [.command])
-        case .forward: return Shortcut(KeyCode.rightBracket, [.command])
+        case .back: return Shortcut(KeyCode.leftBracket, [.command], character: "[")
+        case .forward: return Shortcut(KeyCode.rightBracket, [.command], character: "]")
         case .nextTab: return Shortcut(KeyCode.tab, [.control])
         case .previousTab: return Shortcut(KeyCode.tab, [.control, .shift])
-        case .newTab: return Shortcut(KeyCode.t, [.command])
-        case .closeTab: return Shortcut(KeyCode.w, [.command])
-        case .reopenClosedTab: return Shortcut(KeyCode.t, [.command, .shift])
-        case .refresh: return Shortcut(KeyCode.r, [.command])
-        case .copy: return Shortcut(KeyCode.c, [.command])
-        case .paste: return Shortcut(KeyCode.v, [.command])
-        case .newDocument: return Shortcut(KeyCode.n, [.command])
-        case .open: return Shortcut(KeyCode.o, [.command])
-        case .save: return Shortcut(KeyCode.s, [.command])
-        case .quit: return Shortcut(KeyCode.q, [.command])
-        case .lockScreen: return Shortcut(KeyCode.q, [.control, .command])
+        case .newTab: return Shortcut(KeyCode.t, [.command], character: "t")
+        case .closeTab: return Shortcut(KeyCode.w, [.command], character: "w")
+        case .reopenClosedTab: return Shortcut(KeyCode.t, [.command, .shift], character: "t")
+        case .refresh: return Shortcut(KeyCode.r, [.command], character: "r")
+        case .copy: return Shortcut(KeyCode.c, [.command], character: "c")
+        case .paste: return Shortcut(KeyCode.v, [.command], character: "v")
+        case .newDocument: return Shortcut(KeyCode.n, [.command], character: "n")
+        case .open: return Shortcut(KeyCode.o, [.command], character: "o")
+        case .save: return Shortcut(KeyCode.s, [.command], character: "s")
+        case .quit: return Shortcut(KeyCode.q, [.command], character: "q")
+        case .lockScreen: return Shortcut(KeyCode.q, [.control, .command], character: "q")
         default: return nil
         }
     }
@@ -173,10 +176,15 @@ public struct Shortcut: Equatable {
 
     public var keyCode: UInt16
     public var modifiers: Modifiers
+    /// The character the shortcut is really about, for built-in shortcuts: the sender
+    /// finds the key that types it on the keyboard layout in use. A recorded shortcut has
+    /// none; the key that was pressed is the key that is sent.
+    public var character: Character?
 
-    public init(_ keyCode: UInt16, _ modifiers: Modifiers) {
+    public init(_ keyCode: UInt16, _ modifiers: Modifiers, character: Character? = nil) {
         self.keyCode = keyCode
         self.modifiers = modifiers
+        self.character = character
     }
 
     /// As menus write it: ⌃⌥⇧⌘ in that order, then the key.

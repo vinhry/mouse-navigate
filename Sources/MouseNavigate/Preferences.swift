@@ -10,7 +10,7 @@ enum CharacterSource: String, CaseIterable {
     var displayName: String {
         switch self {
         case .trackpad: return "Draw with two spread fingers on the trackpad"
-        case .magicMouseRightDrag: return "Draw while holding the right button (Magic Mouse)"
+        case .magicMouseRightDrag: return "Draw while holding the right mouse button"
         case .middleButtonDrag: return "Draw while holding the middle button"
         }
     }

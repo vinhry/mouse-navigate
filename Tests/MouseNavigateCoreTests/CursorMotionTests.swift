@@ -82,7 +82,8 @@ final class CursorMotionTests: XCTestCase {
 
     // MARK: - Clamping
 
-    private let primary = Rect(minX: 0, minY: 0, maxX: 1439, maxY: 899)
+    /// Half-open, as the engine builds them: 1440 points wide, so x runs up to 1440.
+    private let primary = Rect(minX: 0, minY: 0, maxX: 1440, maxY: 900)
 
     func testPointInsideIsUnchanged() {
         let point = Vector2(x: 100, y: 100)
@@ -118,7 +119,7 @@ final class CursorMotionTests: XCTestCase {
     }
 
     func testMovingIntoASecondDisplayIsAllowed() {
-        let secondary = Rect(minX: 1440, minY: 0, maxX: 3279, maxY: 1079)
+        let secondary = Rect(minX: 1440, minY: 0, maxX: 3280, maxY: 1080)
         let point = Vector2(x: 2000, y: 500)
         XCTAssertEqual(
             CursorMotion.clamp(point: point, previous: Vector2(x: 1439, y: 500), screens: [primary, secondary]),
@@ -128,13 +129,47 @@ final class CursorMotionTests: XCTestCase {
 
     func testGapBetweenMisalignedDisplaysDoesNotTrapTheCursor() {
         // The secondary display is taller, so y=1000 exists on it but not on the primary.
-        let secondary = Rect(minX: 1440, minY: 0, maxX: 3279, maxY: 1079)
+        let secondary = Rect(minX: 1440, minY: 0, maxX: 3280, maxY: 1080)
         let result = CursorMotion.clamp(
             point: Vector2(x: 1400, y: 1000),
             previous: Vector2(x: 1500, y: 1000),
             screens: [primary, secondary]
         )
         XCTAssertEqual(result, Vector2(x: 1500, y: 1000))
+    }
+
+    func testFractionalPositionReachesTheLastColumn() {
+        // Retina pointers sit at fractional positions; the last column is still on screen.
+        let point = Vector2(x: 1439.4, y: 500)
+        XCTAssertEqual(CursorMotion.clamp(point: point, previous: Vector2(x: 1438.4, y: 500), screens: [primary]), point)
+    }
+
+    func testOnePointStepCrossesADisplaySeam() {
+        let secondary = Rect(minX: 1440, minY: 0, maxX: 3280, maxY: 1080)
+        let point = Vector2(x: 1440.4, y: 500)
+        XCTAssertEqual(
+            CursorMotion.clamp(point: point, previous: Vector2(x: 1439.4, y: 500), screens: [primary, secondary]),
+            point
+        )
+    }
+
+    func testTheEdgeItselfIsOffScreen() {
+        let result = CursorMotion.clamp(
+            point: Vector2(x: 1440, y: 500),
+            previous: Vector2(x: 1439, y: 500),
+            screens: [primary]
+        )
+        XCTAssertEqual(result, Vector2(x: 1439, y: 500))
+    }
+
+    func testCornerOverrunPinsToTheDisplayThePointerWasOn() {
+        let secondary = Rect(minX: 1440, minY: 0, maxX: 3280, maxY: 1080)
+        let result = CursorMotion.clamp(
+            point: Vector2(x: -50, y: 1200),
+            previous: Vector2(x: 1400, y: 899),
+            screens: [primary, secondary]
+        )
+        XCTAssertEqual(result, Vector2(x: 0, y: 899))
     }
 
     func testNoScreensLeavesThePointAlone() {

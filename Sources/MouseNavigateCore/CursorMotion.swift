@@ -75,6 +75,10 @@ public enum CursorMotion {
     /// Confine a point to the union of the display rects. Each axis falls back to its
     /// previous value independently, so sliding along the edge of one display does not
     /// snag on the gap next to another.
+    ///
+    /// Display rects are half-open: a display 1440 points wide holds x from 0 up to, but
+    /// not including, 1440, so the pointer's fractional positions on a Retina display can
+    /// reach its last column and step across to a display that starts at 1440.
     public static func clamp(
         point: Vector2,
         previous: Vector2,
@@ -82,32 +86,37 @@ public enum CursorMotion {
     ) -> Vector2 {
         guard !screens.isEmpty else { return point }
 
-        if screens.contains(where: { $0.contains(x: point.x, y: point.y) }) {
+        if screens.contains(where: { holds($0, point) }) {
             return point
         }
 
         // Try giving up one axis at a time before falling back entirely.
         let horizontalOnly = Vector2(x: point.x, y: previous.y)
-        if screens.contains(where: { $0.contains(x: horizontalOnly.x, y: horizontalOnly.y) }) {
+        if screens.contains(where: { holds($0, horizontalOnly) }) {
             return horizontalOnly
         }
 
         let verticalOnly = Vector2(x: previous.x, y: point.y)
-        if screens.contains(where: { $0.contains(x: verticalOnly.x, y: verticalOnly.y) }) {
+        if screens.contains(where: { holds($0, verticalOnly) }) {
             return verticalOnly
         }
 
-        // Both axes left the desktop: pin to the nearest edge of the closest display.
-        guard let nearest = screens.min(by: {
+        // Both axes left the desktop: pin to the edge of the display the pointer was on,
+        // or of the closest one when it was nowhere.
+        guard let home = screens.first(where: { holds($0, previous) }) ?? screens.min(by: {
             squaredDistance(from: point, to: $0) < squaredDistance(from: point, to: $1)
         }) else {
             return previous
         }
 
         return Vector2(
-            x: min(max(point.x, nearest.minX), nearest.maxX),
-            y: min(max(point.y, nearest.minY), nearest.maxY)
+            x: min(max(point.x, home.minX), home.maxX - 1),
+            y: min(max(point.y, home.minY), home.maxY - 1)
         )
+    }
+
+    private static func holds(_ rect: Rect, _ point: Vector2) -> Bool {
+        point.x >= rect.minX && point.x < rect.maxX && point.y >= rect.minY && point.y < rect.maxY
     }
 
     private static func squaredDistance(from point: Vector2, to rect: Rect) -> Double {

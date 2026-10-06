@@ -48,10 +48,23 @@ public struct ActivationGate {
         case exitEngaged
     }
 
+    /// What engaging from a mouse button did.
+    public enum ExternalToggle: Equatable {
+        /// Cursor mode was on and is now off.
+        case ended
+        /// Cursor mode is now latched on.
+        case engaged
+        /// Latched on, once the caller has replayed the activation letter that was being
+        /// withheld: it had been pressed moments before, so it was typed after all.
+        case engagedAfterReplay
+    }
+
     public private(set) var phase: Phase = .idle
 
     /// When the activation letter was last handed to whoever is typing.
     private var lastTypedAt: TimeInterval?
+    /// The activation key is down and the app saw it go down, so it gets the release too.
+    private var passesActivationRelease = false
 
     public init() {}
 
@@ -149,6 +162,12 @@ public struct ActivationGate {
         case .locked:
             // The activation key is no longer what holds the mode open.
             guard keyCode == activationKey else { return .handleEngaged }
+            if passesActivationRelease {
+                // The press reached the app, so withholding the release would leave the
+                // key stuck down there.
+                passesActivationRelease = false
+                return .pass
+            }
             return .consume
         }
     }
@@ -189,20 +208,34 @@ public struct ActivationGate {
         }
     }
 
-    /// Engage from something other than the activation key, such as a mouse button.
-    /// Returns true when the mode should end instead.
-    public mutating func toggleExternally() -> Bool {
+    /// Engage from something other than the activation key, such as a mouse button, or end
+    /// the mode if it is on. Whatever the activation key was in the middle of is settled
+    /// first, so the app is never left with half a keystroke.
+    public mutating func toggleExternally() -> ExternalToggle {
         if isEngaged {
             phase = .idle
-            return true
+            passesActivationRelease = false
+            return .ended
         }
+
+        let previous = phase
         phase = .locked
-        return false
+        switch previous {
+        case .pending:
+            return .engagedAfterReplay
+        case .typing, .aborted:
+            // The app has the press already, so it gets the release as well.
+            passesActivationRelease = true
+            return .engaged
+        case .idle, .engaged, .locked:
+            return .engaged
+        }
     }
 
     /// Unconditional teardown for pause, sleep, tap loss and quit.
     public mutating func reset() {
         phase = .idle
+        passesActivationRelease = false
         // A window left armed across a teardown would spray the letter on the next hold.
         lastTypedAt = nil
     }

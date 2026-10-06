@@ -4,8 +4,8 @@ import AppKit
 enum AppInfo {
     static let name = "MouseNavigate"
     static let tagline = "Global mouse side-button navigation, touch gestures and keyboard cursor control for macOS."
-    static let developer = "Vinh Ry"
-    static let copyright = "© 2026 Vinh Ry"
+    static let developer = "Vinhry"
+    static let copyright = "© 2026 Vinhry"
     static let license = "MIT License"
 
     static let repositoryURL = URL(string: "https://github.com/vinhry/mouse-navigate")!
@@ -14,8 +14,11 @@ enum AppInfo {
     /// never are.
     static let latestReleaseURL = URL(string: "https://api.github.com/repos/vinhry/mouse-navigate/releases/latest")!
 
+    /// From the bundle the build script wrote, which is the one place the version lives.
+    /// Unbundled, as under `swift run`, this is a development build and says so, so it is
+    /// never mistaken for a release to be updated from.
     static let version: String =
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.3.2"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0-dev"
 
     static let build: String? = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
 

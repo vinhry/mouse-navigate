@@ -19,6 +19,10 @@ final class KeyboardCursorEngine {
     private let output = CursorOutput()
 
     private var gate = ActivationGate()
+    /// Every key whose press was swallowed and is still down. Their repeats and releases
+    /// are swallowed too, however cursor mode ends in between: the frontmost app never saw
+    /// the press, so it must not see the rest.
+    private var heldKeys = HeldKeySwallower()
     private var heldDirections: Set<CursorBinding> = []
     private var isScrollModifierHeld = false
     private var tier: SpeedTier = []
@@ -36,8 +40,6 @@ final class KeyboardCursorEngine {
 
     /// The grid or the click hints, while one has the keyboard.
     private var modal: CursorModal?
-    /// Keys whose press the modal took, so their releases go nowhere either.
-    private var modalKeysDown: Set<UInt16> = []
     /// The activation key came up while a modal was open. Its release is held over until
     /// the modal closes, so letting go of it mid-pick does not snatch the grid away.
     private var activationReleasedDuringModal = false
@@ -49,11 +51,26 @@ final class KeyboardCursorEngine {
     /// Modifier flags (Caps Lock, in practice) on the activation key-down being withheld.
     private var withheldFlags: CGEventFlags = []
 
-    /// Suspends the engine entirely — used while a key recorder in preferences is armed,
-    /// and while the app is paused from the status menu.
+    // Settings, read once per change rather than on every keystroke.
+    private var bindingsByKey: [UInt16: CursorBinding] = [:]
+    private var activationKey = CursorBinding.activate.defaultKeyCode
+    private var isCursorModeEnabled = true
+    private var holdThreshold = CursorSetting.holdThreshold.defaultValue
+    private var retypeWindow = CursorSetting.retypeWindow.defaultValue
+
+    /// Suspends the engine entirely while the app is paused from the status menu.
     var isSuspended = false {
         didSet {
             if isSuspended { forceExit() }
+        }
+    }
+
+    /// Suspends the engine while a key recorder in preferences is armed, so the global tap
+    /// does not swallow the very keystroke being recorded. Kept apart from pausing: the
+    /// recorder finishing must not resume a paused app.
+    var isRecordingSuspended = false {
+        didSet {
+            if isRecordingSuspended { forceExit() }
         }
     }
 
@@ -63,23 +80,28 @@ final class KeyboardCursorEngine {
     var isEngaged: Bool { gate.isEngaged }
 
     init() {
-        NSWorkspace.shared.notificationCenter.addObserver(
+        reloadSettings()
+
+        let workspace = NSWorkspace.shared.notificationCenter
+        for name in [
+            NSWorkspace.willSleepNotification,
+            NSWorkspace.screensDidSleepNotification,
+            NSWorkspace.sessionDidResignActiveNotification,
+        ] {
+            workspace.addObserver(self, selector: #selector(handleSystemInterruption), name: name, object: nil)
+        }
+        // Locking the screen is announced to nobody in particular, by the lock screen itself.
+        DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(handleSystemInterruption),
-            name: NSWorkspace.willSleepNotification,
-            object: nil
-        )
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self,
-            selector: #selector(handleSystemInterruption),
-            name: NSWorkspace.sessionDidResignActiveNotification,
+            name: Notification.Name("com.apple.screenIsLocked"),
             object: nil
         )
         // Rebinding a key or disabling the feature mid-hold would otherwise leave the
         // gate waiting on a key that no longer means anything.
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handleSystemInterruption),
+            selector: #selector(preferencesDidChange),
             name: Preferences.didChangeNotification,
             object: nil
         )
@@ -87,6 +109,27 @@ final class KeyboardCursorEngine {
 
     @objc private func handleSystemInterruption() {
         forceExit()
+    }
+
+    @objc private func preferencesDidChange() {
+        reloadSettings()
+        forceExit()
+    }
+
+    private func reloadSettings() {
+        var bindings: [UInt16: CursorBinding] = [:]
+        // The first binding in declaration order keeps a key two of them claim.
+        for binding in CursorBinding.allCases {
+            let keyCode = preferences.keyCode(for: binding)
+            if bindings[keyCode] == nil {
+                bindings[keyCode] = binding
+            }
+        }
+        bindingsByKey = bindings
+        activationKey = preferences.keyCode(for: .activate)
+        isCursorModeEnabled = preferences.isCursorModeEnabled
+        holdThreshold = preferences.value(for: .holdThreshold)
+        retypeWindow = preferences.value(for: .retypeWindow)
     }
 
     // MARK: - Key routing
@@ -99,6 +142,11 @@ final class KeyboardCursorEngine {
         isRepeat: Bool,
         proxy: CGEventTapProxy
     ) -> Disposition {
+        // A key whose press was swallowed keeps repeating until it is let go, whatever
+        // cursor mode is doing by now. Those repeats are nobody's.
+        if heldKeys.keyDown(keyCode, isRepeat: isRepeat) {
+            return .consume
+        }
         guard isEnabled else { return .pass }
 
         if modal != nil, gate.isEngaged {
@@ -126,14 +174,19 @@ final class KeyboardCursorEngine {
     }
 
     func handleKeyUp(keyCode: UInt16, proxy: CGEventTapProxy) -> Disposition {
-        guard isEnabled else { return .pass }
+        // Whether the press was swallowed decides whether the release is: an app is never
+        // handed one half of a keystroke.
+        let wasHeld = heldKeys.keyUp(keyCode)
+        guard isEnabled else { return wasHeld ? .consume : .pass }
 
-        if modalKeysDown.remove(keyCode) != nil {
-            return .consume
-        }
-        if modal != nil, keyCode == activationKey, gate.phase == .engaged {
-            activationReleasedDuringModal = true
-            return .consume
+        if modal != nil, gate.isEngaged {
+            if keyCode == activationKey, gate.phase == .engaged {
+                activationReleasedDuringModal = true
+                return .consume
+            }
+            if wasHeld {
+                return .consume
+            }
         }
 
         let outcome = gate.keyUp(
@@ -144,12 +197,14 @@ final class KeyboardCursorEngine {
 
         switch outcome {
         case .handleEngaged:
-            return handleKeyUpEngaged(keyCode: keyCode)
+            handleKeyUpEngaged(keyCode: keyCode)
+            return wasHeld ? .consume : .pass
         case .exitEngaged:
             tearDownCursorMode()
             return .consume
         default:
-            return apply(outcome, proxy: proxy)
+            let disposition = apply(outcome, proxy: proxy)
+            return wasHeld ? .consume : disposition
         }
     }
 
@@ -196,9 +251,8 @@ final class KeyboardCursorEngine {
     private func startHoldTimer() {
         cancelHoldTimer()
 
-        let threshold = preferences.value(for: .holdThreshold)
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + threshold)
+        timer.schedule(deadline: .now() + holdThreshold)
         timer.setEventHandler { [weak self] in
             self?.enterCursorMode()
         }
@@ -211,12 +265,14 @@ final class KeyboardCursorEngine {
         holdTimer = nil
     }
 
-    private func replayActivationKey(proxy: CGEventTapProxy) {
+    /// Hands the withheld activation letter to the frontmost app after all. With no tap
+    /// callback in progress there is no proxy, and the key goes in at the top of the stream.
+    private func replayActivationKey(proxy: CGEventTapProxy?) {
         postKeyEvent(keyCode: activationKey, down: true, proxy: proxy)
         postKeyEvent(keyCode: activationKey, down: false, proxy: proxy)
     }
 
-    private func postKeyEvent(keyCode: UInt16, down: Bool, proxy: CGEventTapProxy) {
+    private func postKeyEvent(keyCode: UInt16, down: Bool, proxy: CGEventTapProxy?) {
         guard let event = CGEvent(
             keyboardEventSource: keyEventSource,
             virtualKey: CGKeyCode(keyCode),
@@ -232,7 +288,11 @@ final class KeyboardCursorEngine {
         // triggered the replay, which is then delivered first: typing "abc" fast came out
         // as "bac". An event posted through the proxy enters the system before the event
         // the tap callback returns, so the withheld letter keeps its place.
-        event.tapPostEvent(proxy)
+        if let proxy {
+            event.tapPostEvent(proxy)
+        } else {
+            event.post(tap: .cghidEventTap)
+        }
     }
 
     // MARK: - Engaged
@@ -249,12 +309,21 @@ final class KeyboardCursorEngine {
             return .consume
         }
 
-        guard let binding = binding(for: keyCode) else {
+        // ⌘ means a shortcut for the frontmost app, never a cursor action: ⌘S saves and
+        // ⌘L reaches the address bar, in locked mode as much as anywhere.
+        if flags.contains(.maskCommand) {
+            return .pass
+        }
+
+        guard let binding = bindingsByKey[keyCode] else {
             // Unmapped keys still reach the frontmost app, so ⌘Tab and ⌘W keep working.
             return .pass
         }
 
         guard !isRepeat else { return .consume }
+
+        // Swallowed here, so its repeats and release are swallowed too.
+        heldKeys.hold(keyCode)
 
         switch binding {
         case .exit:
@@ -287,6 +356,33 @@ final class KeyboardCursorEngine {
         return .consume
     }
 
+    /// Side effects of a release while engaged. Whether the event itself is swallowed is
+    /// decided by whether its press was.
+    private func handleKeyUpEngaged(keyCode: UInt16) {
+        guard let binding = bindingsByKey[keyCode] else { return }
+
+        switch binding {
+        case .leftClick:
+            output.releaseButton(.left)
+        case .rightClick:
+            output.releaseButton(.right)
+        case .middleClick:
+            output.releaseButton(.middle)
+        case .scrollModifier:
+            isScrollModifierHeld = false
+            restartMotionRamp()
+        case .moveUp, .moveDown, .moveLeft, .moveRight:
+            heldDirections.remove(binding)
+            if heldDirections.isEmpty {
+                stopMotionTimer()
+            } else {
+                restartMotionRamp()
+            }
+        case .activate, .exit, .lock, .grid, .hints:
+            break
+        }
+    }
+
     // MARK: - Modals
 
     private func handleKeyDownModal(keyCode: UInt16, flags: CGEventFlags, isRepeat: Bool) -> Disposition {
@@ -294,19 +390,21 @@ final class KeyboardCursorEngine {
         if keyCode == activationKey {
             return .consume
         }
-        // ⌘-shortcuts still reach the frontmost app; the modal gives way to them.
+        // ⌘-shortcuts reach the frontmost app; the modal gives way to them. Nothing else
+        // runs: closing the modal may end cursor mode with it, and a cursor action started
+        // then would have no mode to end it.
         if flags.contains(.maskCommand) {
             closeModal()
-            return handleKeyDownEngaged(keyCode: keyCode, flags: flags, isRepeat: isRepeat)
+            return .pass
         }
         guard !isRepeat, let modal else { return .consume }
 
         switch modal.keyDown(keyCode, flags: flags) {
         case .consume:
-            modalKeysDown.insert(keyCode)
+            heldKeys.hold(keyCode)
             return .consume
         case .finish:
-            modalKeysDown.insert(keyCode)
+            heldKeys.hold(keyCode)
             closeModal()
             return .consume
         case .finishAndForward:
@@ -314,10 +412,10 @@ final class KeyboardCursorEngine {
             // key still clicks where a grid opened from a mouse button led.
             dismissModal()
             let disposition = handleKeyDownEngaged(keyCode: keyCode, flags: flags, isRepeat: isRepeat)
-            settleAfterModal()
-            if !gate.isEngaged, disposition == .consume {
-                // Cursor mode is gone, so nothing else will claim the key's release.
-                modalKeysDown.insert(keyCode)
+            // A key that opened another modal hands it what was held over, rather than
+            // settling now and taking the new modal straight down again.
+            if self.modal == nil {
+                settleAfterModal()
             }
             return disposition
         }
@@ -327,7 +425,7 @@ final class KeyboardCursorEngine {
         let exitKey = preferences.keyCode(for: .exit)
         let gridKey = preferences.keyCode(for: .grid)
         present(GridMode(pointer: output.location, exitKey: exitKey, gridKey: gridKey) { [weak self] point in
-            self?.jump(to: point)
+            _ = self?.jump(to: point)
         })
     }
 
@@ -339,10 +437,11 @@ final class KeyboardCursorEngine {
         ) { [weak self] point, click in
             guard let self else { return }
             let target = Vector2(x: Double(point.x), y: Double(point.y))
-            self.jump(to: target)
+            // The click lands where the pointer actually went, which may be clamped.
+            let landed = self.jump(to: target)
             switch click {
-            case .left: self.output.click(.left, at: target)
-            case .right: self.output.click(.right, at: target)
+            case .left: self.output.click(.left, at: landed)
+            case .right: self.output.click(.right, at: landed)
             case .none: break
             }
         }
@@ -363,10 +462,12 @@ final class KeyboardCursorEngine {
         modal = newModal
     }
 
-    private func jump(to point: Vector2) {
+    @discardableResult
+    private func jump(to point: Vector2) -> Vector2 {
         let clamped = CursorMotion.clamp(point: point, previous: output.location, screens: output.screenRects())
         lastPosition = clamped
         output.move(to: clamped)
+        return clamped
     }
 
     /// Ends the modal and settles what was held over while it was open.
@@ -402,15 +503,10 @@ final class KeyboardCursorEngine {
     /// For the Click Hints and Grid Jump actions on a mouse button or gesture: switches
     /// cursor mode on for as long as the modal is up, if it was not on already.
     func showFromMouseButton(hints: Bool) {
-        guard preferences.isCursorModeEnabled, !isSuspended else { return }
+        guard isCursorModeEnabled, !isSuspended, !isRecordingSuspended else { return }
 
         if !gate.isEngaged {
-            _ = gate.toggleExternally()
-            cancelHoldTimer()
-            speedProfile = preferences.speedProfile()
-            screens = output.screenRects()
-            lastPosition = output.location
-            onModeChange?(true)
+            engageExternally()
             exitsWithModal = true
         }
         if hints {
@@ -420,41 +516,41 @@ final class KeyboardCursorEngine {
         }
     }
 
-    private func handleKeyUpEngaged(keyCode: UInt16) -> Disposition {
-        guard let binding = binding(for: keyCode) else { return .pass }
+    /// Engages cursor mode from a mouse button rather than the keyboard, or ends it.
+    func toggleFromMouseButton() {
+        guard isCursorModeEnabled, !isSuspended, !isRecordingSuspended else { return }
 
-        switch binding {
-        case .leftClick:
-            output.releaseButton(.left)
-        case .rightClick:
-            output.releaseButton(.right)
-        case .middleClick:
-            output.releaseButton(.middle)
-        case .scrollModifier:
-            isScrollModifierHeld = false
-            restartMotionRamp()
-        case .moveUp, .moveDown, .moveLeft, .moveRight:
-            heldDirections.remove(binding)
-            if heldDirections.isEmpty {
-                stopMotionTimer()
-            } else {
-                restartMotionRamp()
-            }
-        case .activate, .exit, .lock, .grid, .hints:
-            break
+        if gate.isEngaged {
+            _ = gate.toggleExternally()
+            tearDownCursorMode()
+            return
         }
+        engageExternally()
+    }
 
-        return .consume
+    private func engageExternally() {
+        if gate.toggleExternally() == .engagedAfterReplay {
+            // The activation letter was pressed moments before, so it was typed after all.
+            replayActivationKey(proxy: nil)
+        }
+        beginCursorMode()
     }
 
     private func enterCursorMode() {
         cancelHoldTimer()
         guard gate.holdElapsed() else { return }
 
+        // Withheld all along, and still down: its repeats and release are ours to swallow.
+        heldKeys.hold(activationKey)
+        beginCursorMode()
+        startWatchdog()
+    }
+
+    private func beginCursorMode() {
+        cancelHoldTimer()
         speedProfile = preferences.speedProfile()
         screens = output.screenRects()
         lastPosition = output.location
-        startWatchdog()
         onModeChange?(true)
     }
 
@@ -465,10 +561,10 @@ final class KeyboardCursorEngine {
     }
 
     /// Release everything cursor mode was holding. The gate's phase is assumed to have
-    /// been settled already by whoever called this.
-    private func tearDownCursorMode() {
+    /// been settled already by whoever called this. Keys still physically down stay
+    /// remembered: their repeats and releases are swallowed whenever they come.
+    private func tearDownCursorMode(reporting: Bool = true) {
         dismissModal()
-        modalKeysDown.removeAll()
         activationReleasedDuringModal = false
         exitsWithModal = false
         cancelHoldTimer()
@@ -481,30 +577,20 @@ final class KeyboardCursorEngine {
         accumulator.reset()
         scrollAccumulator.reset()
 
-        onModeChange?(false)
+        if reporting {
+            onModeChange?(false)
+        }
     }
 
     /// Unconditional teardown for pause, sleep, tap loss and quit.
     func forceExit() {
         let wasEngaged = gate.isEngaged
-        dismissModal()
-        modalKeysDown.removeAll()
-        activationReleasedDuringModal = false
-        exitsWithModal = false
-        gate.reset()
-        cancelHoldTimer()
-        stopMotionTimer()
-        stopWatchdog()
-        output.releaseAllButtons()
-
-        heldDirections.removeAll()
-        isScrollModifierHeld = false
-        accumulator.reset()
-        scrollAccumulator.reset()
-
-        if wasEngaged {
-            onModeChange?(false)
+        if gate.phase == .pending {
+            // The letter was being withheld; dropping it would lose a keystroke.
+            replayActivationKey(proxy: nil)
         }
+        gate.reset()
+        tearDownCursorMode(reporting: wasEngaged)
     }
 
     // MARK: - Motion
@@ -540,6 +626,9 @@ final class KeyboardCursorEngine {
 
     private var lastTick: TimeInterval = 0
 
+    /// The tick interval the scroll budget is written for.
+    private static let nominalTick: TimeInterval = 0.008
+
     private func tick() {
         let now = ProcessInfo.processInfo.systemUptime
         let dt = lastTick == 0 ? 1.0 / 120.0 : min(now - lastTick, 0.1)
@@ -561,8 +650,10 @@ final class KeyboardCursorEngine {
                 acceleration: speedProfile.acceleration
             )
             let multiplier = tier.multiplier(using: speedProfile)
-            // Scroll runs on the same ramp, scaled to a per-tick pixel budget.
+            // Scroll runs on the same ramp, scaled to a per-tick pixel budget. Scaled by
+            // the real tick length too, so a busy main thread slows nothing down.
             let perTick = speedProfile.scrollSpeed * (0.35 + 0.65 * eased) * multiplier
+                * (dt / KeyboardCursorEngine.nominalTick)
             let delta = Vector2(x: direction.x * perTick, y: direction.y * perTick)
             let step = scrollAccumulator.take(delta)
             // Positive wheel1 scrolls the content up, which is the opposite sign to the
@@ -580,7 +671,7 @@ final class KeyboardCursorEngine {
         let target = Vector2(x: current.x + Double(step.dx), y: current.y + Double(step.dy))
         let clamped = CursorMotion.clamp(point: target, previous: lastPosition, screens: screens)
         lastPosition = clamped
-        output.move(to: clamped)
+        output.move(to: clamped, delta: (clamped.x - current.x, clamped.y - current.y))
     }
 
     // MARK: - Watchdog
@@ -623,24 +714,7 @@ final class KeyboardCursorEngine {
     // MARK: - Helpers
 
     private var isEnabled: Bool {
-        !isSuspended && preferences.isCursorModeEnabled
-    }
-
-    private var activationKey: UInt16 {
-        preferences.keyCode(for: .activate)
-    }
-
-    /// How soon after the activation letter was typed a fresh press means the user wants
-    /// it again, held down, rather than cursor mode.
-    private var retypeWindow: TimeInterval {
-        preferences.value(for: .retypeWindow)
-    }
-
-    private func binding(for keyCode: UInt16) -> CursorBinding? {
-        for binding in CursorBinding.allCases where preferences.keyCode(for: binding) == keyCode {
-            return binding
-        }
-        return nil
+        !isSuspended && !isRecordingSuspended && isCursorModeEnabled
     }
 
     private func hasAnyModifier(_ flags: CGEventFlags) -> Bool {
@@ -657,21 +731,5 @@ final class KeyboardCursorEngine {
         if flags.contains(.maskControl) { next.insert(.control) }
         if flags.contains(.maskAlternate) { next.insert(.option) }
         tier = next
-    }
-
-    /// Engages cursor mode from a mouse button rather than the keyboard.
-    func toggleFromMouseButton() {
-        guard preferences.isCursorModeEnabled, !isSuspended else { return }
-
-        if gate.toggleExternally() {
-            tearDownCursorMode()
-            return
-        }
-
-        cancelHoldTimer()
-        speedProfile = preferences.speedProfile()
-        screens = output.screenRects()
-        lastPosition = output.location
-        onModeChange?(true)
     }
 }

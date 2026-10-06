@@ -40,7 +40,7 @@ final class Updater {
     /// Nothing about an update is worth keeping on disk: the answer changes, and the
     /// download is unpacked and verified straight away.
     private let session = URLSession(configuration: .ephemeral)
-    private var timer: DispatchSourceTimer?
+    private var timer: Timer?
     private var hasAskedThisLaunch = false
     /// nil when this copy cannot check an update's signature, and so never installs one.
     private let requirement = UpdateVerifier.ownRequirement()
@@ -58,17 +58,20 @@ final class Updater {
 
     /// Hourly ticks, each deciding whether a daily check is due. Cheap enough to leave
     /// running, and it copes with sleep and clock changes where a 24-hour timer would not.
+    ///
+    /// A run-loop timer, not a dispatch source: the tick may put up an alert, and a modal
+    /// alert run from inside a main-queue block stops every other main-queue block, the
+    /// engine's hold and motion timers among them, for as long as it is up.
     func start() {
         work.async {
             try? FileManager.default.removeItem(at: Updater.stagingDirectory)
         }
 
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + Updater.firstTick, repeating: Updater.tickInterval)
-        timer.setEventHandler { [weak self] in
+        let timer = Timer(timeInterval: Updater.tickInterval, repeats: true) { [weak self] _ in
             self?.tick()
         }
-        timer.resume()
+        timer.fireDate = Date(timeIntervalSinceNow: Updater.firstTick)
+        RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
 
@@ -85,10 +88,16 @@ final class Updater {
         }
     }
 
+    /// Whether this copy can ever install an update: it needs a Developer ID identity of
+    /// its own to hold a download to, and a release version to compare against.
+    var canSelfUpdate: Bool {
+        requirement != nil && SemanticVersion(AppInfo.version)?.preRelease == nil
+    }
+
     /// Asked after Accessibility is granted, so it never stacks on the permission prompt a
-    /// new install already shows.
+    /// new install already shows. A copy that could never install an update is not asked.
     private func askOnce() {
-        guard !hasAskedThisLaunch, AXIsProcessTrusted() else { return }
+        guard !hasAskedThisLaunch, canSelfUpdate, AXIsProcessTrusted() else { return }
         hasAskedThisLaunch = true
 
         let alert = NSAlert()
@@ -100,11 +109,26 @@ final class Updater {
         alert.addButton(withTitle: "Check Automatically")
         alert.addButton(withTitle: "Don't Check")
 
-        NSApp.activate(ignoringOtherApps: true)
-        let automatic = alert.runModal() == .alertFirstButtonReturn
-        Preferences.shared.automaticUpdates = automatic
-        if automatic {
-            check(userInitiated: false)
+        present(alert) { [weak self] response in
+            let automatic = response == .alertFirstButtonReturn
+            Preferences.shared.automaticUpdates = automatic
+            if automatic {
+                self?.check(userInitiated: false)
+            }
+        }
+    }
+
+    /// Shows a modal alert from run-loop context, whatever context the caller is in.
+    ///
+    /// `NSAlert.runModal()` spins a nested run loop. Entered from a block on the main
+    /// dispatch queue, that loop serves no other main-queue block until the alert closes,
+    /// so the keyboard cursor's hold timer never fires, side buttons with a hold binding
+    /// swallow their presses and gesture actions queue up. Entered from the run loop
+    /// itself, it serves everything as usual.
+    private func present(_ alert: NSAlert, then handle: @escaping (NSApplication.ModalResponse) -> Void = { _ in }) {
+        RunLoop.main.perform(inModes: [.common]) {
+            NSApp.activate(ignoringOtherApps: true)
+            handle(alert.runModal())
         }
     }
 
@@ -124,7 +148,13 @@ final class Updater {
             if userInitiated { offerInstall(staged) }
             return
         }
-        guard let current = SemanticVersion(AppInfo.version) else { return }
+        // A development build, run unbundled, has no release to be updated to.
+        guard let current = SemanticVersion(AppInfo.version), current.preRelease == nil else {
+            if userInitiated {
+                showAlert("Not a release build", "This copy runs from source, so it does not update itself.")
+            }
+            return
+        }
 
         state = .checking
         var request = URLRequest(url: AppInfo.latestReleaseURL, timeoutInterval: 30)
@@ -278,14 +308,15 @@ final class Updater {
         alert.addButton(withTitle: "Later")
         alert.addButton(withTitle: "Release Notes")
 
-        NSApp.activate(ignoringOtherApps: true)
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            installAndRelaunch()
-        case .alertThirdButtonReturn:
-            NSWorkspace.shared.open(staged.releasePage)
-        default:
-            break
+        present(alert) { [weak self] response in
+            switch response {
+            case .alertFirstButtonReturn:
+                self?.installAndRelaunch()
+            case .alertThirdButtonReturn:
+                NSWorkspace.shared.open(staged.releasePage)
+            default:
+                break
+            }
         }
     }
 
@@ -384,8 +415,7 @@ final class Updater {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message
-        NSApp.activate(ignoringOtherApps: true)
-        alert.runModal()
+        present(alert)
     }
 
     private static func run(_ tool: String, _ arguments: [String]) throws {

@@ -84,7 +84,7 @@ final class ShortcutRecorderButton: NSButton {
     }
 
     private func showShortcut() {
-        title = shortcut?.displayString ?? "Record Shortcut"
+        title = shortcut.map { KeyboardLayout.shared.displayString(for: $0) } ?? "Record Shortcut"
     }
 
     private func removeMonitor() {

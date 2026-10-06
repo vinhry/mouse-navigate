@@ -497,7 +497,18 @@ final class PreferencesWindowController: NSObject {
         let index = popup.indexOfItem(withRepresentedObject: binding.storageValue)
         if index >= 0 {
             popup.selectItem(at: index)
+            return
         }
+
+        // Stored, but not on this picker: an action this trigger does not offer, or one a
+        // later version added. Shown as itself rather than as whatever was selected before.
+        let unavailable = NSMenuItem(title: "\(binding.displayName) (not available here)", action: nil, keyEquivalent: "")
+        unavailable.representedObject = binding.storageValue
+        unavailable.tag = Self.customItemTag
+        unavailable.isEnabled = false
+        let shortcutIndex = popup.indexOfItem(withRepresentedObject: PickerCommand.shortcut)
+        menu.insertItem(unavailable, at: max(shortcutIndex, 0))
+        popup.select(unavailable)
     }
 
     private func refreshBindings(where include: (BindingSlot) -> Bool = { _ in true }) {
@@ -731,12 +742,21 @@ final class PreferencesWindowController: NSObject {
                 binding: binding,
                 keyCode: Preferences.shared.keyCode(for: binding)
             )
-            recorder.onRecord = { keyCode in
+            recorder.onRecord = { [weak self] keyCode in
+                // A key already doing something else swaps: it takes this binding's old key
+                // rather than being claimed twice, which would leave one of them unreachable.
+                let previous = Preferences.shared.keyCode(for: binding)
+                if let taken = CursorBinding.allCases.first(where: {
+                    $0 != binding && Preferences.shared.keyCode(for: $0) == keyCode
+                }) {
+                    Preferences.shared.setKeyCode(previous, for: taken)
+                    self?.recorders[taken]?.update(keyCode: previous)
+                }
                 Preferences.shared.setKeyCode(keyCode, for: binding)
             }
             recorder.onRecordingChange = { [weak self] recording in
                 // Stop the tap from eating the keystroke being recorded.
-                self?.engine.isSuspended = recording
+                self?.engine.isRecordingSuspended = recording
             }
             recorders[binding] = recorder
 
@@ -1249,6 +1269,11 @@ final class PreferencesWindowController: NSObject {
             target: self,
             action: #selector(automaticUpdatesChanged(_:))
         )
+        // A copy that could never install an update has nothing to check for.
+        automatic.isEnabled = updater.canSelfUpdate
+        automatic.toolTip = updater.canSelfUpdate
+            ? nil
+            : "Only a release signed with a Developer ID, installed from GitHub, updates itself."
         automatic.toolTip = "Once a day, from GitHub. Updates are downloaded and checked in the "
             + "background, and installed only when you choose to."
         automaticUpdatesCheckbox = automatic

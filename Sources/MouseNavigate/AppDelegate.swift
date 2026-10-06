@@ -19,4 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         navigator?.showPreferences()
         return true
     }
+
+    /// Logging out, restarting and a scripted quit all end here rather than at the menu,
+    /// and must not leave a synthetic key or button held down behind them.
+    func applicationWillTerminate(_ notification: Notification) {
+        navigator?.prepareForTermination()
+    }
 }

@@ -199,18 +199,29 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     // MARK: - Launch at Login
 
     private func updateLaunchAtLoginState() {
-        launchAtLoginMenuItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        let status = SMAppService.mainApp.status
+        launchAtLoginMenuItem?.state = status == .enabled ? .on : .off
+        // Registered, but macOS is holding it until the user allows it in System Settings;
+        // registering again would change nothing, so say what will.
+        launchAtLoginMenuItem?.title = status == .requiresApproval
+            ? "Launch at Login (needs approval in System Settings)"
+            : "Launch at Login"
     }
 
     @objc private func launchAtLoginTapped() {
+        let service = SMAppService.mainApp
         do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
+            switch service.status {
+            case .enabled:
+                try service.unregister()
+            case .requiresApproval:
+                SMAppService.openSystemSettingsLoginItems()
+            default:
+                try service.register()
             }
         } catch {
-            // Silently ignore — typically fails when not running from a signed app bundle
+            // Typically an unsigned or unbundled build, which macOS will not start at login.
+            Log.launch.error("Launch at Login could not be changed: \(error.localizedDescription, privacy: .public)")
         }
         updateLaunchAtLoginState()
     }

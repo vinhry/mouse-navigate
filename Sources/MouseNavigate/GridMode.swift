@@ -109,7 +109,7 @@ final class GridMode: CursorModal {
             .foregroundColor: NSColor.black,
         ]
         for (cell, key) in zip(cells, GridNavigator.cellKeys) {
-            let text = NSAttributedString(string: KeyCodeNames.name(for: key), attributes: attributes)
+            let text = NSAttributedString(string: KeyboardLayout.shared.name(for: key), attributes: attributes)
             let size = text.size()
             ScreenOverlay.drawBadge(
                 text,

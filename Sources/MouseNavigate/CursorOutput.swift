@@ -48,7 +48,7 @@ final class CursorOutput {
 
     private let source = CGEventSource(stateID: .hidSystemState)
     private var heldButtons: [MouseButton: Int] = [:]
-    private var lastClick: (button: MouseButton, time: TimeInterval, location: CGPoint)?
+    private var lastClick: (button: MouseButton, time: TimeInterval, location: CGPoint, count: Int)?
 
     // MARK: - Position
 
@@ -57,26 +57,17 @@ final class CursorOutput {
         return Vector2(x: Double(point.x), y: Double(point.y))
     }
 
-    /// Display rects in CoreGraphics coordinates (origin top-left, +y downwards).
+    /// Display rects in CoreGraphics coordinates (origin top-left, +y downwards). Half-open:
+    /// a display 1440 points wide runs from 0 up to, but not including, 1440.
     func screenRects() -> [Rect] {
-        guard let primaryHeight = NSScreen.screens.first?.frame.height else { return [] }
-
-        return NSScreen.screens.map { screen in
-            let frame = screen.frame
-            // AppKit's origin is the bottom-left of the primary display with +y up.
-            let top = primaryHeight - frame.maxY
-            return Rect(
-                minX: Double(frame.minX),
-                minY: Double(top),
-                maxX: Double(frame.maxX) - 1,
-                maxY: Double(top + frame.height) - 1
-            )
-        }
+        ScreenOverlay.displayFrames().map(Rect.init)
     }
 
     // MARK: - Movement
 
-    func move(to position: Vector2) {
+    /// `delta` is how far the pointer travelled to get here, for apps that read movement
+    /// rather than position: games, canvases and scrubbers see nothing without it.
+    func move(to position: Vector2, delta: (x: Double, y: Double)? = nil) {
         let point = CGPoint(x: position.x, y: position.y)
 
         // While a button is held the system expects drag events, not plain moves —
@@ -91,6 +82,10 @@ final class CursorOutput {
             mouseButton: button
         ) else {
             return
+        }
+        if let delta {
+            event.setDoubleValueField(.mouseEventDeltaX, value: delta.x)
+            event.setDoubleValueField(.mouseEventDeltaY, value: delta.y)
         }
 
         post(event)
@@ -121,7 +116,7 @@ final class CursorOutput {
         guard let clickCount = heldButtons.removeValue(forKey: button) else { return }
 
         let point = CGPoint(x: location.x, y: location.y)
-        lastClick = (button, ProcessInfo.processInfo.systemUptime, point)
+        lastClick = (button, ProcessInfo.processInfo.systemUptime, point, clickCount)
 
         guard let event = CGEvent(
             mouseEventSource: source,
@@ -139,6 +134,7 @@ final class CursorOutput {
     /// the system may not report it at its new location yet.
     func click(_ button: MouseButton, at position: Vector2) {
         let point = CGPoint(x: position.x, y: position.y)
+        let clickCount = clickCount(for: button, at: point)
         for type in [button.downType, button.upType] {
             guard let event = CGEvent(
                 mouseEventSource: source,
@@ -148,9 +144,10 @@ final class CursorOutput {
             ) else {
                 return
             }
-            event.setIntegerValueField(.mouseEventClickState, value: 1)
+            event.setIntegerValueField(.mouseEventClickState, value: Int64(clickCount))
             post(event)
         }
+        lastClick = (button, ProcessInfo.processInfo.systemUptime, point, clickCount)
     }
 
     /// Release everything still held. Called on every exit path so a synthetic button
@@ -161,20 +158,18 @@ final class CursorOutput {
         }
     }
 
-    var hasHeldButton: Bool { !heldButtons.isEmpty }
-
-    /// Promote a rapid second press at the same spot to a double-click, matching what
-    /// a real mouse would report.
+    /// Promote a rapid press at the same spot to a double- or triple-click, matching what
+    /// a real mouse would report and the interval the user set for it.
     private func clickCount(for button: MouseButton, at point: CGPoint) -> Int {
         guard let lastClick,
               lastClick.button == button,
-              ProcessInfo.processInfo.systemUptime - lastClick.time < 0.3,
+              ProcessInfo.processInfo.systemUptime - lastClick.time < NSEvent.doubleClickInterval,
               abs(lastClick.location.x - point.x) < 5,
               abs(lastClick.location.y - point.y) < 5
         else {
             return 1
         }
-        return 2
+        return lastClick.count + 1
     }
 
     // MARK: - Scrolling
@@ -198,6 +193,10 @@ final class CursorOutput {
     // MARK: - Posting
 
     private func post(_ event: CGEvent) {
+        // The source stamps in whatever modifiers are down, and in cursor mode those are
+        // speed tiers: Shift for fast must not make a Shift-click, nor Option for
+        // precision an Option-click.
+        event.flags = []
         event.setIntegerValueField(.eventSourceUserData, value: CursorOutput.syntheticTag)
         event.post(tap: .cghidEventTap)
     }

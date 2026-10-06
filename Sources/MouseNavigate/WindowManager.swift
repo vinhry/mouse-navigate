@@ -23,7 +23,10 @@ final class WindowManager {
     /// Frames saved before "Maximize Window" so a second use restores them.
     private var framesBeforeZoom: [(window: AXUIElement, frame: Rect)] = []
 
-    var isDragging: Bool { drag != nil }
+    /// How long one Accessibility request may wait on the other app. The actions run inside
+    /// the event tap's callback, and a hung app must not take every keystroke on the Mac
+    /// down with it for the several seconds the system would otherwise allow.
+    private static let messagingTimeout: Float = 0.25
 
     // MARK: - Actions
 
@@ -40,8 +43,13 @@ final class WindowManager {
         let target = screens[index]
         if frame.approximatelyEquals(target),
            let saved = framesBeforeZoom.lastIndex(where: { CFEqual($0.window, window) }) {
-            setFrame(framesBeforeZoom.remove(at: saved).frame, of: window)
-            return
+            let restored = framesBeforeZoom.remove(at: saved).frame
+            // Saved before a display was unplugged or moved, the frame may now be off every
+            // screen; a window sent there could not be reached again.
+            if screens.contains(where: { $0.intersectionArea(with: restored) > 0 }) {
+                setFrame(restored, of: window)
+                return
+            }
         }
 
         framesBeforeZoom.removeAll { CFEqual($0.window, window) }
@@ -111,21 +119,28 @@ final class WindowManager {
     // MARK: - Accessibility helpers
 
     private func focusedWindow() -> AXUIElement? {
-        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
-        let element = AXUIElementCreateApplication(app.processIdentifier)
+        guard let pid = FrontmostApp.shared.processIdentifier else { return nil }
+        let element = bounded(AXUIElementCreateApplication(pid))
         return copyElement(element, kAXFocusedWindowAttribute)
+    }
+
+    /// The element with the request timeout applied. Every element the actions touch goes
+    /// through here: the timeout is per element, not per app.
+    private func bounded(_ element: AXUIElement) -> AXUIElement {
+        AXUIElementSetMessagingTimeout(element, WindowManager.messagingTimeout)
+        return element
     }
 
     private func windowUnderCursor() -> AXUIElement? {
         let point = cursorLocation()
         var hit: AXUIElement?
         let result = AXUIElementCopyElementAtPosition(
-            AXUIElementCreateSystemWide(),
+            bounded(AXUIElementCreateSystemWide()),
             Float(point.x),
             Float(point.y),
             &hit
         )
-        guard result == .success, var element = hit else { return nil }
+        guard result == .success, var element = hit.map(bounded) else { return nil }
 
         if let window = copyElement(element, kAXWindowAttribute) {
             return window
@@ -148,7 +163,7 @@ final class WindowManager {
         else {
             return nil
         }
-        return (value as! AXUIElement)
+        return bounded(value as! AXUIElement)
     }
 
     private func role(of element: AXUIElement) -> String? {
@@ -208,17 +223,6 @@ final class WindowManager {
 
     /// Visible frames (menu bar and Dock excluded) in CoreGraphics coordinates.
     private func visibleScreenRects() -> [Rect] {
-        guard let primaryHeight = NSScreen.screens.first?.frame.height else { return [] }
-
-        return NSScreen.screens.map { screen in
-            let visible = screen.visibleFrame
-            // AppKit's origin is the bottom-left of the primary display with +y up.
-            return Rect(
-                x: Double(visible.minX),
-                y: Double(primaryHeight - visible.maxY),
-                width: Double(visible.width),
-                height: Double(visible.height)
-            )
-        }
+        NSScreen.screens.map { Rect(ScreenOverlay.globalFrame(of: $0, visibleOnly: true)) }
     }
 }

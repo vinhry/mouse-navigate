@@ -76,16 +76,17 @@ final class ScreenOverlay {
     }
 
     /// A display's frame in CoreGraphics global points: origin at the top left of the
-    /// primary display, +y down, where AppKit has it at the bottom left, +y up.
-    static func globalFrame(of screen: NSScreen) -> CGRect {
+    /// primary display, +y down, where AppKit has it at the bottom left, +y up. The
+    /// visible frame leaves out the menu bar and the Dock.
+    static func globalFrame(of screen: NSScreen, visibleOnly: Bool = false) -> CGRect {
         let primaryHeight = NSScreen.screens.first?.frame.height ?? screen.frame.height
-        let frame = screen.frame
+        let frame = visibleOnly ? screen.visibleFrame : screen.frame
         return CGRect(x: frame.minX, y: primaryHeight - frame.maxY, width: frame.width, height: frame.height)
     }
 
     /// Every display, left to right, which is the order the digit keys pick them in.
     static func displayFrames() -> [CGRect] {
-        NSScreen.screens.map(globalFrame(of:)).sorted {
+        NSScreen.screens.map { globalFrame(of: $0) }.sorted {
             $0.minX == $1.minX ? $0.minY < $1.minY : $0.minX < $1.minX
         }
     }

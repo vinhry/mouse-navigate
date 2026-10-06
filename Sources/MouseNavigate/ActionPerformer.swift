@@ -6,6 +6,11 @@ import MouseNavigateCore
 import notify
 
 /// Carries out a `ButtonAction`, whichever input asked for it. Main thread only.
+///
+/// Most calls arrive from inside the event tap's callback, where every keystroke and click
+/// on the Mac waits. Anything that can take its time, such as launching an app or asking
+/// another app to move its window, is decided here and done on the next turn of the run
+/// loop, once the event has been answered.
 final class ActionPerformer {
     private static let hiServicesPath =
         "/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework/HIServices"
@@ -69,13 +74,24 @@ final class ActionPerformer {
                 Log.actions.notice("No app found for \(bundleID, privacy: .public); nothing launched.")
                 return false
             }
-            launchApplication(at: url)
+            later { self.launchApplication(at: url) }
             return true
         case .openURL(let url):
-            return NSWorkspace.shared.open(url)
+            later {
+                if !NSWorkspace.shared.open(url) {
+                    Log.actions.notice("Nothing opened \(url.absoluteString, privacy: .public).")
+                }
+            }
+            return true
         case .runShortcut(let name):
-            return runShortcut(named: name)
+            later { self.runShortcut(named: name) }
+            return true
         }
+    }
+
+    /// Runs `work` once the event being handled has been answered.
+    private func later(_ work: @escaping () -> Void) {
+        DispatchQueue.main.async(execute: work)
     }
 
     private func perform(_ action: ButtonAction) -> Bool {
@@ -89,16 +105,16 @@ final class ActionPerformer {
             pointer.releaseButton(.middle)
             return true
         case .minimize:
-            windowManager.minimize()
+            later { self.windowManager.minimize() }
             return true
         case .zoom:
-            windowManager.zoom()
+            later { self.windowManager.zoom() }
             return true
         case .maximizeLeft:
-            windowManager.maximize(.left)
+            later { self.windowManager.maximize(.left) }
             return true
         case .maximizeRight:
-            windowManager.maximize(.right)
+            later { self.windowManager.maximize(.right) }
             return true
         case .moveResizeWindow:
             // Driven continuously by the touch monitor, never as a one-shot.
@@ -171,8 +187,10 @@ final class ActionPerformer {
         }
     }
 
+    /// The same answer the per-app bindings were resolved against, so the two never
+    /// disagree in the moment after an app switch.
     private var isSupportedFrontmostApp: Bool {
-        SupportedApps.isSupported(bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+        SupportedApps.isSupported(bundleID: FrontmostApp.shared.bundleID)
     }
 
     private func launchApplication(at url: URL?) {
@@ -183,7 +201,7 @@ final class ActionPerformer {
     /// Runs a Shortcuts.app shortcut through the `shortcuts` tool, which needs no
     /// automation permission and never brings the Shortcuts app forward. Not waited on:
     /// a shortcut can take as long as it likes.
-    private func runShortcut(named name: String) -> Bool {
+    private func runShortcut(named name: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
         process.arguments = ["run", name]
@@ -197,10 +215,8 @@ final class ActionPerformer {
         }
         do {
             try process.run()
-            return true
         } catch {
             Log.actions.error("Could not run shortcut \(name, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            return false
         }
     }
 
@@ -212,7 +228,8 @@ final class ActionPerformer {
         if shortcut.modifiers.contains(.shift) { flags.insert(.maskShift) }
         if shortcut.modifiers.contains(.control) { flags.insert(.maskControl) }
         if shortcut.modifiers.contains(.option) { flags.insert(.maskAlternate) }
-        sendShortcut(keyCode: CGKeyCode(shortcut.keyCode), flags: flags)
+        // A built-in shortcut names a letter; the key that types it depends on the layout.
+        sendShortcut(keyCode: CGKeyCode(KeyboardLayout.shared.keyCode(for: shortcut)), flags: flags)
     }
 
     private func sendShortcut(keyCode: CGKeyCode, flags: CGEventFlags) {

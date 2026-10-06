@@ -25,6 +25,8 @@ final class MouseNavigator {
     private var installedEventMask: CGEventMask = 0
     /// Set when a Magic Mouse click became a gesture, so its release is swallowed too.
     private var isSwallowingLeftMouseUp = false
+    /// Set once a touch gesture has taken a scroll, until the next scroll begins.
+    private var isSuppressingScrollSession = false
 
     /// NSApplication holds its delegate weakly, so it lives here.
     private lazy var appDelegate = AppDelegate(navigator: self)
@@ -110,9 +112,15 @@ final class MouseNavigator {
             self?.startServices()
         }
 
+        // Never returns: quitting ends the process from inside the run loop, and the lock
+        // goes with it.
         app.run()
+    }
 
-        releaseSingleInstanceLock()
+    /// The last thing before the process ends, by whatever route.
+    func prepareForTermination() {
+        cursorEngine.forceExit()
+        releaseHeldMouseInput()
     }
 
     /// Everything that needs permission, hardware or a private framework. None of it is
@@ -139,6 +147,15 @@ final class MouseNavigator {
             self?.updateFrontmostDisabled()
         }
         updateFrontmostDisabled()
+
+        // A press held across sleep would otherwise fire its hold on waking, and a click
+        // waiting on its double-click window would run long after it was made.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(handleWillSleep),
+            name: NSWorkspace.willSleepNotification,
+            object: nil
+        )
 
         NotificationCenter.default.addObserver(
             self,
@@ -212,20 +229,28 @@ final class MouseNavigator {
         return true
     }
 
-    private func releaseSingleInstanceLock() {
-        if lockFileDescriptor >= 0 {
-            _ = flock(lockFileDescriptor, LOCK_UN)
-            _ = close(lockFileDescriptor)
-            lockFileDescriptor = -1
-        }
-    }
-
-    /// The running copy is a registered application, so it can simply be brought forward;
-    /// it answers reopen by showing its preferences. This is only reachable from a second
-    /// command-line launch, since Finder never starts a second process for a running app.
+    /// The running copy answers reopen by showing its preferences, and reopen is what
+    /// Launch Services sends a running app when it is asked to open it again. Activating
+    /// it would only bring forward an app with no windows, which is to say nothing. This
+    /// is only reachable from a second command-line launch, since Finder never starts a
+    /// second process for a running app.
     private func activateRunningInstance() {
-        guard let identifier = Bundle.main.bundleIdentifier else { return }
+        let bundle = Bundle.main.bundleURL
+        if bundle.pathExtension == "app" {
+            let opened = DispatchSemaphore(value: 0)
+            var succeeded = false
+            NSWorkspace.shared.openApplication(at: bundle, configuration: NSWorkspace.OpenConfiguration()) { app, _ in
+                succeeded = app != nil
+                opened.signal()
+            }
+            // The process is about to exit; give Launch Services a moment to deliver.
+            if opened.wait(timeout: .now() + 3) == .success, succeeded {
+                return
+            }
+        }
 
+        // Unbundled, or Launch Services declined: bringing it forward is all that is left.
+        guard let identifier = Bundle.main.bundleIdentifier else { return }
         let mine = ProcessInfo.processInfo.processIdentifier
         for app in NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
         where app.processIdentifier != mine {
@@ -306,11 +331,15 @@ final class MouseNavigator {
         return true
     }
 
-    /// Clicks and scrolls only pass through the tap while something needs them, so with
-    /// gestures and scroll options off the pointer never waits on this process. Side-button
-    /// releases are rare enough to take always: a hold or double-click needs them.
+    /// Clicks, keystrokes and scrolls only pass through the tap while something needs them,
+    /// so with the keyboard cursor, gestures and scroll options off neither the pointer nor
+    /// the keyboard ever waits on this process. Side-button releases are rare enough to take
+    /// always: a hold or double-click needs them.
     private var desiredEventMask: CGEventMask {
-        var types: [CGEventType] = [.otherMouseDown, .otherMouseUp, .keyDown, .keyUp, .flagsChanged]
+        var types: [CGEventType] = [.otherMouseDown, .otherMouseUp]
+        if Preferences.shared.isCursorModeEnabled {
+            types += [.keyDown, .keyUp, .flagsChanged]
+        }
         if Preferences.shared.isTouchEnabled {
             types += [
                 .scrollWheel, .leftMouseDown, .leftMouseUp,
@@ -338,6 +367,10 @@ final class MouseNavigator {
         applyPauseState()
     }
 
+    @objc private func handleWillSleep() {
+        releaseHeldMouseInput()
+    }
+
     @objc private func preferencesDidChange() {
         updateFrontmostDisabled()
         guard let eventTap, desiredEventMask != installedEventMask else { return }
@@ -350,13 +383,18 @@ final class MouseNavigator {
         CFMachPortInvalidate(eventTap)
         self.eventTap = nil
         runLoopSource = nil
-        _ = installEventTap()
+        if !installEventTap() {
+            // Accessibility was taken away since the tap was first made. Say so, and keep
+            // trying, exactly as at startup.
+            waitForAccessibilityPermission()
+        }
     }
 
     /// Lets go of anything held back mid-gesture, so no click is ever lost.
     private func releaseHeldMouseInput() {
         strokeCapture.cancel()
         isSwallowingLeftMouseUp = false
+        isSuppressingScrollSession = false
         buttons.reset()
         wheel.stop()
     }
@@ -366,6 +404,7 @@ final class MouseNavigator {
     /// arrives, so poll for it and install the tap the moment it does.
     private func waitForAccessibilityPermission() {
         statusBarController?.isAwaitingPermission = true
+        guard permissionTimer == nil else { return }
 
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + 1, repeating: .seconds(1))
@@ -397,6 +436,13 @@ final class MouseNavigator {
             return Unmanaged.passUnretained(event)
         }
 
+        if type == .otherMouseUp, isPaused {
+            // Pausing forgets every press in progress, but not that a press was swallowed:
+            // its release is swallowed too, so the app never gets half a click.
+            let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
+            return buttons.buttonUp(button) ? nil : Unmanaged.passUnretained(event)
+        }
+
         guard !isPaused else {
             return Unmanaged.passUnretained(event)
         }
@@ -407,21 +453,27 @@ final class MouseNavigator {
         case .otherMouseDown:
             let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
             preferencesController?.reportButtonPress(button)
-            if button == 2, isCharacterSourceActive(.middleButtonDrag),
-               strokeCapture.handleDown(.middle, at: event.location) {
-                return nil
+            if button == 2 {
+                if isCharacterSourceActive(.middleButtonDrag), strokeCapture.handleDown(.middle, at: event.location) {
+                    return nil
+                }
+                return Unmanaged.passUnretained(event)
             }
             guard Preferences.configurableButtons.contains(button) else {
                 return Unmanaged.passUnretained(event)
             }
-            return buttons.buttonDown(button) ? nil : Unmanaged.passUnretained(event)
+            return buttons.buttonDown(button, at: event.location) ? nil : Unmanaged.passUnretained(event)
         case .otherMouseDragged:
+            // Only the middle button draws; a side button dragged mid-stroke is its own affair.
+            guard event.getIntegerValueField(.mouseEventButtonNumber) == 2 else {
+                return Unmanaged.passUnretained(event)
+            }
             return strokeCapture.handleDragged(.middle, at: event.location) ? nil : Unmanaged.passUnretained(event)
         case .otherMouseUp:
-            if strokeCapture.handleUp(.middle, at: event.location) {
-                return nil
-            }
             let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
+            if button == 2 {
+                return strokeCapture.handleUp(.middle, at: event.location) ? nil : Unmanaged.passUnretained(event)
+            }
             return buttons.buttonUp(button) ? nil : Unmanaged.passUnretained(event)
         case .rightMouseDown:
             if isCharacterSourceActive(.magicMouseRightDrag), strokeCapture.handleDown(.right, at: event.location) {
@@ -442,7 +494,7 @@ final class MouseNavigator {
             // Only trackpad and Magic Mouse scrolls are continuous; a wheel is never held back.
             let isContinuous = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
             if isContinuous {
-                return touchMonitor.shouldSuppressScroll ? nil : Unmanaged.passUnretained(event)
+                return shouldSuppressContinuousScroll(event) ? nil : Unmanaged.passUnretained(event)
             }
             let settings = Preferences.shared.scrollSettings
             guard settings.isActive else { return Unmanaged.passUnretained(event) }
@@ -450,6 +502,22 @@ final class MouseNavigator {
         default:
             return Unmanaged.passUnretained(event)
         }
+    }
+
+    /// Once a touch gesture has claimed a scroll, the rest of that scroll is its too: the
+    /// moves that follow and the momentum after the fingers lift, which would otherwise
+    /// fling the page the moment the drawn letter was done. The gesture's end still
+    /// reaches the app, so a scroll it had begun is finished rather than left hanging.
+    private func shouldSuppressContinuousScroll(_ event: CGEvent) -> Bool {
+        let phase = CGScrollPhase(rawValue: UInt32(event.getIntegerValueField(.scrollWheelEventScrollPhase)))
+        if phase == .began || phase == .mayBegin {
+            isSuppressingScrollSession = false
+        }
+        if touchMonitor.shouldSuppressScroll {
+            isSuppressingScrollSession = true
+        }
+        guard isSuppressingScrollSession else { return false }
+        return !(phase == .ended || phase == .cancelled)
     }
 
     /// A Magic Mouse click with the fingers in the middle-click pose runs that gesture's

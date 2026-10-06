@@ -13,9 +13,14 @@ permissions:
 jobs:
   build:
     runs-on: macos-latest
+    # A pull request from a branch in this repository was already built by its push.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          # The build number counts commits.
+          fetch-depth: 0
 
       - name: Toolchain
         run: |
@@ -27,3 +32,16 @@ jobs:
 
       - name: Test
         run: swift test
+
+      # The universal bundle, the icon and the zip are what a release is made of, so they
+      # are exercised on every push rather than first discovered broken after tagging.
+      # No signing identity exists here, so the script signs ad hoc.
+      - name: Build app bundle
+        run: ./scripts/build-app.sh release
+
+      - name: Check the bundle
+        run: |
+          lipo -archs dist/MouseNavigate.app/Contents/MacOS/MouseNavigate | grep -q arm64
+          lipo -archs dist/MouseNavigate.app/Contents/MacOS/MouseNavigate | grep -q x86_64
+          codesign --verify --strict dist/MouseNavigate.app
+          test -f dist/MouseNavigate.zip

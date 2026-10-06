@@ -294,11 +294,53 @@ final class ActivationGateTests: XCTestCase {
     // MARK: - External toggle and teardown
 
     func testMouseButtonTogglesTheModeOnAndOff() {
-        XCTAssertFalse(gate.toggleExternally())
+        XCTAssertEqual(gate.toggleExternally(), .engaged)
         XCTAssertEqual(gate.phase, .locked)
 
-        XCTAssertTrue(gate.toggleExternally())
+        XCTAssertEqual(gate.toggleExternally(), .ended)
         XCTAssertEqual(gate.phase, .idle)
+    }
+
+    func testMouseButtonDuringAPendingHoldReplaysTheLetterFirst() {
+        XCTAssertEqual(down(activate), .armHold)
+        XCTAssertEqual(gate.toggleExternally(), .engagedAfterReplay)
+        XCTAssertEqual(gate.phase, .locked)
+        // Replayed, so the key is the app's: its release goes nowhere.
+        XCTAssertEqual(up(activate), .consume)
+    }
+
+    func testMouseButtonWhileTypingTheLetterPassesItsRelease() {
+        // Typed, then pressed again within the window: the press reached the app.
+        _ = down(activate)
+        _ = up(activate, at: 0)
+        XCTAssertEqual(down(activate, at: 0.1), .pass)
+        XCTAssertEqual(gate.phase, .typing)
+
+        XCTAssertEqual(gate.toggleExternally(), .engaged)
+        XCTAssertEqual(gate.phase, .locked)
+        XCTAssertEqual(up(activate), .pass)
+        // Only once: the next hold is withheld as usual.
+        XCTAssertEqual(up(activate), .consume)
+    }
+
+    func testMouseButtonAfterAnAbortedRollPassesTheRelease() {
+        _ = down(activate)
+        XCTAssertEqual(down(s), .replayThenPass)
+        XCTAssertEqual(gate.phase, .aborted)
+
+        XCTAssertEqual(gate.toggleExternally(), .engaged)
+        XCTAssertEqual(up(s), .handleEngaged)
+        XCTAssertEqual(up(activate), .pass)
+    }
+
+    func testEndingFromAMouseButtonForgetsAPendingRelease() {
+        _ = down(activate)
+        _ = up(activate, at: 0)
+        _ = down(activate, at: 0.1)
+        _ = gate.toggleExternally()
+        XCTAssertEqual(gate.toggleExternally(), .ended)
+        _ = gate.toggleExternally()
+        XCTAssertEqual(up(activate), .consume)
     }
 
     func testResetFromEveryPhaseReturnsToIdle() {

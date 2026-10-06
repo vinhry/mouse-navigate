@@ -42,7 +42,9 @@ public struct AppOverride: Equatable {
         self.bundleID = bundleID
         name = dictionary["name"] as? String ?? bundleID
         isDisabled = dictionary["disabled"] as? Bool ?? false
-        bindings = dictionary["bindings"] as? [String: String] ?? [:]
+        // Entry by entry: one value of another type must not read as "no bindings", which
+        // the next save would then write back for good.
+        bindings = (dictionary["bindings"] as? [String: Any])?.compactMapValues { $0 as? String } ?? [:]
     }
 
     /// Every entry that reads cleanly; the rest are dropped rather than failing the lot.

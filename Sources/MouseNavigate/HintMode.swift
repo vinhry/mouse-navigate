@@ -48,12 +48,14 @@ final class HintMode: CursorModal {
     // MARK: - Scanning
 
     private func scan() {
-        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else {
+        guard let pid = FrontmostApp.shared.processIdentifier else {
             showMessage("No app in front")
             return
         }
+        // AppKit's screen list is the main thread's to read.
+        let displays = ScreenOverlay.displayFrames()
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
-            let found = AccessibilityScanner.scan(pid: pid)
+            let found = AccessibilityScanner.scan(pid: pid, displays: displays)
             DispatchQueue.main.async {
                 self?.show(found)
             }
@@ -135,7 +137,7 @@ final class HintMode: CursorModal {
         for (index, target) in targets.enumerated() where filter.isVisible(index) {
             guard display.intersects(target.frame) else { continue }
 
-            let letters = filter.labels[index].map { KeyCodeNames.name(for: $0) }
+            let letters = filter.labels[index].map { KeyboardLayout.shared.name(for: $0) }
             let text = NSMutableAttributedString()
             for (position, letter) in letters.enumerated() {
                 // What has been typed already fades, leaving the letters still to type.

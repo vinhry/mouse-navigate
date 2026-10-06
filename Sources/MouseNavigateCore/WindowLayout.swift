@@ -74,17 +74,23 @@ public enum WindowLayout {
         return half(side == .left ? .right : .left, of: screens[neighbour])
     }
 
-    /// The nearest display whose centre lies in the given direction.
+    /// The nearest display lying wholly to that side. A display stacked above or below,
+    /// however its centre happens to sit, is not where a window walked sideways should go.
+    /// Among several, one level with the origin wins over one placed diagonally.
     public static func neighbourIndex(of index: Int, toward side: Side, in screens: [Rect]) -> Int? {
         let origin = screens[index]
+        let tolerance = 1.0
         let candidates = screens.indices.filter { candidate in
             guard candidate != index else { return false }
             switch side {
-            case .left: return screens[candidate].midX < origin.midX
-            case .right: return screens[candidate].midX > origin.midX
+            case .left: return screens[candidate].maxX <= origin.minX + tolerance
+            case .right: return screens[candidate].minX >= origin.maxX - tolerance
             }
         }
-        return candidates.min(by: {
+        let level = candidates.filter { candidate in
+            min(screens[candidate].maxY, origin.maxY) - max(screens[candidate].minY, origin.minY) > 0
+        }
+        return (level.isEmpty ? candidates : level).min(by: {
             abs(screens[$0].midX - origin.midX) < abs(screens[$1].midX - origin.midX)
         })
     }

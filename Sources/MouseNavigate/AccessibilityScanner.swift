@@ -7,7 +7,8 @@ import ApplicationServices
 /// Every attribute read is a round trip to the other app, so the walk is bounded three
 /// ways: a timeout on each request, a cap on elements visited and a deadline for the
 /// whole scan. A huge web page gets the targets found in time rather than a hang. Safe to
-/// run off the main thread.
+/// run off the main thread, given the display frames, which only the main thread may ask
+/// AppKit for.
 enum AccessibilityScanner {
     struct Target {
         /// The visible part, in CoreGraphics global points.
@@ -38,10 +39,10 @@ enum AccessibilityScanner {
         kAXVisibleChildrenAttribute, kAXChildrenAttribute,
     ] as CFArray
 
-    static func scan(pid: pid_t, maxElements: Int = 4000, budget: TimeInterval = 0.4) -> [Target] {
+    static func scan(pid: pid_t, displays: [CGRect], maxElements: Int = 4000, budget: TimeInterval = 0.4) -> [Target] {
         let deadline = ProcessInfo.processInfo.systemUptime + budget
         let app = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(app, 0.2)
+        bound(app, until: deadline)
         // Electron and Chromium build their accessibility tree only when asked; every
         // other app ignores this.
         AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
@@ -54,7 +55,6 @@ enum AccessibilityScanner {
         }
         let window = focused as! AXUIElement
 
-        let displays = NSScreen.screens.map(ScreenOverlay.globalFrame(of:))
         var targets: [Target] = []
         var queue: [(element: AXUIElement, clip: CGRect)] = [(window, .infinite)]
         var next = 0
@@ -63,6 +63,8 @@ enum AccessibilityScanner {
             let (element, clip) = queue[next]
             next += 1
 
+            // The timeout is per element, so each one gets what is left of the budget.
+            bound(element, until: deadline)
             var raw: CFArray?
             guard AXUIElementCopyMultipleAttributeValues(element, attributes, [], &raw) == .success,
                   let values = raw as? [AnyObject], values.count == 5
@@ -100,6 +102,13 @@ enum AccessibilityScanner {
     }
 
     // MARK: - Helpers
+
+    /// No single request may outlive the scan's deadline by much, nor be cut so short that
+    /// a healthy app cannot answer at all.
+    private static func bound(_ element: AXUIElement, until deadline: TimeInterval) {
+        let remaining = deadline - ProcessInfo.processInfo.systemUptime
+        AXUIElementSetMessagingTimeout(element, Float(min(max(remaining, 0.05), 0.2)))
+    }
 
     private static func frame(position: AnyObject, size: AnyObject) -> CGRect? {
         guard CFGetTypeID(position) == AXValueGetTypeID(), CFGetTypeID(size) == AXValueGetTypeID() else {

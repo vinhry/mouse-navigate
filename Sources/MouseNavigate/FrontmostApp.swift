@@ -9,12 +9,15 @@ final class FrontmostApp {
     static let shared = FrontmostApp()
 
     private(set) var bundleID: String?
+    private(set) var processIdentifier: pid_t?
 
     /// Called on the main thread whenever a different app comes to the front.
     var onChange: ((String?) -> Void)?
 
     private init() {
-        bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        bundleID = frontmost?.bundleIdentifier
+        processIdentifier = frontmost?.processIdentifier
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(applicationDidActivate(_:)),
@@ -26,6 +29,7 @@ final class FrontmostApp {
     @objc private func applicationDidActivate(_ notification: Notification) {
         let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
         let identifier = app?.bundleIdentifier
+        processIdentifier = app?.processIdentifier
         guard identifier != bundleID else { return }
         bundleID = identifier
         onChange?(identifier)
