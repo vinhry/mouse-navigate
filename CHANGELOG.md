@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1] - 2026-10-06
+
+### Fixed
+- Leaving cursor mode with a key still held, such as pressing Escape while holding `A` or
+  letting go of `A` a beat before a movement key, no longer types that letter into the
+  frontmost app for as long as the key stays down.
+- `⌘` shortcuts on mapped keys (`⌘S`, `⌘L`, `⌘F`…) reach the frontmost app while cursor
+  mode is engaged or locked, and pressing one while the grid or the click hints are up
+  closes them instead of starting a cursor action that nothing could end.
+- Engaging cursor mode from a mouse button while the activation key was mid-press no longer
+  leaves that key stuck down in the app, or loses the letter.
+- A side button pressed while drawing with the middle button no longer ends the drawing or
+  loses its own release; a release whose press MouseNavigate swallowed is swallowed too,
+  even across **Pause** and app switches. A hold or double-click no binding handles is
+  passed on as the button's own clicks, where it was pressed.
+- The pointer reaches the last column of a display and crosses to the next one at the
+  slowest speeds, where it used to stop one point short.
+- Maximize Left / Right no longer carries a window to a display stacked above or below.
+- The "Keep MouseNavigate up to date?" question and the other update alerts no longer freeze
+  the keyboard cursor, button holds and gestures while they are open.
+- Closing Preferences with a key recorder still armed no longer leaves the keyboard cursor
+  off until the window is opened again; recording a key another binding uses swaps them.
+- Built-in shortcuts such as Close Tab and Quit send the right key on AZERTY, QWERTZ and
+  other layouts, and key labels in Preferences and the click hints read as the keys they are.
+- Window actions and app launches no longer run inside the event tap, so a hung app cannot
+  stall every keystroke on the Mac; window requests give up after a quarter of a second.
+- A settings change made after Accessibility was revoked shows the permission warning and
+  recovers when it is granted again, instead of silently stopping for good.
+- Synthetic clicks no longer carry the Shift or Option held for a speed tier, and
+  double-clicks follow the system's double-click interval.
+- Cursor mode stands down when the screen locks, as documented.
+- Launch at Login says when macOS is still waiting for approval, and opens Login Items.
+- Local builds signed with an Apple Development certificate, and copies run from source,
+  no longer download every release only to refuse it.
+- A second launch from the command line opens Preferences, as a second launch from Finder
+  already did.
+
+### Changed
+- Keystrokes only pass through MouseNavigate while the keyboard cursor is enabled.
+- The build script writes `dist/MouseNavigate.zip` next to the app.
+
 ## [0.4.0] - 2026-09-27
 
 Copies of 0.3.x cannot update themselves, so install this version by hand once. From here

@@ -9,7 +9,7 @@ BUILD_CONFIG="${1:-release}"
 # The one place the version lives. A release tag must be v$VERSION: the release workflow
 # refuses any other, and the app's updater refuses a download whose version differs from
 # its tag.
-VERSION="0.4.0"
+VERSION="0.4.1"
 # Must only ever grow. The count of commits on main does, and needs full history, which is
 # why the release workflow checks out with fetch-depth 0.
 BUILD_NUMBER="${BUILD_NUMBER:-$(git -C "$ROOT_DIR" rev-list --count HEAD 2>/dev/null || echo 0)}"
@@ -115,7 +115,7 @@ cat >"$CONTENTS_DIR/Info.plist" <<EOF_PLIST
   <key>LSUIElement</key>
   <true/>
   <key>NSHumanReadableCopyright</key>
-  <string>© 2026 Vinh Ry. Released under the MIT License.</string>
+  <string>© 2026 Vinhry. Released under the MIT License.</string>
 </dict>
 </plist>
 EOF_PLIST
@@ -146,3 +146,11 @@ fi
 
 rm -rf "$ICONSET_DIR"
 echo "Created app bundle: $APP_DIR"
+
+# ditto, not zip: it keeps the code signature, symlinks and extended attributes intact,
+# which is what the updater's verification depends on. Rebuilt every time, so a stale zip
+# from an earlier version is never shipped by mistake.
+ZIP_PATH="$ROOT_DIR/dist/${APP_NAME}.zip"
+rm -f "$ZIP_PATH"
+ditto -c -k --keepParent "$APP_DIR" "$ZIP_PATH"
+echo "Created archive: $ZIP_PATH"

@@ -47,10 +47,15 @@ To see what MouseNavigate detects:
 - Default mapping:
   - Button `3` → Back (`⌘[`) in supported browsers & Finder
   - Button `4` → Forward (`⌘]`) in supported browsers & Finder
-  - Button `5` → App Exposé system-wide (uses your configured Mission Control shortcut if enabled)
-  - Button `6` → Mission Control system-wide (uses your configured Mission Control shortcut if enabled)
+  - Button `5` → App Exposé system-wide
+  - Button `6` → Mission Control system-wide
+  - App Exposé, Mission Control and Show Desktop ask the Dock directly, the way the
+    trackpad gestures do. Where that is not possible they send the shortcut you have set
+    for them in System Settings → Keyboard, if it is enabled.
 - Single-instance: one process, registered with macOS. Launching it again opens Preferences
   rather than starting a second copy.
+- Built-in shortcuts such as Close Tab (`⌘W`) and Quit (`⌘Q`) mean the letter, not the key
+  position, so they do the right thing on AZERTY, QWERTZ and every other layout.
 - The menu bar icon appears first, before permissions, device detection and gesture support
   are started, so the app can always be seen and quit even when something below it stalls.
 
@@ -63,11 +68,14 @@ To see what MouseNavigate detects:
 - Until Accessibility permission is granted, the icon shows a warning triangle. MouseNavigate keeps running and starts working as soon as the permission is turned on — no relaunch needed.
 - Hover the icon to see a tooltip confirming the running or paused state.
 - Right-click (or click) the icon for the context menu:
-  - **MouseNavigate** / **vX.Y.Z** — app name and version header (non-interactive)
+  - **MouseNavigate - vX.Y.Z** — app name and version header (non-interactive)
+  - The detected mouse and the profile in use (non-interactive)
+  - **Install MouseNavigate X.Y.Z and Relaunch** — shown only once an update has been downloaded and verified
   - **⚠ Grant Accessibility Permission…** — shown only while the permission is missing; clicking opens System Settings → Accessibility directly
-  - **Pause** / **Resume** — temporarily suspends all button handling without quitting
-  - **Launch at Login** ✓ — toggle to start MouseNavigate automatically at login
   - **⚠ Grant Input Monitoring…** — shown only when keyboard events are blocked
+  - **Pause** / **Resume** — temporarily suspends all button handling without quitting
+  - **Launch at Login** ✓ — toggle to start MouseNavigate automatically at login. When macOS is still waiting for you to allow it, the item says so and opens System Settings → Login Items instead.
+  - **Check for Updates…** — ask GitHub for a newer release now
   - **Preferences…** — open the Preferences window
   - **Quit MouseNavigate** — quits the app
 
@@ -124,13 +132,16 @@ a hold or double-click too, it has to wait to see which you meant:
 - **Hold** fires after about a third of a second while the button is still down.
 - **Double-click** fires on the second press, if it comes within 0.3 s of the first
   release. Because of that, a single click on such a button runs 0.3 s after release.
-- A click the binding does not handle, such as Back outside a browser, is passed on as the
-  button's own click.
+- A press the binding does not handle, such as Back outside a browser, is passed on as the
+  button's own click, where the button went down: one click for a click or a hold, two for
+  a double-click. A press MouseNavigate swallowed never reaches an app as a release alone,
+  not even if you pause or switch apps while the button is down.
 
 Not sure which physical button is which? Open **Preferences → Mouse** and press a button —
 the panel reports the number it reported, so you can map it directly.
 
-Changes apply immediately and persist across restarts (stored in `UserDefaults` suite `com.vinhry.MouseNavigate`).
+Changes apply immediately and persist across restarts, in the app's own `UserDefaults`
+(`~/Library/Preferences/com.vinhry.MouseNavigate.plist` when run as an app).
 
 **Back / Forward — supported apps:**
 Safari, Finder, Chrome, Chrome Canary, Firefox, Firefox Developer Edition, Arc, Brave, Edge, Opera, Vivaldi, Orion
@@ -147,8 +158,8 @@ natural scrolling while the wheel goes the other way.
   jumping. It covers the same distance a notch does in standard Mac apps; browsers pick their
   own distance per notch, so use **Speed** if it feels slower there.
 
-With all three at their defaults, wheel events never pass through MouseNavigate. Logi
-Options+ smooth scrolling makes a Logitech wheel scroll continuously, like a trackpad, so
+With all three at their defaults, and touch gestures off, wheel events never pass through
+MouseNavigate. Logi Options+ smooth scrolling makes a Logitech wheel scroll continuously, like a trackpad, so
 turn that off to use these.
 
 ## Per-App Bindings
@@ -252,9 +263,11 @@ when that expires. Anything else hands the letter straight back:
   behaves completely normally.
 
 While engaged, only the mapped keys are captured; everything else still reaches the
-frontmost app, so `⌘Tab` and `⌘W` keep working. Cursor mode also releases everything and
-stands down on sleep, screen lock, **Pause**, and if the event tap is ever cut off
-mid-hold.
+frontmost app, so `⌘Tab` and `⌘W` keep working, and so does any `⌘` shortcut on a mapped
+key: `⌘S` saves and `⌘L` reaches the address bar even in locked mode. A key cursor mode
+took stays taken until you let go of it, so leaving cursor mode with a key still held never
+types that letter. Cursor mode also releases everything and stands down on sleep, screen
+lock, **Pause**, and if the event tap is ever cut off mid-hold.
 
 You can also bind a mouse button to **Toggle Keyboard Cursor** to latch the mode without
 using the keyboard at all.
@@ -318,8 +331,9 @@ Draw a letter or a straight line and it runs the bound action. Sources, each tog
   width (30% by default, about 47 mm on a MacBook Pro). Lower it to draw with index and
   middle; raise it if ordinary two-finger scrolling is being taken for a drawing. The
   slider reads in millimetres once a trackpad is connected.
-- **Right-button drag** (off): hold the right button — the right half of a Magic Mouse —
-  and draw.
+- **Right-button drag** (off): hold the right button of any mouse — the right half of a
+  Magic Mouse — and draw. While this is on, every right-button drag longer than about 40
+  points is a drawing, so leave it off in apps that drag with the right button.
 - **Middle-button drag** (off): hold the middle button of any mouse and draw.
 
 A button drag holds the click back until release; a short one is replayed as a normal
@@ -377,7 +391,8 @@ gesture and drawn letter with its match score.
   - About `30 MB` once Preferences has been opened. The window and its four pages are kept
     rather than rebuilt: reopening is then instant and costs nothing, where building a fresh
     one each time would add roughly `10 MB` of AppKit caches that are never given back.
-  - Touch gestures add the drawing overlay, a window only as large as the drawing itself.
+  - Touch gestures add the drawing overlay: a small window for trackpad strokes, and a
+    transparent one over the whole screen while a stroke is drawn with a mouse button.
 - Drawn strokes are capped and thinned rather than kept whole, so a long one cannot grow
   without bound.
 - No network activity, apart from a daily update check if you turn that on.
@@ -424,7 +439,8 @@ Updates…** in the menu bar menu.
 
 Where it cannot replace itself — running straight from Downloads, or from a folder this
 account cannot change — it shows the verified new version in Finder to move by hand. A
-build signed ad hoc, such as a local one without a Developer ID, never updates itself.
+build signed ad hoc or with an Apple Development certificate, such as a local one, never
+updates itself, and is not asked about automatic updates. Nor is a copy run from source.
 
 ## Build from Source
 
@@ -491,7 +507,7 @@ dist/MouseNavigate.app
 ## About
 
 **Preferences → About** shows the version, links to this repository and the issue tracker,
-and the license. MouseNavigate is developed by Vinh Ry and released under the MIT License.
+and the license. MouseNavigate is developed by Vinhry and released under the MIT License.
 
 ## Run from Source
 
@@ -539,15 +555,15 @@ Or run the built binary directly:
 
 ## Versioning
 
-- Current release: `0.4.0`
+- Current release: `0.4.1`
 - The version is set in one place, `VERSION` in `scripts/build-app.sh`; the build number
   is the number of commits, so it only ever grows.
 - Pushing a version tag builds, signs, notarizes and publishes the release
   (`.github/workflows/release.yml`). The tag must match `VERSION`, or the workflow stops
   straight away:
 ```bash
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.4.1
+git push origin v0.4.1
 ```
 - Notarization has taken hours. The workflow prints nothing while it waits; that is not a
   hang.
