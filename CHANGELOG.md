@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.4.2] - 2026-10-07
 
 ### Fixed
 - **Magic Mouse gestures work the way the mouse is held.** Slides start from fingers already
