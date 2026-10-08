@@ -191,7 +191,8 @@ final class TouchMonitor {
         if isDebugLogging {
             print("[touch] started with \(bridge.devices.count) surface(s)")
             for device in bridge.devices {
-                print("[touch]   \(device.name): \(device.surface.displayName), aspect \(String(format: "%.2f", device.aspectRatio))")
+                let family = device.familyID.map { "family \($0)" } ?? "family unknown"
+                print("[touch]   \(device.name): \(device.surface.displayName), \(family), aspect \(String(format: "%.2f", device.aspectRatio))")
             }
         }
         NotificationCenter.default.post(name: TouchMonitor.didChangeNotification, object: nil)
@@ -267,9 +268,11 @@ final class TouchMonitor {
     // MARK: - Frames
 
     /// Called on MultitouchSupport's thread.
-    private func handleFrame(device: UnsafeMutableRawPointer, contacts: [TouchContact]) {
+    private func handleFrame(device: UnsafeMutableRawPointer, contacts reported: [TouchContact]) {
         let isButtonDown = CGEventSource.buttonState(.hidSystemState, button: .left)
         let now = ProcessInfo.processInfo.systemUptime
+        // Only fingers on the surface count; the rest are hovering or on their way out.
+        let contacts = reported.filter(\.isTouching)
 
         lock.lock()
         guard let state = recognizers[device] else {
@@ -289,17 +292,19 @@ final class TouchMonitor {
             // Raw positions: the pose check applies left-handed mirroring itself.
             lastMagicMouseContacts = contacts
         }
-        let countChanged = state.lastContactCount != contacts.count
-        state.lastContactCount = contacts.count
+        let countChanged = state.lastContactCount != reported.count
+        state.lastContactCount = reported.count
         suppressScroll = recognizers.values.contains { $0.recognizer.shouldSuppressScroll }
         lock.unlock()
 
         if isDebugLogging && countChanged {
-            let positions = contacts
+            // Every finger in range, with its state and size, so a finger the surface keeps
+            // losing shows up as what it is: a touch that becomes a hover, or one that is gone.
+            let described = reported
                 .sorted { $0.position.x < $1.position.x }
-                .map { String(format: "(%.2f, %.2f)", $0.position.x, $0.position.y) }
+                .map { String(format: "(%.2f, %.2f%@ s%d z%.1f)", $0.position.x, $0.position.y, $0.isTouching ? "" : " hover", $0.state, $0.size) }
                 .joined(separator: " ")
-            print("[touch] \(surface.displayName): \(contacts.count) finger(s) \(positions)")
+            print("[touch] \(surface.displayName): \(contacts.count) finger(s) \(described)")
         }
 
         guard !events.isEmpty else { return }

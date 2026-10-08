@@ -62,6 +62,20 @@ private final class TouchDriver {
             fingers[id] = nil
         }
         frame()
+        // A Magic Mouse lift is only believed once the lift grace has passed.
+        if recognizer.surface == .magicMouse {
+            wait(0.1)
+        }
+    }
+
+    /// Takes a finger off the surface for a moment, as a Magic Mouse keeps doing to a
+    /// lightly resting one, and brings it back where it is now, under the same or a new id.
+    func flicker(_ id: Int, frames: Int = 1, newID: Int? = nil) {
+        guard let position = fingers[id] else { return }
+        fingers[id] = nil
+        wait(0.01 * Double(frames))
+        fingers[newID ?? id] = position
+        frame()
     }
 
     func wait(_ seconds: Double) {
@@ -442,11 +456,20 @@ final class MagicMouseGestureTests: XCTestCase {
 
     func testMiddleFixIndexFarTap() {
         let mouse = TouchDriver(.magicMouse)
-        mouse.down(2, 0.7, 0.4)
+        mouse.down(2, 0.9, 0.2)
         mouse.wait(0.2)
-        mouse.tap(1, 0.25, 0.45)
+        mouse.tap(1, 0.1, 0.22)
         mouse.up(2)
         XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexFarTap])
+    }
+
+    func testTapAtTheNaturalSpreadIsNear() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(2, 0.91, 0.21)
+        mouse.wait(0.3)
+        mouse.tap(1, 0.42, 0.24)
+        mouse.up(2)
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexNearTap])
     }
 
     func testMiddleFixIndexSlideLeft() {
@@ -503,8 +526,8 @@ final class MagicMouseGestureTests: XCTestCase {
 
     func testCornerHoldDrivesAWindowDrag() {
         let mouse = TouchDriver(.magicMouse)
-        mouse.down(1, 0.2, 0.8)
-        mouse.down(2, 0.7, 0.2)
+        mouse.down(1, 0.2, 0.65)
+        mouse.down(2, 0.7, 0.25)
         mouse.wait(0.5)
         mouse.up(1)
         mouse.wait(0.2)
@@ -519,6 +542,219 @@ final class MagicMouseGestureTests: XCTestCase {
         mouse.wait(1)
         mouse.up(1, 2)
         XCTAssertEqual(mouse.events, [])
+    }
+
+    // MARK: Holding the mouse
+
+    func testSlideStartsFromFingersAlreadyResting() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(1, 0.4, 0.4)
+        mouse.down(2, 0.6, 0.4)
+        mouse.wait(1)
+        mouse.slide([1], by: Vector2(x: -0.2, y: 0))
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexSlideLeft])
+        XCTAssertTrue(mouse.suppressedScroll)
+
+        // Coming to rest re-arms it: no need to lift anything between slides.
+        mouse.wait(0.5)
+        mouse.slide([1], by: Vector2(x: 0.2, y: 0))
+        mouse.up(1, 2)
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexSlideLeft, .mouseMiddleFixIndexSlideRight])
+    }
+
+    func testOneSlideFiresOnce() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(1, 0.4, 0.4)
+        mouse.down(2, 0.6, 0.4)
+        mouse.wait(0.5)
+        mouse.slide([1], by: Vector2(x: -0.3, y: 0), over: 0.6)
+        mouse.up(1, 2)
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexSlideLeft])
+    }
+
+    func testRestingFingerThatDriftedStillAnchorsATap() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(2, 0.6, 0.4)
+        // Two seconds of use, the finger creeping as the mouse is moved about.
+        for _ in 0..<20 {
+            mouse.wait(0.1)
+            mouse.fingers[2]!.x += 0.008
+        }
+        mouse.tap(1, 0.52, 0.42)
+        mouse.up(2)
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexNearTap])
+    }
+
+    func testRestingFingerThatDriftedStillAnchorsASlide() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(2, 0.6, 0.4)
+        for _ in 0..<20 {
+            mouse.wait(0.1)
+            mouse.fingers[2]!.y += 0.008
+        }
+        mouse.down(1, 0.4, 0.4)
+        mouse.slide([1], by: Vector2(x: -0.2, y: 0))
+        mouse.up(1, 2)
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexSlideLeft])
+    }
+
+    func testClickBesideARestingFingerIsNotATap() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(2, 0.6, 0.4)
+        mouse.wait(0.2)
+        mouse.down(1, 0.42, 0.42)
+        mouse.wait(0.03)
+        mouse.isButtonDown = true
+        mouse.wait(0.06)
+        mouse.isButtonDown = false
+        mouse.wait(0.02)
+        mouse.up(1)
+        mouse.up(2)
+        XCTAssertEqual(mouse.gestures, [])
+    }
+
+    func testScrollingBesideARestingFingerIsLeftAlone() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(1, 0.4, 0.3)
+        mouse.down(2, 0.6, 0.3)
+        mouse.wait(0.5)
+        mouse.slide([1], by: Vector2(x: 0, y: 0.3))
+        mouse.up(1, 2)
+        XCTAssertEqual(mouse.gestures, [])
+        XCTAssertFalse(mouse.suppressedScroll)
+    }
+
+    func testPalmOnTheBackOfTheMouseIsNotAFinger() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(9, 0.5, 0.9)
+        mouse.down(2, 0.6, 0.4)
+        mouse.wait(0.2)
+        mouse.tap(1, 0.42, 0.42)
+        mouse.up(2, 9)
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexNearTap])
+
+        let index = TouchContact(id: 1, position: Vector2(x: 0.4, y: 0.6))
+        let middle = TouchContact(id: 2, position: Vector2(x: 0.6, y: 0.45))
+        let palm = TouchContact(id: 9, position: Vector2(x: 0.5, y: 0.92), size: 3)
+        XCTAssertTrue(TouchGestureRecognizer.isMiddleClickPose([palm, middle, index]))
+    }
+
+    // MARK: Contacts the mouse keeps losing
+
+    func testFlickeringRestingFingerIsNotTapping() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(1, 0.25, 0.25)
+        mouse.down(2, 0.75, 0.2)
+        mouse.wait(0.5)
+        for round in 0..<10 {
+            mouse.flicker(1, frames: 2, newID: round % 2 == 0 ? nil : 100 + round)
+            mouse.wait(0.05)
+        }
+        mouse.up(1, 2)
+        XCTAssertEqual(mouse.gestures, [])
+    }
+
+    func testSlideSurvivesFlicker() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(2, 0.6, 0.4)
+        mouse.down(1, 0.4, 0.4)
+        mouse.wait(0.5)
+        var id = 1
+        var x = 0.4
+        for step in 0..<20 {
+            x -= 0.012
+            mouse.fingers[id] = Vector2(x: x, y: 0.4)
+            mouse.wait(0.01)
+            if step % 4 == 3 {
+                // Dropped for a frame, back under a new id a little further along.
+                mouse.fingers[id] = nil
+                mouse.wait(0.01)
+                id += 10
+                x -= 0.012
+                mouse.fingers[id] = Vector2(x: x, y: 0.4)
+                mouse.frame()
+            }
+        }
+        mouse.up(id)
+        mouse.up(2)
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexSlideLeft])
+    }
+
+    func testQuickRepeatedTapsStaySeparate() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(2, 0.85, 0.2)
+        mouse.wait(0.3)
+        for _ in 0..<3 {
+            mouse.down(1, 0.5, 0.22)
+            mouse.wait(0.05)
+            mouse.fingers[1] = nil
+            mouse.wait(0.07)
+        }
+        mouse.up(2)
+        XCTAssertEqual(mouse.gestures, Array(repeating: .mouseMiddleFixIndexNearTap, count: 3))
+    }
+
+    func testBouncingTapIsOneTap() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(2, 0.91, 0.21)
+        mouse.wait(0.3)
+        for _ in 0..<3 {
+            mouse.down(1, 0.3, 0.22)
+            mouse.wait(0.02)
+            mouse.fingers[1] = nil
+            mouse.wait(0.02)
+        }
+        mouse.up(2)
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexFarTap])
+    }
+
+    func testTapsSurviveTheRestingFingerRocking() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(2, 0.88, 0.2)
+        mouse.wait(0.3)
+        for round in 0..<3 {
+            // Each tap rocks the mouse, and the resting finger shifts a hair with it.
+            mouse.fingers[2]!.x = round % 2 == 0 ? 0.85 : 0.89
+            mouse.down(1, 0.5, 0.22)
+            mouse.wait(0.06)
+            mouse.fingers[1] = nil
+            mouse.wait(0.1)
+        }
+        mouse.up(2)
+        XCTAssertEqual(mouse.gestures, Array(repeating: .mouseMiddleFixIndexNearTap, count: 3))
+    }
+
+    func testAbsenceLongerThanTheGraceIsALift() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(2, 0.6, 0.4)
+        mouse.wait(0.3)
+        mouse.tap(1, 0.42, 0.42)
+        mouse.wait(0.2)
+        mouse.tap(1, 0.42, 0.42)
+        mouse.up(2)
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexNearTap, .mouseMiddleFixIndexNearTap])
+    }
+
+    func testTapCountsWhenTheRestingFingerLiftsStraightAfter() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(2, 0.6, 0.4)
+        mouse.wait(0.3)
+        mouse.down(1, 0.42, 0.42)
+        mouse.wait(0.06)
+        mouse.fingers[1] = nil
+        mouse.wait(0.02)
+        mouse.up(2)
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexNearTap])
+    }
+
+    func testFingersAreOnlyFilteredWhenOthersAreDown() {
+        let alone = [TouchContact(id: 1, position: Vector2(x: 0.5, y: 0.9))]
+        XCTAssertEqual(TouchGestureRecognizer.fingers(among: alone, on: .magicMouse), alone)
+
+        let edge = TouchContact(id: 3, position: Vector2(x: 1, y: 0.4), size: 0.1)
+        let finger = TouchContact(id: 1, position: Vector2(x: 0.5, y: 0.4), size: 1)
+        XCTAssertEqual(TouchGestureRecognizer.fingers(among: [edge, finger], on: .magicMouse), [finger])
+        XCTAssertEqual(TouchGestureRecognizer.fingers(among: [edge, finger], on: .trackpad), [edge, finger])
     }
 
     func testMiddleClickPose() {

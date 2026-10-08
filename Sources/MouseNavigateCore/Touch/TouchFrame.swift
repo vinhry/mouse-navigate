@@ -19,11 +19,19 @@ public struct TouchContact: Equatable {
     /// trackpad or the front of a Magic Mouse, 1 the edge nearest the user.
     public var position: Vector2
     public var size: Double
+    /// MultitouchSupport's finger state: 1 and 2 are coming into range and hovering, 3 and
+    /// 4 making and holding touch, 5 breaking it, 6 and 7 lingering and leaving.
+    public var state: Int
 
-    public init(id: Int, position: Vector2, size: Double = 0) {
+    public static let touchingStates: ClosedRange<Int> = 3...4
+
+    public var isTouching: Bool { TouchContact.touchingStates.contains(state) }
+
+    public init(id: Int, position: Vector2, size: Double = 0, state: Int = 4) {
         self.id = id
         self.position = position
         self.size = size
+        self.state = state
     }
 }
 
@@ -66,6 +74,13 @@ public struct TouchTuning: Equatable {
     /// A finger counts as resting once it has been down this long without drifting.
     public var fixDuration = 0.12
     public var fixTolerance = 0.03
+    /// How far a resting finger may have strayed since it came to rest and still anchor a
+    /// gesture. Tapping on a Magic Mouse rocks it, and the resting finger with it.
+    public var restTolerance = 0.06
+    /// A finger that stays within `fixTolerance` for this long has come to rest where it
+    /// is: its movement is measured from there on. Fingers resting on a Magic Mouse drift
+    /// as the mouse moves, and without this they would stop counting as resting.
+    public var settleDuration = 0.3
     public var tapMaxDuration = 0.22
     public var tapTolerance = 0.03
     /// Fingers landing within this window count as landing together.
@@ -78,7 +93,18 @@ public struct TouchTuning: Equatable {
     public var sequenceMaxSpan = 0.8
     public var releaseTogetherWindow = 0.15
     /// On a Magic Mouse, an index tap closer than this to the resting middle finger is "near".
-    public var nearTapDistance = 0.3
+    /// Index and middle rest about half the mouse's width apart, and a tap made there is
+    /// near; far means reaching out towards the edge.
+    public var nearTapDistance = 0.6
+    /// A Magic Mouse loses a finger for a frame or two at a time: a lightly resting or
+    /// sliding one drops out, and a light tap bounces between touching and hovering. A
+    /// contact that vanishes is kept for this long, and one that comes back within
+    /// `mouseReviveDistance` of it carries on as the same finger; only a longer absence is
+    /// a lift. Mouse taps are reported this much later.
+    public var mouseLiftGrace = 0.05
+    public var mouseReviveDistance = 0.12
+    /// Taps closer together than this are one tap still bouncing; no hand taps that fast.
+    public var tapRefractory = 0.1
     public var swipeDistance = 0.15
     public var cornerHoldDuration = 0.4
     public var cornerSpread = 0.35
@@ -87,6 +113,12 @@ public struct TouchTuning: Equatable {
     public var thumbZone = 0.85
     /// Fingers working beside a resting finger stay roughly level with it.
     public var neighbourMaxOffset = 0.3
+    /// On a Magic Mouse, a contact nearer the user than this while other fingers are down
+    /// is the palm resting on the back of the mouse, not a finger.
+    public var mousePalmZone = 0.7
+    /// A Magic Mouse contact hugging the left or right edge and smaller than this is the
+    /// side of the hand, not a finger.
+    public var mouseEdgeContactSize = 0.375
     /// Two fingers at least this far apart draw instead of scrolling, as a fraction of the
     /// surface's width.
     public var drawSpread = 0.3
@@ -133,9 +165,16 @@ public enum TouchEvent: Equatable {
 public struct TrackedContact: Equatable {
     public let id: Int
     public let downTime: Double
-    public let start: Vector2
+    /// Where the finger landed, or where it last came to rest (see `TouchTuning.settleDuration`).
+    public internal(set) var start: Vector2
+    /// When `start` was last set.
+    public internal(set) var restTime: Double
+    /// Where the finger was when it last moved more than the tolerance, and when: the
+    /// stillness that makes a new rest position is measured from here.
+    var settleAnchor: Vector2
+    var settleTime: Double
     public var position: Vector2
-    /// Furthest the finger has strayed from where it landed.
+    /// Furthest the finger has strayed from `start`.
     public var maxDisplacement: Double
     public var upTime: Double?
 
@@ -143,8 +182,9 @@ public struct TrackedContact: Equatable {
         Vector2(x: position.x - start.x, y: position.y - start.y)
     }
 
+    /// Down long enough, and not strayed far from where it rests.
     public func isFixed(at time: Double, tuning: TouchTuning) -> Bool {
-        upTime == nil && time - downTime >= tuning.fixDuration && maxDisplacement <= tuning.fixTolerance
+        upTime == nil && time - downTime >= tuning.fixDuration && maxDisplacement <= tuning.restTolerance
     }
 
     public func isTap(tuning: TouchTuning) -> Bool {
@@ -172,28 +212,64 @@ public struct ContactSnapshot {
 }
 
 /// Turns raw frames into landings, lifts and per-finger histories.
+///
+/// With a lift grace, a contact that drops out of a frame is not lifted at once: it stays
+/// active where it was, and a contact reported again within the grace, under the same id or
+/// a new one close by, carries on as the same finger. Only one that stays away for the whole
+/// grace is lifted, as of the moment it vanished.
 public struct ContactTracker {
     private var contacts: [Int: TrackedContact] = [:]
+    /// Contacts that have dropped out and may yet come back, with the time they vanished.
+    private var missing: [Int: (contact: TrackedContact, since: Double)] = [:]
+    /// Raw ids standing in for a contact that came back under a new id.
+    private var aliases: [Int: Int] = [:]
 
     public init() {}
 
-    public mutating func update(_ frame: TouchFrame) -> ContactSnapshot {
+    public mutating func update(
+        _ frame: TouchFrame,
+        tuning: TouchTuning = TouchTuning(),
+        liftGrace: Double = 0
+    ) -> ContactSnapshot {
         let time = frame.timestamp
         var landed: [TrackedContact] = []
         var seen = Set<Int>()
 
         for contact in frame.contacts {
-            seen.insert(contact.id)
-            if var tracked = contacts[contact.id] {
+            let id = aliases[contact.id] ?? contact.id
+            seen.insert(id)
+            if var tracked = contacts[id] ?? revive(id, near: contact.position, rawID: contact.id, tuning: tuning) {
+                seen.insert(tracked.id)
                 tracked.position = contact.position
                 let offset = tracked.displacement
                 tracked.maxDisplacement = max(tracked.maxDisplacement, offset.magnitude)
-                contacts[contact.id] = tracked
+                // A finger that has stayed put has come to rest here, wherever here is.
+                // Measuring from here on lets slow drift pass, while a deliberate movement,
+                // which covers far more than the tolerance within the window, keeps
+                // restarting the window and is never rebased mid-way.
+                let shift = Vector2(
+                    x: contact.position.x - tracked.settleAnchor.x,
+                    y: contact.position.y - tracked.settleAnchor.y
+                )
+                if shift.magnitude > tuning.fixTolerance {
+                    tracked.settleAnchor = contact.position
+                    tracked.settleTime = time
+                } else if time - tracked.settleTime >= tuning.settleDuration {
+                    tracked.start = contact.position
+                    tracked.restTime = time
+                    tracked.maxDisplacement = 0
+                    tracked.settleAnchor = contact.position
+                    tracked.settleTime = time
+                }
+                contacts[tracked.id] = tracked
             } else {
                 let tracked = TrackedContact(
                     id: contact.id,
                     downTime: time,
                     start: contact.position,
+                    restTime: time,
+                    settleAnchor: contact.position,
+                    settleTime: time,
                     position: contact.position,
                     maxDisplacement: 0,
                     upTime: nil
@@ -204,15 +280,28 @@ public struct ContactTracker {
         }
 
         var lifted: [TrackedContact] = []
-        for (id, var tracked) in contacts where !seen.contains(id) {
-            tracked.upTime = time
-            lifted.append(tracked)
+        for (id, tracked) in contacts where !seen.contains(id) {
             contacts.removeValue(forKey: id)
+            if liftGrace > 0 {
+                missing[id] = (tracked, time)
+            } else {
+                var gone = tracked
+                gone.upTime = time
+                lifted.append(gone)
+            }
+        }
+        for (id, entry) in missing where time - entry.since >= liftGrace {
+            var gone = entry.contact
+            gone.upTime = entry.since
+            lifted.append(gone)
+            missing.removeValue(forKey: id)
+            aliases = aliases.filter { $0.value != id }
         }
 
+        let active = Array(contacts.values) + missing.values.map(\.contact)
         return ContactSnapshot(
             time: time,
-            active: contacts.values.sorted { $0.position.x < $1.position.x },
+            active: active.sorted { $0.position.x < $1.position.x },
             landed: landed,
             lifted: lifted.sorted { $0.position.x < $1.position.x },
             isPrimaryButtonDown: frame.isPrimaryButtonDown,
@@ -220,7 +309,31 @@ public struct ContactTracker {
         )
     }
 
+    /// A missing contact that a reported one continues: the same id, or a new id close to
+    /// where a finger was last seen. Taken out of the missing set.
+    private mutating func revive(_ id: Int, near position: Vector2, rawID: Int, tuning: TouchTuning) -> TrackedContact? {
+        if let entry = missing.removeValue(forKey: id) {
+            return entry.contact
+        }
+        guard aliases[rawID] == nil else { return nil }
+        let nearest = missing.min { lhs, rhs in
+            distance(lhs.value.contact.position, position) < distance(rhs.value.contact.position, position)
+        }
+        guard let nearest, distance(nearest.value.contact.position, position) <= tuning.mouseReviveDistance else {
+            return nil
+        }
+        missing.removeValue(forKey: nearest.key)
+        aliases[rawID] = nearest.key
+        return nearest.value.contact
+    }
+
+    private func distance(_ a: Vector2, _ b: Vector2) -> Double {
+        Vector2(x: a.x - b.x, y: a.y - b.y).magnitude
+    }
+
     public mutating func reset() {
         contacts.removeAll()
+        missing.removeAll()
+        aliases.removeAll()
     }
 }

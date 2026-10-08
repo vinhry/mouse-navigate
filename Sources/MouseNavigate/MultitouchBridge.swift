@@ -16,7 +16,13 @@ final class MultitouchBridge {
         let aspectRatio: Double
         /// Physical width of the touch surface, when the registry reports it.
         let widthMillimetres: Double?
+        /// MultitouchSupport's model family, when the registry reports it. 112 and 113 are
+        /// Magic Mice; 98–105 and 111 built-in trackpads; 128–130 Magic Trackpads.
+        let familyID: Int?
     }
+
+    /// The families jitouch and the other MultitouchSupport readers know to be Magic Mice.
+    private static let magicMouseFamilies: ClosedRange<Int> = 112...113
 
     typealias FrameHandler = (_ device: UnsafeMutableRawPointer, _ contacts: [TouchContact], _ timestamp: Double) -> Void
 
@@ -42,9 +48,6 @@ final class MultitouchBridge {
         static let positionX = 32
         static let positionY = 36
         static let size = 48
-        /// Finger states 3 and 4 are "making touch" and "touching"; the rest are hovering
-        /// or lifting away.
-        static let touchingStates: ClosedRange<Int32> = 3...4
         /// No hand has this many fingers. A count beyond it means the framework's record
         /// layout is not what this code expects, and walking it would read past the buffer.
         static let maximumContacts = 32
@@ -153,8 +156,14 @@ final class MultitouchBridge {
         let width = registryNumber(service, "Sensor Surface Width") ?? 0
         let height = registryNumber(service, "Sensor Surface Height") ?? 0
 
+        let familyID = registryNumber(service, "Family ID").map { Int($0) }
+
+        // The family is the reliable tell; the name is a fallback for a family this code
+        // has not met, since a device that says it is a mouse surely is one.
         let builtIn = isBuiltIn?(reference) ?? false
-        let surface: TouchSurface = !builtIn && name.lowercased().contains("mouse") ? .magicMouse : .trackpad
+        let isMagicMouse = familyID.map(MultitouchBridge.magicMouseFamilies.contains)
+            ?? (!builtIn && name.lowercased().contains("mouse"))
+        let surface: TouchSurface = isMagicMouse ? .magicMouse : .trackpad
         let aspectRatio = width > 0 && height > 0 ? width / height : (surface == .trackpad ? 1.6 : 0.55)
 
         return Device(
@@ -163,7 +172,8 @@ final class MultitouchBridge {
             name: name,
             aspectRatio: aspectRatio,
             // The registry reports the sensor surface in hundredths of a millimetre.
-            widthMillimetres: width > 0 ? width / 100 : nil
+            widthMillimetres: width > 0 ? width / 100 : nil,
+            familyID: familyID
         )
     }
 
@@ -192,9 +202,9 @@ final class MultitouchBridge {
             parsed.reserveCapacity(Int(count))
             for index in 0..<Int(count) {
                 let record = contacts.advanced(by: index * ContactLayout.stride)
+                // Every finger in range is passed on with its state, touching or not; the
+                // monitor decides which count, and can show the rest when debugging.
                 let state = record.load(fromByteOffset: ContactLayout.state, as: Int32.self)
-                guard ContactLayout.touchingStates.contains(state) else { continue }
-
                 let x = record.load(fromByteOffset: ContactLayout.positionX, as: Float32.self)
                 let y = record.load(fromByteOffset: ContactLayout.positionY, as: Float32.self)
                 let size = record.load(fromByteOffset: ContactLayout.size, as: Float32.self)
@@ -207,7 +217,8 @@ final class MultitouchBridge {
                         x: min(max(Double(x), 0), 1),
                         y: 1 - min(max(Double(y), 0), 1)
                     ),
-                    size: size.isFinite ? Double(size) : 0
+                    size: size.isFinite ? Double(size) : 0,
+                    state: Int(state)
                 ))
             }
         }

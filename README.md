@@ -290,8 +290,14 @@ names assume the right hand; tick **Left-handed** to mirror them.
 
 Gestures run alongside the ones built into macOS rather than replacing them, so turn off
 any that overlap in `System Settings` → `Trackpad` (for example **Look up & data detectors**
-with a three-finger tap). While a gesture is using finger movement, MouseNavigate holds back
-the scrolling macOS would otherwise do.
+with a three-finger tap) and `System Settings` → `Mouse` (**Swipe between full-screen
+applications** with two fingers, and **Swipe between pages** with one). While a gesture is
+using finger movement, MouseNavigate holds back the scrolling macOS would otherwise do.
+
+Magic Mouse gestures are made the way the mouse is held: with the fingers already resting on
+it. A resting finger stays a resting finger however long it has been there, and the heel of
+the hand on the back of the mouse is never taken for a finger. Clicking beside a resting
+finger is a click, not a tap.
 
 ### Trackpad
 

@@ -41,7 +41,13 @@ public struct TouchGestureRecognizer {
     }
 
     public mutating func process(_ frame: TouchFrame) -> [TouchEvent] {
-        let snapshot = tracker.update(isLeftHanded ? frame.mirrored() : frame)
+        var frame = frame
+        frame.contacts = TouchGestureRecognizer.fingers(among: frame.contacts, on: surface, tuning: tuning)
+        let snapshot = tracker.update(
+            isLeftHanded ? frame.mirrored() : frame,
+            tuning: tuning,
+            liftGrace: surface == .magicMouse ? tuning.mouseLiftGrace : 0
+        )
 
         var events: [TouchEvent] = []
         for index in detectors.indices {
@@ -95,11 +101,30 @@ public struct TouchGestureRecognizer {
         tuning: TouchTuning = TouchTuning(),
         isLeftHanded: Bool = false
     ) -> Bool {
+        let contacts = fingers(among: contacts, on: .magicMouse, tuning: tuning)
         guard contacts.count == 2 else { return false }
         let sorted = contacts.sorted { $0.position.x < $1.position.x }
         let index = isLeftHanded ? sorted[1] : sorted[0]
         let middle = isLeftHanded ? sorted[0] : sorted[1]
         return index.position.y - middle.position.y >= tuning.middleClickOffset
+    }
+
+    /// The contacts that are fingers. A hand holding a Magic Mouse also touches it with the
+    /// heel of the palm, at the back, and sometimes with the side of the hand along an edge;
+    /// those must not count as fingers, or every two-finger gesture becomes a three-finger
+    /// one. A single contact is always kept: with nothing else down, there is no grip to
+    /// mistake it for. Trackpad contacts are left alone; the thumb zone handles them.
+    public static func fingers(
+        among contacts: [TouchContact],
+        on surface: TouchSurface,
+        tuning: TouchTuning = TouchTuning()
+    ) -> [TouchContact] {
+        guard surface == .magicMouse, contacts.count > 1 else { return contacts }
+        return contacts.filter { contact in
+            guard contact.position.y <= tuning.mousePalmZone else { return false }
+            let onEdge = contact.position.x <= 0.001 || contact.position.x >= 0.999
+            return !(onEdge && contact.size < tuning.mouseEdgeContactSize)
+        }
     }
 }
 
@@ -152,6 +177,9 @@ struct FixedTapDetector: GestureDetector {
     private var anchors: [TrackedContact] = []
     private var burst: [Int: TrackedContact] = [:]
     private var lastTwoFixTap: Double?
+    /// Whether the button went down while the burst was on the surface.
+    private var sawClick = false
+    private var lastTapTime: Double?
 
     var suppressesScroll: Bool { false }
 
@@ -160,9 +188,9 @@ struct FixedTapDetector: GestureDetector {
     }
 
     mutating func update(_ snapshot: ContactSnapshot, tuning: TouchTuning, blocked: Bool) -> [TouchEvent] {
-        if snapshot.active.isEmpty {
-            reset()
-            return []
+        // Judged before the reset: fingers that all lift in one frame may still be a tap.
+        defer {
+            if snapshot.active.isEmpty { reset() }
         }
 
         if !snapshot.landed.isEmpty {
@@ -178,14 +206,33 @@ struct FixedTapDetector: GestureDetector {
         }
         guard !burst.isEmpty else { return [] }
 
+        // A finger that lands to press the button is clicking, not tapping, however brief
+        // the touch. On a Magic Mouse every ordinary click is made this way beside a
+        // resting finger, and must not switch tabs as well.
+        if snapshot.isPrimaryButtonDown {
+            sawClick = true
+        }
+
         for contact in snapshot.active + snapshot.lifted where burst[contact.id] != nil {
             burst[contact.id] = contact
         }
 
-        // A resting finger that lifts or wanders cancels the burst.
-        let currentAnchors = anchors.compactMap { snapshot.active($0.id) }
+        // A resting finger that lifts or wanders cancels the burst. One that lifted in this
+        // very frame, after the taps did, was still resting while they were made: with a
+        // lift grace the taps are judged late, and the rest has to be judged as of then.
+        let lastTapUp = burst.values.compactMap(\.upTime).max()
+        let currentAnchors = anchors.compactMap { anchor -> TrackedContact? in
+            if let active = snapshot.active(anchor.id) { return active }
+            guard let lastTapUp,
+                  let gone = snapshot.lifted.first(where: { $0.id == anchor.id }),
+                  let upTime = gone.upTime, upTime >= lastTapUp
+            else {
+                return nil
+            }
+            return gone
+        }
         if currentAnchors.count != anchors.count
-            || currentAnchors.contains(where: { $0.maxDisplacement > tuning.fixTolerance * 2 }) {
+            || currentAnchors.contains(where: { $0.maxDisplacement > tuning.restTolerance }) {
             anchors = []
         }
 
@@ -193,11 +240,19 @@ struct FixedTapDetector: GestureDetector {
 
         let taps = burst.values.sorted { $0.start.x < $1.start.x }
         burst.removeAll()
-        guard !blocked, !currentAnchors.isEmpty, anchors.count == currentAnchors.count,
+        let clicked = sawClick
+        sawClick = false
+        guard !blocked, !clicked, !currentAnchors.isEmpty, anchors.count == currentAnchors.count,
               taps.allSatisfy({ $0.isTap(tuning: tuning) })
         else {
             return []
         }
+        // A light tap on a Magic Mouse can bounce, touching two or three times in a row
+        // faster than any hand could tap; the first touch is the tap.
+        if let lastTapTime, snapshot.time - lastTapTime < tuning.tapRefractory {
+            return []
+        }
+        lastTapTime = snapshot.time
         return classify(taps: taps, anchors: currentAnchors, time: snapshot.time, tuning: tuning)
     }
 
@@ -244,6 +299,8 @@ struct FixedTapDetector: GestureDetector {
         anchors = []
         burst.removeAll()
         lastTwoFixTap = nil
+        sawClick = false
+        lastTapTime = nil
     }
 }
 
@@ -282,6 +339,16 @@ struct FixedSlideDetector: GestureDetector {
                 .map { _ in .dragToggleMode }
         }
 
+        if fired {
+            // One slide, one action. The next needs a fresh start: a finger coming or
+            // going, or every finger coming to rest, which is how a Magic Mouse is held
+            // between gestures.
+            let settled = snapshot.active.allSatisfy { $0.maxDisplacement <= tuning.fixTolerance }
+            guard !snapshot.landed.isEmpty || !snapshot.lifted.isEmpty || settled else { return [] }
+            fired = false
+            cancel()
+        }
+
         if !snapshot.landed.isEmpty {
             if sliders.isEmpty {
                 anchors = restingFingers(whenLanding: snapshot, surface: surface, tuning: tuning) ?? []
@@ -291,19 +358,43 @@ struct FixedSlideDetector: GestureDetector {
             }
         }
 
-        guard !fired, !anchors.isEmpty, !sliders.isEmpty else { return [] }
+        if surface == .magicMouse, sliders.isEmpty, snapshot.landed.isEmpty {
+            // The fingers that slide on a Magic Mouse were already resting on it: that is how
+            // a mouse is held. So a session also starts when one resting finger sets off
+            // while the one or two beside it stay put.
+            let movers = snapshot.active.filter { $0.maxDisplacement > tuning.fixTolerance }
+            let resting = snapshot.active.filter { $0.isFixed(at: snapshot.time, tuning: tuning) }
+            if movers.count == 1, (1...2).contains(resting.count),
+               movers.count + resting.count == snapshot.active.count {
+                anchors = resting
+                sliders = [movers[0].id]
+            }
+        }
+
+        guard !anchors.isEmpty, !sliders.isEmpty else { return [] }
 
         let currentAnchors = anchors.compactMap { snapshot.active($0.id) }
         let moving = sliders.compactMap { snapshot.active($0) }
         guard currentAnchors.count == anchors.count,
               moving.count == sliders.count,
-              !currentAnchors.contains(where: { $0.maxDisplacement > tuning.fixTolerance * 2 })
+              !currentAnchors.contains(where: { $0.maxDisplacement > tuning.restTolerance })
         else {
             cancel()
             return []
         }
 
-        suppressesScroll = !blocked && moving.contains { $0.maxDisplacement > tuning.fixTolerance }
+        if surface == .magicMouse {
+            // Mouse slides go across the mouse. A finger moving along it beside a resting
+            // one is scrolling, which has to keep working with the fingers at rest.
+            let travel = mean(moving.map(\.displacement))
+            if abs(travel.y) > tuning.fixTolerance, abs(travel.y) > abs(travel.x) {
+                cancel()
+                return []
+            }
+            suppressesScroll = !blocked && abs(travel.x) > tuning.fixTolerance
+        } else {
+            suppressesScroll = !blocked && moving.contains { $0.maxDisplacement > tuning.fixTolerance }
+        }
         guard !blocked, let gesture = classify(moving: moving, anchors: currentAnchors, snapshot: snapshot, tuning: tuning) else {
             return []
         }

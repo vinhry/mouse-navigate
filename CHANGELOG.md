@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Magic Mouse gestures work the way the mouse is held.** Slides start from fingers already
+  resting on the mouse, where before a finger had to land beside a resting one first. A
+  resting finger that has crept along with the mouse still counts as resting, instead of
+  disqualifying itself after a few seconds of use. The heel of the hand on the back of the
+  mouse, and the side of the hand along an edge, are no longer taken for fingers, so they
+  cannot turn a two-finger gesture into a three-finger one or defeat the middle-click pose.
+  A finger that lands beside a resting one to click is a click, not a Near / Far Tap, so
+  ordinary clicks no longer switch tabs as well. Scrolling along the mouse with a finger
+  resting beside the scrolling one is left alone.
+- A Magic Mouse is recognised by its MultitouchSupport family rather than by its name, so
+  one whose name is missing from the registry no longer gets the trackpad gestures.
+  `--touch-debug` prints the family of each surface.
+- A slide can be made again after the fingers come to rest; before, every finger had to
+  lift first.
+- A Magic Mouse loses a lightly resting or sliding finger for a frame at a time. Each loss
+  used to be a lift and each return a landing, so a slide fired once per dropout or not at
+  all, a slid finger returning to rest fired the opposite slide, and a resting index finger
+  produced a stream of Far-Taps, and a light tap that bounced fired two or three times. A
+  finger that comes back within 50 ms is now the same finger, and taps closer together
+  than 100 ms are one tap; mouse taps are reported 50 ms later.
+- Tapping on a Magic Mouse rocks it, and the resting finger shifts a hair. That shift no
+  longer disqualifies it from anchoring the next tap or slide.
+- Near-Tap is a tap where the index finger naturally rests, or tucked in towards the middle
+  finger; Far-Tap means reaching out towards the edge. The split used to fall right on the
+  natural spread, so the same tap came out Near or Far depending on where the middle
+  finger happened to rest.
+- `--touch-debug` shows every finger in range with its state and size, hovering ones included.
+
 ## [0.4.1] - 2026-10-06
 
 ### Fixed
