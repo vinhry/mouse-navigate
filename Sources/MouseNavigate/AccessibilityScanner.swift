@@ -39,13 +39,25 @@ enum AccessibilityScanner {
         kAXVisibleChildrenAttribute, kAXChildrenAttribute,
     ] as CFArray
 
+    /// Electron and Chromium build their accessibility tree only when asked, and keep
+    /// building it, at a cost to the app, until told to stop; every other app ignores
+    /// this. `scan` asks; the caller says when it is done. An AX round trip, so not for
+    /// the main thread.
+    static func setManualAccessibility(_ enabled: Bool, pid: pid_t) {
+        setManualAccessibility(enabled, app: AXUIElementCreateApplication(pid))
+    }
+
+    private static func setManualAccessibility(_ enabled: Bool, app: AXUIElement) {
+        AXUIElementSetAttributeValue(
+            app, "AXManualAccessibility" as CFString, enabled ? kCFBooleanTrue : kCFBooleanFalse
+        )
+    }
+
     static func scan(pid: pid_t, displays: [CGRect], maxElements: Int = 4000, budget: TimeInterval = 0.4) -> [Target] {
         let deadline = ProcessInfo.processInfo.systemUptime + budget
         let app = AXUIElementCreateApplication(pid)
         bound(app, until: deadline)
-        // Electron and Chromium build their accessibility tree only when asked; every
-        // other app ignores this.
-        AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        setManualAccessibility(true, app: app)
 
         var focused: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &focused) == .success,

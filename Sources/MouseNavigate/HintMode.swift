@@ -25,6 +25,8 @@ final class HintMode: CursorModal {
     private var filter: HintFilter?
     private var message: String?
     private var isClosed = false
+    /// The app whose accessibility tree the scan asked for, to be released on close.
+    private var scannedPID: pid_t?
 
     private static let emptyMessageDuration: TimeInterval = 0.9
 
@@ -52,6 +54,7 @@ final class HintMode: CursorModal {
             showMessage("No app in front")
             return
         }
+        scannedPID = pid
         // AppKit's screen list is the main thread's to read.
         let displays = ScreenOverlay.displayFrames()
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
@@ -119,6 +122,12 @@ final class HintMode: CursorModal {
         isClosed = true
         overlay.hide()
         overlay.draw = nil
+        if let scannedPID {
+            // The scan asked the app to build its accessibility tree; let it stop.
+            DispatchQueue.global(qos: .userInteractive).async {
+                AccessibilityScanner.setManualAccessibility(false, pid: scannedPID)
+            }
+        }
     }
 
     // MARK: - Drawing

@@ -16,6 +16,8 @@ All notable changes to this project will be documented in this file.
   outside the Keyboard Cursor tab no longer ends cursor mode.
 - A Magic Mouse click that became a gesture no longer hands the app its release alone if
   MouseNavigate is paused, or the app switched, while the button is still down.
+- Click hints no longer leave Electron and Chromium apps building their accessibility
+  tree after the hints have closed.
 
 ## [0.5.0] - 2026-10-09
 
