@@ -484,8 +484,9 @@ swift test
 ```
 
 The pure logic — device matching, the movement curve, screen clamping, the activation
-state machine that protects normal typing, window placement, and touch gesture and letter
-recognition — lives in the `MouseNavigateCore` target so it can be tested without any UI.
+state machine that protects normal typing, window placement, touch gesture and letter
+recognition, and settings storage and migration — lives in the `MouseNavigateCore` target
+so it can be tested without any UI.
 
 ## Build .app Bundle
 

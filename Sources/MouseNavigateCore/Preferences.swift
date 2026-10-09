@@ -1,51 +1,30 @@
 import Foundation
-import MouseNavigateCore
-
-/// Where drawn characters can come from.
-enum CharacterSource: String, CaseIterable {
-    case trackpad
-    case magicMouseRightDrag
-    case middleButtonDrag
-
-    var displayName: String {
-        switch self {
-        case .trackpad: return "Draw with two spread fingers on the trackpad"
-        case .magicMouseRightDrag: return "Draw while holding the right mouse button"
-        case .middleButtonDrag: return "Draw while holding the middle button"
-        }
-    }
-
-    /// Button drags hold back the click until release, which delays context menus, so they
-    /// stay off until asked for.
-    var isEnabledByDefault: Bool {
-        self == .trackpad
-    }
-}
 
 /// UserDefaults-backed settings shared by the daemon and the preferences window.
 ///
 /// Main thread only: the event tap, the preferences window and the touch monitor's
 /// gesture handling all run there, and the cache below is not locked.
-final class Preferences {
-    static let shared = Preferences()
+public final class Preferences {
+    public static let shared = Preferences(store: .standard)
 
-    static let didChangeNotification = Notification.Name("com.vinhry.MouseNavigate.preferencesDidChange")
+    public static let didChangeNotification = Notification.Name("com.vinhry.MouseNavigate.preferencesDidChange")
     /// `userInfo` key carrying the `SettingsArea` that changed.
-    static let areaUserInfoKey = "area"
+    public static let areaUserInfoKey = "area"
 
     /// Buttons the preferences window offers. CGEvent numbers 0-2 are the primary,
     /// secondary and middle buttons, which are left alone.
-    static let configurableButtons = Array(3...9)
+    public static let configurableButtons = Array(3...9)
 
     private let store: UserDefaults
-    private let currentConfigVersion = 2
+    let currentConfigVersion = 2
 
-    private init() {
-        // Not a suite: the app's own bundle identifier is not a valid suite name, so
-        // `UserDefaults(suiteName:)` returned nil here and logged "does not make sense and
-        // will not work" on every terminal run. The fallback was already what ran, and it
-        // reads the same ~/Library/Preferences/com.vinhry.MouseNavigate.plist.
-        store = .standard
+    /// The app uses `.standard`, not a suite: its own bundle identifier is not a valid
+    /// suite name, so `UserDefaults(suiteName:)` returned nil and logged "does not make
+    /// sense and will not work" on every terminal run. The fallback was already what ran,
+    /// and it reads the same ~/Library/Preferences/com.vinhry.MouseNavigate.plist. Tests
+    /// pass a suite of their own.
+    public init(store: UserDefaults) {
+        self.store = store
         migrateIfNeeded()
     }
 
@@ -53,7 +32,7 @@ final class Preferences {
 
     /// v1 stored a single global mapping under "button<n>". Those values came from the
     /// MX Master 4, so they seed that profile and the old keys are cleared.
-    private func migrateIfNeeded() {
+    func migrateIfNeeded() {
         guard store.integer(forKey: "configVersion") < currentConfigVersion else { return }
 
         for button in Preferences.configurableButtons {
@@ -73,7 +52,7 @@ final class Preferences {
     // MARK: - Device profile
 
     /// nil means "auto" — follow whatever the detector reports.
-    var deviceOverride: DeviceProfile? {
+    public var deviceOverride: DeviceProfile? {
         get {
             guard let raw = store.string(forKey: "deviceOverride") else { return nil }
             return DeviceProfile(rawValue: raw)
@@ -92,7 +71,7 @@ final class Preferences {
 
     /// What `trigger` runs with `bundleID` in front: that app's own binding, then the one
     /// for all apps.
-    func binding(for trigger: BindingTrigger, app bundleID: String?) -> ActionBinding {
+    public func binding(for trigger: BindingTrigger, app bundleID: String?) -> ActionBinding {
         BindingResolver.resolve(
             trigger,
             frontmost: bundleID,
@@ -103,7 +82,7 @@ final class Preferences {
 
     /// The binding for all apps, or the trigger's default when none is stored or the
     /// stored one cannot be read.
-    func globalBinding(for trigger: BindingTrigger) -> ActionBinding {
+    public func globalBinding(for trigger: BindingTrigger) -> ActionBinding {
         guard let raw = store.string(forKey: trigger.storageKey),
               let binding = ActionBinding(storageValue: raw),
               trigger.allows(binding)
@@ -113,7 +92,7 @@ final class Preferences {
         return binding
     }
 
-    func setGlobalBinding(_ binding: ActionBinding, for trigger: BindingTrigger) {
+    public func setGlobalBinding(_ binding: ActionBinding, for trigger: BindingTrigger) {
         store.set(binding.storageValue, forKey: trigger.storageKey)
         notifyChange(.bindings)
     }
@@ -127,7 +106,7 @@ final class Preferences {
     private var cachedAppOverrides: [String: AppOverride]?
 
     /// Keyed by bundle identifier.
-    var appOverrides: [String: AppOverride] {
+    public var appOverrides: [String: AppOverride] {
         if let cachedAppOverrides {
             return cachedAppOverrides
         }
@@ -142,31 +121,31 @@ final class Preferences {
     }
 
     /// Apps with bindings of their own, by name.
-    var overriddenApps: [AppOverride] {
+    public var overriddenApps: [AppOverride] {
         appOverrides.values.sorted {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
     }
 
-    func addApp(bundleID: String, name: String) {
+    public func addApp(bundleID: String, name: String) {
         var overrides = appOverrides
         guard overrides[bundleID] == nil else { return }
         overrides[bundleID] = AppOverride(bundleID: bundleID, name: name)
         saveAppOverrides(overrides)
     }
 
-    func removeApp(bundleID: String) {
+    public func removeApp(bundleID: String) {
         var overrides = appOverrides
         overrides[bundleID] = nil
         saveAppOverrides(overrides)
     }
 
-    func isAppDisabled(_ bundleID: String?) -> Bool {
+    public func isAppDisabled(_ bundleID: String?) -> Bool {
         guard let bundleID else { return false }
         return appOverrides[bundleID]?.isDisabled ?? false
     }
 
-    func setApp(_ bundleID: String, disabled: Bool) {
+    public func setApp(_ bundleID: String, disabled: Bool) {
         var overrides = appOverrides
         guard overrides[bundleID] != nil else { return }
         overrides[bundleID]?.isDisabled = disabled
@@ -174,19 +153,19 @@ final class Preferences {
     }
 
     /// nil means the app follows the binding for all apps.
-    func appBinding(for trigger: BindingTrigger, app bundleID: String) -> ActionBinding? {
+    public func appBinding(for trigger: BindingTrigger, app bundleID: String) -> ActionBinding? {
         appOverrides[bundleID]?.binding(for: trigger)
     }
 
     /// Hands every trigger whose key passes `matching` back to the binding for all apps.
-    func clearAppBindings(app bundleID: String, matching: (String) -> Bool) {
+    public func clearAppBindings(app bundleID: String, matching: (String) -> Bool) {
         var overrides = appOverrides
         guard let bindings = overrides[bundleID]?.bindings else { return }
         overrides[bundleID]?.bindings = bindings.filter { !matching($0.key) }
         saveAppOverrides(overrides)
     }
 
-    func setAppBinding(_ binding: ActionBinding?, for trigger: BindingTrigger, app bundleID: String) {
+    public func setAppBinding(_ binding: ActionBinding?, for trigger: BindingTrigger, app bundleID: String) {
         var overrides = appOverrides
         guard overrides[bundleID] != nil else { return }
         overrides[bundleID]?.bindings[trigger.storageKey] = binding?.storageValue
@@ -195,7 +174,7 @@ final class Preferences {
 
     // MARK: - Scroll wheel
 
-    var scrollSettings: ScrollSettings {
+    public var scrollSettings: ScrollSettings {
         get {
             ScrollSettings(
                 isReversed: store.bool(forKey: "scroll.reversed"),
@@ -214,7 +193,7 @@ final class Preferences {
     // MARK: - Updates
 
     /// nil until the user has been asked, which happens once.
-    var automaticUpdates: Bool? {
+    public var automaticUpdates: Bool? {
         get { store.object(forKey: "update.automatic") as? Bool }
         set {
             store.set(newValue, forKey: "update.automatic")
@@ -223,14 +202,14 @@ final class Preferences {
     }
 
     /// Not a setting, so it changes without telling anyone.
-    var lastUpdateCheck: Date? {
+    public var lastUpdateCheck: Date? {
         get { store.object(forKey: "update.lastCheck") as? Date }
         set { store.set(newValue, forKey: "update.lastCheck") }
     }
 
     // MARK: - Keyboard cursor
 
-    var isCursorModeEnabled: Bool {
+    public var isCursorModeEnabled: Bool {
         get { store.object(forKey: "cursorModeEnabled") as? Bool ?? true }
         set {
             store.set(newValue, forKey: "cursorModeEnabled")
@@ -238,7 +217,7 @@ final class Preferences {
         }
     }
 
-    func keyCode(for binding: CursorBinding) -> UInt16 {
+    public func keyCode(for binding: CursorBinding) -> UInt16 {
         guard let stored = store.object(forKey: "key.\(binding.rawValue)") as? Int,
               let keyCode = UInt16(exactly: stored)
         else {
@@ -247,24 +226,24 @@ final class Preferences {
         return keyCode
     }
 
-    func setKeyCode(_ keyCode: UInt16, for binding: CursorBinding) {
+    public func setKeyCode(_ keyCode: UInt16, for binding: CursorBinding) {
         store.set(Int(keyCode), forKey: "key.\(binding.rawValue)")
         notifyChange(.cursor)
     }
 
-    func value(for setting: CursorSetting) -> Double {
+    public func value(for setting: CursorSetting) -> Double {
         guard let stored = store.object(forKey: "cursor.\(setting.rawValue)") as? Double else {
             return setting.defaultValue
         }
         return setting.clamp(stored)
     }
 
-    func setValue(_ value: Double, for setting: CursorSetting) {
+    public func setValue(_ value: Double, for setting: CursorSetting) {
         store.set(setting.clamp(value), forKey: "cursor.\(setting.rawValue)")
         notifyChange(.cursor)
     }
 
-    func speedProfile() -> CursorSpeedProfile {
+    public func speedProfile() -> CursorSpeedProfile {
         CursorSpeedProfile(
             baseSpeed: value(for: .baseSpeed),
             maxSpeed: value(for: .maxSpeed),
@@ -277,7 +256,7 @@ final class Preferences {
     }
 
     /// Reset only the cursor-mode keys and tunables; button mappings are untouched.
-    func restoreCursorDefaults() {
+    public func restoreCursorDefaults() {
         for binding in CursorBinding.allCases {
             store.removeObject(forKey: "key.\(binding.rawValue)")
         }
@@ -291,7 +270,7 @@ final class Preferences {
     // MARK: - Touch gestures
 
     /// Off until the user opts in: the gestures run alongside macOS's own and can overlap.
-    var isTouchEnabled: Bool {
+    public var isTouchEnabled: Bool {
         get { store.object(forKey: "touchEnabled") as? Bool ?? false }
         set {
             store.set(newValue, forKey: "touchEnabled")
@@ -299,7 +278,7 @@ final class Preferences {
         }
     }
 
-    var isLeftHanded: Bool {
+    public var isLeftHanded: Bool {
         get { store.bool(forKey: "touchLeftHanded") }
         set {
             store.set(newValue, forKey: "touchLeftHanded")
@@ -310,7 +289,7 @@ final class Preferences {
     // MARK: - Character gestures
 
     /// Whether the stroke is drawn on screen as it is made.
-    var showsDrawingOverlay: Bool {
+    public var showsDrawingOverlay: Bool {
         get { store.object(forKey: "touchShowsDrawing") as? Bool ?? true }
         set {
             store.set(newValue, forKey: "touchShowsDrawing")
@@ -320,7 +299,7 @@ final class Preferences {
 
     /// How far apart the two fingers must be to draw rather than scroll, as a fraction of
     /// the trackpad's width.
-    var characterDrawSpread: Double {
+    public var characterDrawSpread: Double {
         get {
             let stored = store.object(forKey: "touchDrawSpread") as? Double ?? TouchTuning().drawSpread
             return TouchTuning.clampDrawSpread(stored)
@@ -331,17 +310,17 @@ final class Preferences {
         }
     }
 
-    func isCharacterSourceEnabled(_ source: CharacterSource) -> Bool {
+    public func isCharacterSourceEnabled(_ source: CharacterSource) -> Bool {
         store.object(forKey: "characterSource.\(source.rawValue)") as? Bool ?? source.isEnabledByDefault
     }
 
-    func setCharacterSource(_ source: CharacterSource, enabled: Bool) {
+    public func setCharacterSource(_ source: CharacterSource, enabled: Bool) {
         store.set(enabled, forKey: "characterSource.\(source.rawValue)")
         notifyChange(.touch)
     }
 
     /// Reset every gesture binding and touch option; mouse buttons and cursor keys are untouched.
-    func restoreTouchDefaults() {
+    public func restoreTouchDefaults() {
         for gesture in TouchGesture.allCases {
             store.removeObject(forKey: BindingTrigger.touch(gesture).storageKey)
         }
@@ -370,7 +349,7 @@ final class Preferences {
 /// Which part of the settings a change touched, so an observer can tell a change it has
 /// to act on from one it can ignore. Cursor mode, for one, stands down when its own keys
 /// change and keeps going when a scroll slider moves.
-enum SettingsArea: String {
+public enum SettingsArea: String {
     case bindings
     case device
     case apps
@@ -382,7 +361,7 @@ enum SettingsArea: String {
     case all
 }
 
-extension Notification {
+public extension Notification {
     /// The area a `Preferences.didChangeNotification` reports; `.all` when it says nothing.
     var settingsArea: SettingsArea {
         userInfo?[Preferences.areaUserInfoKey] as? SettingsArea ?? .all
