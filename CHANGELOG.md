@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- When the helper that reopens MouseNavigate after an update could not start, the
+  explanation was never shown: the app quit before the alert reached the screen.
+
 ## [0.5.0] - 2026-10-09
 
 ### Fixed

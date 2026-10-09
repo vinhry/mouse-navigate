@@ -386,7 +386,13 @@ final class Updater {
         do {
             try helper.run()
         } catch {
-            showAlert("Installed, but couldn't relaunch", "Open MouseNavigate again to finish updating.")
+            // The alert is shown from the run loop, so quitting here would end the process
+            // before it appeared. The new version is already in place either way.
+            let alert = NSAlert()
+            alert.messageText = "Installed, but couldn't relaunch"
+            alert.informativeText = "Open MouseNavigate again to finish updating."
+            present(alert) { [weak self] _ in self?.onQuit?() }
+            return
         }
         onQuit?()
     }
