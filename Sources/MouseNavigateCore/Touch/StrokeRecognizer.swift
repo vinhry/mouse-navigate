@@ -72,8 +72,15 @@ public struct StrokeRecognizer {
     }
 
     public func recognize(_ points: [Vector2]) -> CharacterGesture? {
-        guard let match = bestMatch(points), match.score >= minimumScore else { return nil }
+        guard let match = bestMatch(points), accepts(match) else { return nil }
         return match.gesture
+    }
+
+    /// Whether a match is close enough to be the letter, rather than a scribble that
+    /// happened to be nearest it. Lets a caller that already has the match avoid a second
+    /// search.
+    public func accepts(_ match: Match) -> Bool {
+        match.score >= minimumScore
     }
 
     /// The closest gesture whatever its score, for diagnostics.

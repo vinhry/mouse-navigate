@@ -84,6 +84,21 @@ final class StrokeRecognizerTests: XCTestCase {
         XCTAssertNil(recognizer.recognize(trace(scribble)))
     }
 
+    func testAcceptsAgreesWithRecognize() {
+        let letter = trace(CharacterTemplates.all.first { $0.gesture == .n }!.points)
+        let line = trace([Vector2(x: 0, y: 0), Vector2(x: 0, y: 1)])
+        var generator = SeededGenerator(seed: 7)
+        let scribble = (0..<40).map { _ in
+            Vector2(x: Double.random(in: 0...1, using: &generator), y: Double.random(in: 0...1, using: &generator))
+        }
+        for stroke in [letter, line, scribble] {
+            let viaMatch = recognizer.bestMatch(stroke).flatMap { recognizer.accepts($0) ? $0.gesture : nil }
+            XCTAssertEqual(viaMatch, recognizer.recognize(stroke))
+        }
+        XCTAssertNotNil(recognizer.recognize(letter))
+        XCTAssertNil(recognizer.recognize(scribble))
+    }
+
     func testDegenerateStrokesAreIgnored() {
         XCTAssertNil(recognizer.recognize([]))
         XCTAssertNil(recognizer.recognize([Vector2(x: 0.5, y: 0.5)]))

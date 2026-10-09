@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - When the helper that reopens MouseNavigate after an update could not start, the
   explanation was never shown: the app quit before the alert reached the screen.
+- A drawn stroke is matched against the letter templates once rather than twice.
 
 ## [0.5.0] - 2026-10-09
 

@@ -122,7 +122,7 @@ final class TouchMonitor {
     /// Recognizes a drawn stroke from any source, shows what it was, and runs its action.
     func handleStroke(_ points: [Vector2], in space: DrawingOverlay.Space) {
         let match = strokeRecognizer.bestMatch(points)
-        let character = strokeRecognizer.recognize(points)
+        let character = match.flatMap { strokeRecognizer.accepts($0) ? $0.gesture : nil }
         if isDebugLogging {
             let described = match.map { "\($0.gesture.displayName) (score \(String(format: "%.2f", $0.score)))" } ?? "nothing"
             print("[touch] stroke of \(points.count) points -> \(described)\(character == nil ? ", rejected" : "")")
