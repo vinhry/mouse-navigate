@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.5.0] - 2026-10-09
 
 ### Fixed
 - The updater opens a release's page only when it is a web address. GitHub's answer names
