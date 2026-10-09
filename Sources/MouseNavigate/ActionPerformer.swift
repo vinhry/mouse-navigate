@@ -233,19 +233,14 @@ final class ActionPerformer {
     }
 
     private func sendShortcut(keyCode: CGKeyCode, flags: CGEventFlags) {
-        guard let source = CGEventSource(stateID: .hidSystemState),
-              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
+        guard let keyDown = SyntheticEvents.key(keyCode, down: true),
+              let keyUp = SyntheticEvents.key(keyCode, down: false) else {
             return
         }
-
         keyDown.flags = flags
         keyUp.flags = flags
-        // Tagged so the keyboard path recognises these as ours and ignores them.
-        keyDown.setIntegerValueField(.eventSourceUserData, value: CursorOutput.syntheticTag)
-        keyUp.setIntegerValueField(.eventSourceUserData, value: CursorOutput.syntheticTag)
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
+        SyntheticEvents.post(keyDown)
+        SyntheticEvents.post(keyUp)
     }
 
     /// Media keys are not key codes but system-defined events: subtype 8, with the key in
@@ -266,8 +261,7 @@ final class ActionPerformer {
             ), let cgEvent = event.cgEvent else {
                 return
             }
-            cgEvent.setIntegerValueField(.eventSourceUserData, value: CursorOutput.syntheticTag)
-            cgEvent.post(tap: .cghidEventTap)
+            SyntheticEvents.post(cgEvent)
         }
     }
 

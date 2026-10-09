@@ -99,20 +99,12 @@ final class StrokeCapture {
     }
 
     private func post(_ type: CGEventType, button: Button, at location: CGPoint) {
-        guard let event = CGEvent(
-            mouseEventSource: CGEventSource(stateID: .hidSystemState),
-            mouseType: type,
-            mouseCursorPosition: location,
-            mouseButton: button.cgButton
+        guard let event = SyntheticEvents.mouse(
+            type, at: location, button: button.cgButton, buttonNumber: button == .middle ? 2 : nil
         ) else {
             return
         }
-        event.setIntegerValueField(.mouseEventClickState, value: 1)
-        if button == .middle {
-            event.setIntegerValueField(.mouseEventButtonNumber, value: 2)
-        }
-        event.setIntegerValueField(.eventSourceUserData, value: CursorOutput.syntheticTag)
-        event.post(tap: .cghidEventTap)
+        SyntheticEvents.post(event)
     }
 
     private func vector(_ point: CGPoint) -> Vector2 {

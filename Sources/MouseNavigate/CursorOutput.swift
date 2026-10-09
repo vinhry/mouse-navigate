@@ -6,7 +6,6 @@ import MouseNavigateCore
 final class CursorOutput {
     /// Stamped into `eventSourceUserData` on everything we post so the tap can tell our
     /// own events apart from real input and pass them straight through.
-    static let syntheticTag: Int64 = 0x4D4E_4156 // "MNAV"
 
     enum MouseButton {
         case left
@@ -46,7 +45,6 @@ final class CursorOutput {
         }
     }
 
-    private let source = CGEventSource(stateID: .hidSystemState)
     private var heldButtons: [MouseButton: Int] = [:]
     private var lastClick: (button: MouseButton, time: TimeInterval, location: CGPoint, count: Int)?
 
@@ -76,7 +74,7 @@ final class CursorOutput {
         let button = heldButtons.keys.first?.cgButton ?? .left
 
         guard let event = CGEvent(
-            mouseEventSource: source,
+            mouseEventSource: SyntheticEvents.source,
             mouseType: type,
             mouseCursorPosition: point,
             mouseButton: button
@@ -101,7 +99,7 @@ final class CursorOutput {
         heldButtons[button] = clickCount
 
         guard let event = CGEvent(
-            mouseEventSource: source,
+            mouseEventSource: SyntheticEvents.source,
             mouseType: button.downType,
             mouseCursorPosition: point,
             mouseButton: button.cgButton
@@ -119,7 +117,7 @@ final class CursorOutput {
         lastClick = (button, ProcessInfo.processInfo.systemUptime, point, clickCount)
 
         guard let event = CGEvent(
-            mouseEventSource: source,
+            mouseEventSource: SyntheticEvents.source,
             mouseType: button.upType,
             mouseCursorPosition: point,
             mouseButton: button.cgButton
@@ -137,7 +135,7 @@ final class CursorOutput {
         let clickCount = clickCount(for: button, at: point)
         for type in [button.downType, button.upType] {
             guard let event = CGEvent(
-                mouseEventSource: source,
+                mouseEventSource: SyntheticEvents.source,
                 mouseType: type,
                 mouseCursorPosition: point,
                 mouseButton: button.cgButton
@@ -178,7 +176,7 @@ final class CursorOutput {
         guard deltaX != 0 || deltaY != 0 else { return }
 
         guard let event = CGEvent(
-            scrollWheelEvent2Source: source,
+            scrollWheelEvent2Source: SyntheticEvents.source,
             units: .pixel,
             wheelCount: 2,
             wheel1: Int32(deltaY),
@@ -197,7 +195,6 @@ final class CursorOutput {
         // speed tiers: Shift for fast must not make a Shift-click, nor Option for
         // precision an Option-click.
         event.flags = []
-        event.setIntegerValueField(.eventSourceUserData, value: CursorOutput.syntheticTag)
-        event.post(tap: .cghidEventTap)
+        SyntheticEvents.post(event)
     }
 }

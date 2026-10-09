@@ -47,7 +47,6 @@ final class KeyboardCursorEngine {
     /// again with it.
     private var exitsWithModal = false
 
-    private let keyEventSource = CGEventSource(stateID: .hidSystemState)
     /// Modifier flags (Caps Lock, in practice) on the activation key-down being withheld.
     private var withheldFlags: CGEventFlags = []
 
@@ -278,14 +277,10 @@ final class KeyboardCursorEngine {
     }
 
     private func postKeyEvent(keyCode: UInt16, down: Bool, proxy: CGEventTapProxy?) {
-        guard let event = CGEvent(
-            keyboardEventSource: keyEventSource,
-            virtualKey: CGKeyCode(keyCode),
-            keyDown: down
-        ) else {
+        guard let event = SyntheticEvents.key(CGKeyCode(keyCode), down: down) else {
             return
         }
-        event.setIntegerValueField(.eventSourceUserData, value: CursorOutput.syntheticTag)
+        SyntheticEvents.stamp(event)
         // Replay the letter as it was typed. Left to the source, the event takes whatever
         // modifiers are down *now*, so rolling "a" into Shift+B produced "A".
         event.flags = withheldFlags

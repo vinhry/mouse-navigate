@@ -450,7 +450,7 @@ final class MouseNavigator {
         }
 
         // Our own synthetic events must never re-enter the state machine.
-        if event.getIntegerValueField(.eventSourceUserData) == CursorOutput.syntheticTag {
+        if SyntheticEvents.isSynthetic(event) {
             return Unmanaged.passUnretained(event)
         }
 

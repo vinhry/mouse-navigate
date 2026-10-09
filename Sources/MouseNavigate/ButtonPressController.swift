@@ -82,18 +82,12 @@ final class ButtonPressController {
         let point = CGPoint(x: location.x, y: location.y)
         for clickNumber in 1...max(count, 1) {
             for type in [CGEventType.otherMouseDown, .otherMouseUp] {
-                guard let event = CGEvent(
-                    mouseEventSource: CGEventSource(stateID: .hidSystemState),
-                    mouseType: type,
-                    mouseCursorPosition: point,
-                    mouseButton: .center
+                guard let event = SyntheticEvents.mouse(
+                    type, at: point, button: .center, buttonNumber: button, clickState: clickNumber
                 ) else {
                     return
                 }
-                event.setIntegerValueField(.mouseEventButtonNumber, value: Int64(button))
-                event.setIntegerValueField(.mouseEventClickState, value: Int64(clickNumber))
-                event.setIntegerValueField(.eventSourceUserData, value: CursorOutput.syntheticTag)
-                event.post(tap: .cghidEventTap)
+                SyntheticEvents.post(event)
             }
         }
     }

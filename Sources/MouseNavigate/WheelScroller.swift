@@ -91,20 +91,13 @@ final class WheelScroller {
         }
     }
 
-    /// Pixel units make the event continuous, as a trackpad's are, which apps scroll by the
-    /// exact amount rather than by lines.
     private func postPixels(vertical: Int, horizontal: Int) {
-        guard let event = CGEvent(
-            scrollWheelEvent2Source: CGEventSource(stateID: .hidSystemState),
-            units: .pixel,
-            wheelCount: 2,
-            wheel1: Int32(clamping: vertical),
-            wheel2: Int32(clamping: horizontal),
-            wheel3: 0
+        guard let event = SyntheticEvents.scroll(
+            verticalPixels: Int32(clamping: vertical),
+            horizontalPixels: Int32(clamping: horizontal)
         ) else {
             return
         }
-        event.setIntegerValueField(.eventSourceUserData, value: CursorOutput.syntheticTag)
-        event.post(tap: .cghidEventTap)
+        SyntheticEvents.post(event)
     }
 }
