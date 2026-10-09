@@ -52,7 +52,7 @@ final class PreferencesWindowController: NSObject {
 
     /// Marks the one item in a picker that shows its current custom binding.
     private static let customItemTag = 1
-    private var window: NSWindow?
+    private(set) var window: NSWindow?
 
     private let detector: DeviceDetector
     private let engine: KeyboardCursorEngine
@@ -329,7 +329,7 @@ final class PreferencesWindowController: NSObject {
         return makeSection(title: "Scroll Wheel", content: content)
     }
 
-    private func refreshScrollUI() {
+    func refreshScrollUI() {
         let settings = Preferences.shared.scrollSettings
         reverseScrollCheckbox?.state = settings.isReversed ? .on : .off
         scrollSpeedSlider?.doubleValue = settings.speed
@@ -622,7 +622,7 @@ final class PreferencesWindowController: NSObject {
         return stack
     }
 
-    private func refreshScopeUI() {
+    func refreshScopeUI() {
         let apps = Preferences.shared.overriddenApps
         if let selectedApp, !apps.contains(where: { $0.bundleID == selectedApp }) {
             self.selectedApp = nil
@@ -699,7 +699,7 @@ final class PreferencesWindowController: NSObject {
         refreshScopeUI()
     }
 
-    private func makeSection(title: String, content: NSView) -> NSStackView {
+    func makeSection(title: String, content: NSView) -> NSStackView {
         let header = NSTextField(labelWithString: title)
         header.font = .systemFont(ofSize: 12, weight: .semibold)
         header.textColor = .secondaryLabelColor
@@ -1114,7 +1114,7 @@ final class PreferencesWindowController: NSObject {
         return scroll
     }
 
-    private func refreshTouchUI() {
+    func refreshTouchUI() {
         let preferences = Preferences.shared
         touchEnableCheckbox?.state = preferences.isTouchEnabled ? .on : .off
         leftHandedCheckbox?.state = preferences.isLeftHanded ? .on : .off
@@ -1247,7 +1247,7 @@ final class PreferencesWindowController: NSObject {
         legal.font = .systemFont(ofSize: 11)
         legal.textColor = .secondaryLabelColor
 
-        let stack = NSStackView(views: [iconView, name, version, tagline, developer, links, legal, makeUpdatesSection()])
+        let stack = NSStackView(views: [iconView, name, version, tagline, developer, links, legal, makeUpdatesSection(), makeTransferSection()])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 6
@@ -1299,7 +1299,7 @@ final class PreferencesWindowController: NSObject {
         return section
     }
 
-    private func refreshUpdatesUI() {
+    func refreshUpdatesUI() {
         automaticUpdatesCheckbox?.state = Preferences.shared.automaticUpdates == true ? .on : .off
 
         let text: String
@@ -1372,7 +1372,7 @@ final class PreferencesWindowController: NSObject {
         }
     }
 
-    private func refreshDeviceUI() {
+    func refreshDeviceUI() {
         deviceLabel?.stringValue = detector.statusDescription
         refreshScrollUI()
 
@@ -1433,7 +1433,10 @@ final class PreferencesWindowController: NSObject {
 
     @objc private func restoreDefaultsTapped() {
         Preferences.shared.restoreCursorDefaults()
+        refreshCursorUI()
+    }
 
+    func refreshCursorUI() {
         enableCheckbox?.state = Preferences.shared.isCursorModeEnabled ? .on : .off
         for (binding, recorder) in recorders {
             recorder.update(keyCode: Preferences.shared.keyCode(for: binding))
@@ -1442,6 +1445,17 @@ final class PreferencesWindowController: NSObject {
             slider.doubleValue = Preferences.shared.value(for: setting)
             updateValueLabel(for: setting)
         }
+    }
+
+    /// Every control on every tab, after the settings changed under them all at once.
+    func refreshAllUI() {
+        refreshDeviceUI()
+        refreshScopeUI()
+        refreshBindings()
+        refreshScrollUI()
+        refreshCursorUI()
+        refreshTouchUI()
+        refreshUpdatesUI()
     }
 }
 

@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Export Settings…** and **Import Settings…** on the About tab. Every setting goes to a
+  JSON file that can be read and edited by hand, and comes back from one after the whole
+  file has been checked.
+
 ### Fixed
 - When the helper that reopens MouseNavigate after an update could not start, the
   explanation was never shown: the app quit before the alert reached the screen.

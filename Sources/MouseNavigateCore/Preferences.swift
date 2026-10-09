@@ -334,6 +334,24 @@ public final class Preferences {
         notifyChange(.touch)
     }
 
+    // MARK: - Export and import
+
+    /// Every setting as a JSON file, for keeping or carrying to another Mac.
+    public func exportSettings(appVersion: String?) throws -> Data {
+        try SettingsSnapshot.capture(from: store, configVersion: currentConfigVersion, appVersion: appVersion).jsonData()
+    }
+
+    /// Replaces every setting with the file's, after checking the whole file. Nothing is
+    /// written if any of it is refused.
+    @discardableResult
+    public func importSettings(_ data: Data) throws -> SettingsSnapshot.ReadResult {
+        let result = try SettingsSnapshot.read(data, currentConfigVersion: currentConfigVersion)
+        result.snapshot.apply(to: store)
+        migrateIfNeeded()
+        notifyChange(.all)
+        return result
+    }
+
     private func notifyChange(_ area: SettingsArea) {
         cachedAppOverrides = nil
         NotificationCenter.default.post(

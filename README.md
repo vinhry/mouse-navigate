@@ -518,6 +518,13 @@ dist/MouseNavigate.app
 **Preferences → About** shows the version, links to this repository and the issue tracker,
 and the license. MouseNavigate is developed by Vinhry and released under the MIT License.
 
+**Export Settings…** there writes every setting to a JSON file you can read, edit and keep;
+**Import Settings…** replaces them all with a file's, after checking it. Bindings appear in
+the file exactly as they are stored, a built-in action by name, so a file is easy to edit
+by hand. A file with a setting of the wrong type is refused whole, and one from a newer
+MouseNavigate is refused until this copy is updated; settings a file has that this version
+does not know are left out and listed.
+
 ## Run from Source
 
 ```bash
