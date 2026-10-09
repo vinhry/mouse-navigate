@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.4.3] - 2026-10-08
 
 ### Fixed
 - Trackpad taps beside a resting finger behave as they did in 0.4.1. Three allowances made

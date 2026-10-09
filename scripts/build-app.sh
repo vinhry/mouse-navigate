@@ -9,7 +9,7 @@ BUILD_CONFIG="${1:-release}"
 # The one place the version lives. A release tag must be v$VERSION: the release workflow
 # refuses any other, and the app's updater refuses a download whose version differs from
 # its tag.
-VERSION="0.4.2"
+VERSION="0.4.3"
 # Must only ever grow. The count of commits on main does, and needs full history, which is
 # why the release workflow checks out with fetch-depth 0.
 BUILD_NUMBER="${BUILD_NUMBER:-$(git -C "$ROOT_DIR" rev-list --count HEAD 2>/dev/null || echo 0)}"
