@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- The updater opens a release's page only when it is a web address. GitHub's answer names
+  the page as well as the download, and only the download was held to `https`; the page was
+  handed to whatever opens its scheme.
+- A copy that cannot update itself, such as an ad hoc or Apple Development build, now says
+  so in the tooltip of its greyed-out "Check for updates automatically" box. The
+  explanation was written and then overwritten before it could show.
+
 ## [0.4.3] - 2026-10-08
 
 ### Fixed

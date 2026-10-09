@@ -39,11 +39,12 @@ final class UpdateCandidateTests: XCTestCase {
         prerelease: Bool = false,
         assetName: String = "MouseNavigate.zip",
         size: Int = 834_811,
-        url: String = "https://github.com/vinhry/mouse-navigate/releases/download/v0.4.0/MouseNavigate.zip"
+        url: String = "https://github.com/vinhry/mouse-navigate/releases/download/v0.4.0/MouseNavigate.zip",
+        page: String? = nil
     ) -> GitHubRelease {
         GitHubRelease(
             tagName: tag,
-            htmlURL: URL(string: "https://github.com/vinhry/mouse-navigate/releases/tag/\(tag)")!,
+            htmlURL: URL(string: page ?? "https://github.com/vinhry/mouse-navigate/releases/tag/\(tag)")!,
             body: "Notes",
             draft: draft,
             prerelease: prerelease,
@@ -86,6 +87,12 @@ final class UpdateCandidateTests: XCTestCase {
         XCTAssertNil(UpdateCandidate.select(from: release(size: 0), current: current))
         XCTAssertNil(UpdateCandidate.select(from: release(size: UpdateCandidate.maximumSize + 1), current: current))
         XCTAssertNil(UpdateCandidate.select(from: release(url: "http://example.com/MouseNavigate.zip"), current: current))
+    }
+
+    func testReleasePageMustBeAWebAddress() {
+        XCTAssertNil(UpdateCandidate.select(from: release(page: "file:///Applications/Utilities/Terminal.app"), current: current))
+        XCTAssertNil(UpdateCandidate.select(from: release(page: "x-apple.systempreferences:com.apple.preference.security"), current: current))
+        XCTAssertNotNil(UpdateCandidate.select(from: release(page: "https://github.com/vinhry/mouse-navigate/releases"), current: current))
     }
 
     func testUnreadableTagIsSkipped() {

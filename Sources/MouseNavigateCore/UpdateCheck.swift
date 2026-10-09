@@ -119,7 +119,10 @@ public struct UpdateCandidate: Equatable {
               current < version,
               let asset = release.assets.first(where: { $0.name == assetName }),
               asset.size > 0, asset.size <= maximumSize,
-              asset.browserDownloadURL.scheme == "https"
+              asset.browserDownloadURL.scheme == "https",
+              // The release page is handed to whatever opens its scheme, so only a web
+              // address will do.
+              release.htmlURL.scheme == "https"
         else {
             return nil
         }

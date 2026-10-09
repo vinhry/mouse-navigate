@@ -1272,10 +1272,9 @@ final class PreferencesWindowController: NSObject {
         // A copy that could never install an update has nothing to check for.
         automatic.isEnabled = updater.canSelfUpdate
         automatic.toolTip = updater.canSelfUpdate
-            ? nil
+            ? "Once a day, from GitHub. Updates are downloaded and checked in the "
+                + "background, and installed only when you choose to."
             : "Only a release signed with a Developer ID, installed from GitHub, updates itself."
-        automatic.toolTip = "Once a day, from GitHub. Updates are downloaded and checked in the "
-            + "background, and installed only when you choose to."
         automaticUpdatesCheckbox = automatic
 
         let checkNow = NSButton(title: "Check Now", target: self, action: #selector(checkForUpdatesTapped))
