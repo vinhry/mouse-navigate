@@ -22,4 +22,8 @@ enum Log {
     static let actions = Logger(subsystem: subsystem, category: "actions")
     /// Checking for, downloading, verifying and installing updates.
     static let update = Logger(subsystem: subsystem, category: "update")
+    /// The event tap being switched off by macOS and back on again. A timeout means this
+    /// process took too long to answer an event, which is the usual way buttons and
+    /// keys "stop working" for a moment.
+    static let tap = Logger(subsystem: subsystem, category: "tap")
 }

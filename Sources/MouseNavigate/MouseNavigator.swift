@@ -434,6 +434,10 @@ final class MouseNavigator {
 
     private func handle(type: CGEventType, event: CGEvent, proxy: CGEventTapProxy) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            let cause = type == .tapDisabledByTimeout ? "a timeout" : "user input"
+            Log.tap.notice(
+                "Event tap disabled by \(cause, privacy: .public); re-enabling and letting go of everything held."
+            )
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
