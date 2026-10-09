@@ -8,13 +8,19 @@ final class WheelScroller {
     private var smoother = ScrollSmoother()
     private var timer: DispatchSourceTimer?
     private var lastFrame: TimeInterval = 0
+    /// Modifiers a wheel option has used up, to keep off the frames posted while smoothing:
+    /// the source would otherwise stamp the held ⇧ back on, and AppKit swap the axes again.
+    private var consumedFlags: CGEventFlags = []
 
     private static let frameInterval: TimeInterval = 1.0 / 120
 
     /// Returns true when the event is swallowed, which it is only while smoothing: the
     /// movement is then sent again, spread over the frames that follow.
     func handle(_ event: CGEvent, settings: ScrollSettings) -> Bool {
-        let delta = ScrollTransform.apply(Self.read(event), settings: settings)
+        let modified = ScrollTransform.apply(Self.read(event), settings: settings, modifiers: Shortcut.Modifiers(event.flags))
+        let delta = modified.delta
+        consumedFlags = CGEventFlags(modified.consumedModifiers)
+        event.flags.remove(consumedFlags)
 
         guard settings.isSmooth else {
             Self.write(delta, to: event)
@@ -98,6 +104,7 @@ final class WheelScroller {
         ) else {
             return
         }
+        event.flags.remove(consumedFlags)
         SyntheticEvents.post(event)
     }
 }

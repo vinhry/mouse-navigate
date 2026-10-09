@@ -197,13 +197,19 @@ public final class Preferences {
             ScrollSettings(
                 isReversed: store.bool(forKey: SettingsKey.scrollReversed),
                 speed: store.object(forKey: SettingsKey.scrollSpeed) as? Double ?? 1,
-                isSmooth: store.bool(forKey: SettingsKey.scrollSmooth)
+                isSmooth: store.bool(forKey: SettingsKey.scrollSmooth),
+                shiftSwapsAxes: store.bool(forKey: SettingsKey.scrollShiftSwapsAxes),
+                optionIsPrecise: store.bool(forKey: SettingsKey.scrollOptionPrecise),
+                commandIsFast: store.bool(forKey: SettingsKey.scrollCommandFast)
             )
         }
         set {
             store.set(newValue.isReversed, forKey: SettingsKey.scrollReversed)
             store.set(newValue.speed, forKey: SettingsKey.scrollSpeed)
             store.set(newValue.isSmooth, forKey: SettingsKey.scrollSmooth)
+            store.set(newValue.shiftSwapsAxes, forKey: SettingsKey.scrollShiftSwapsAxes)
+            store.set(newValue.optionIsPrecise, forKey: SettingsKey.scrollOptionPrecise)
+            store.set(newValue.commandIsFast, forKey: SettingsKey.scrollCommandFast)
             notifyChange(.scroll)
         }
     }

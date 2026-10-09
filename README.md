@@ -170,7 +170,15 @@ natural scrolling while the wheel goes the other way.
   jumping. It covers the same distance a notch does in standard Mac apps; browsers pick their
   own distance per notch, so use **Speed** if it feels slower there.
 
-With all three at their defaults, and touch gestures off, wheel events never pass through
+- **⇧ scrolls sideways** turns the wheel horizontal while Shift is held.
+- **⌥ scrolls precisely** moves a quarter as far per notch while Option is held.
+- **⌘ scrolls fast** moves three times as far while Command is held. Option wins when
+  both are held.
+
+A modifier a wheel option acts on is used up: it is taken off the event, so an app that
+scrolls sideways on Shift, or zooms on Command, by itself does not do that as well.
+
+With everything at its defaults, and touch gestures off, wheel events never pass through
 MouseNavigate. Logi Options+ smooth scrolling makes a Logitech wheel scroll continuously, like a trackpad, so
 turn that off to use these.
 

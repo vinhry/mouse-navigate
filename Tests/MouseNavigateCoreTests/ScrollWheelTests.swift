@@ -40,6 +40,63 @@ final class ScrollWheelTests: XCTestCase {
         XCTAssertEqual(result.points.vertical, -5)
     }
 
+    // MARK: - Modifiers
+
+    private let twoAxes = ScrollDelta(lines: (2, -1), fixedLines: (2, -1), points: (20, -10))
+
+    func testShiftSwapsEveryFormWhenAsked() {
+        let settings = ScrollSettings(isReversed: false, speed: 1, isSmooth: false, shiftSwapsAxes: true)
+        let result = ScrollTransform.apply(twoAxes, settings: settings, modifiers: [.shift])
+        XCTAssertEqual(result.delta, ScrollDelta(lines: (-1, 2), fixedLines: (-1, 2), points: (-10, 20)))
+        XCTAssertEqual(result.consumedModifiers, [.shift])
+    }
+
+    func testOptionScrollsPrecisely() {
+        let settings = ScrollSettings(isReversed: false, speed: 2, isSmooth: false, optionIsPrecise: true)
+        let result = ScrollTransform.apply(twoAxes, settings: settings, modifiers: [.option])
+        XCTAssertEqual(result.delta, ScrollDelta(lines: (1, -1), fixedLines: (1, -0.5), points: (10, -5)))
+        XCTAssertEqual(result.consumedModifiers, [.option])
+    }
+
+    func testCommandScrollsFast() {
+        let settings = ScrollSettings(isReversed: true, speed: 1, isSmooth: false, commandIsFast: true)
+        let result = ScrollTransform.apply(notch, settings: settings, modifiers: [.command])
+        XCTAssertEqual(result.delta, ScrollDelta(lines: (-3, 0), fixedLines: (-3, 0), points: (-30, 0)))
+        XCTAssertEqual(result.consumedModifiers, [.command])
+    }
+
+    func testOptionWinsOverCommand() {
+        let settings = ScrollSettings(isReversed: false, speed: 1, isSmooth: false, optionIsPrecise: true, commandIsFast: true)
+        let result = ScrollTransform.apply(notch, settings: settings, modifiers: [.option, .command])
+        XCTAssertEqual(result.delta.points.vertical, 2.5)
+        XCTAssertEqual(result.consumedModifiers, [.option], "⌘ stays on the event for the app")
+    }
+
+    func testSwapComesAfterScaling() {
+        let settings = ScrollSettings(isReversed: false, speed: 1, isSmooth: false, shiftSwapsAxes: true, commandIsFast: true)
+        let result = ScrollTransform.apply(notch, settings: settings, modifiers: [.shift, .command])
+        XCTAssertEqual(result.delta, ScrollDelta(lines: (0, 3), fixedLines: (0, 3), points: (0, 30)))
+        XCTAssertEqual(result.consumedModifiers, [.shift, .command])
+    }
+
+    func testModifiersAreIgnoredWhileTheirOptionsAreOff() {
+        let result = ScrollTransform.apply(twoAxes, settings: .standard, modifiers: [.shift, .option, .command])
+        XCTAssertEqual(result.delta, twoAxes)
+        XCTAssertTrue(result.consumedModifiers.isEmpty)
+    }
+
+    func testNoModifiersMeansNoChange() {
+        let settings = ScrollSettings(isReversed: false, speed: 1, isSmooth: false, shiftSwapsAxes: true, optionIsPrecise: true, commandIsFast: true)
+        XCTAssertEqual(ScrollTransform.apply(twoAxes, settings: settings, modifiers: []).delta, twoAxes)
+        XCTAssertEqual(ScrollTransform.apply(twoAxes, settings: settings), twoAxes)
+    }
+
+    func testAWheelOptionAloneMakesTheSettingsActive() {
+        XCTAssertTrue(ScrollSettings(isReversed: false, speed: 1, isSmooth: false, shiftSwapsAxes: true).isActive)
+        XCTAssertTrue(ScrollSettings(isReversed: false, speed: 1, isSmooth: false, optionIsPrecise: true).isActive)
+        XCTAssertTrue(ScrollSettings(isReversed: false, speed: 1, isSmooth: false, commandIsFast: true).isActive)
+    }
+
     // MARK: - Smoother
 
     /// Runs the smoother at 120 Hz until it settles, returning each frame's vertical step.

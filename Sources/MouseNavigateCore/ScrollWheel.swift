@@ -6,14 +6,32 @@ public struct ScrollSettings: Equatable {
     public var isReversed: Bool
     public var speed: Double
     public var isSmooth: Bool
+    /// ⇧ held while scrolling turns the wheel sideways.
+    public var shiftSwapsAxes: Bool
+    /// ⌥ held while scrolling slows the wheel to a quarter.
+    public var optionIsPrecise: Bool
+    /// ⌘ held while scrolling triples the wheel.
+    public var commandIsFast: Bool
 
     public static let speedRange: ClosedRange<Double> = 0.5...4
+    public static let preciseFactor = 0.25
+    public static let fastFactor = 3.0
     public static let standard = ScrollSettings(isReversed: false, speed: 1, isSmooth: false)
 
-    public init(isReversed: Bool, speed: Double, isSmooth: Bool) {
+    public init(
+        isReversed: Bool,
+        speed: Double,
+        isSmooth: Bool,
+        shiftSwapsAxes: Bool = false,
+        optionIsPrecise: Bool = false,
+        commandIsFast: Bool = false
+    ) {
         self.isReversed = isReversed
         self.speed = ScrollSettings.clampSpeed(speed)
         self.isSmooth = isSmooth
+        self.shiftSwapsAxes = shiftSwapsAxes
+        self.optionIsPrecise = optionIsPrecise
+        self.commandIsFast = commandIsFast
     }
 
     /// Whether wheel events need to pass through the app at all.
@@ -48,16 +66,54 @@ public struct ScrollDelta: Equatable {
     }
 }
 
+/// A wheel event after the settings and the held modifiers have had their say.
+public struct ModifiedScroll: Equatable {
+    public var delta: ScrollDelta
+    /// Modifiers a wheel option acted on. They are taken off the event: AppKit scrolls
+    /// sideways on its own for ⇧, and browsers zoom on ⌘, so a modifier left on would be
+    /// applied twice.
+    public var consumedModifiers: Shortcut.Modifiers
+
+    public init(delta: ScrollDelta, consumedModifiers: Shortcut.Modifiers) {
+        self.delta = delta
+        self.consumedModifiers = consumedModifiers
+    }
+}
+
 public enum ScrollTransform {
     /// Reverses and scales every form of the delta alike, so an app gets the same answer
     /// whichever one it reads.
     public static func apply(_ delta: ScrollDelta, settings: ScrollSettings) -> ScrollDelta {
-        let factor = settings.speed * (settings.isReversed ? -1 : 1)
-        return ScrollDelta(
+        apply(delta, settings: settings, modifiers: []).delta
+    }
+
+    /// The same, with the modifiers held: ⌥ for precision wins over ⌘ for speed, as the
+    /// keyboard cursor's tiers do, and ⇧ swaps the axes after the scaling.
+    public static func apply(_ delta: ScrollDelta, settings: ScrollSettings, modifiers: Shortcut.Modifiers) -> ModifiedScroll {
+        var factor = settings.speed * (settings.isReversed ? -1 : 1)
+        var consumed: Shortcut.Modifiers = []
+        if settings.optionIsPrecise, modifiers.contains(.option) {
+            factor *= ScrollSettings.preciseFactor
+            consumed.insert(.option)
+        } else if settings.commandIsFast, modifiers.contains(.command) {
+            factor *= ScrollSettings.fastFactor
+            consumed.insert(.command)
+        }
+
+        var result = ScrollDelta(
             lines: (scaleLines(delta.lines.vertical, by: factor), scaleLines(delta.lines.horizontal, by: factor)),
             fixedLines: (delta.fixedLines.vertical * factor, delta.fixedLines.horizontal * factor),
             points: (delta.points.vertical * factor, delta.points.horizontal * factor)
         )
+        if settings.shiftSwapsAxes, modifiers.contains(.shift) {
+            result = ScrollDelta(
+                lines: (result.lines.horizontal, result.lines.vertical),
+                fixedLines: (result.fixedLines.horizontal, result.fixedLines.vertical),
+                points: (result.points.horizontal, result.points.vertical)
+            )
+            consumed.insert(.shift)
+        }
+        return ModifiedScroll(delta: result, consumedModifiers: consumed)
     }
 
     /// Whole lines, rounded, but never to zero: slowing the wheel down must not make a

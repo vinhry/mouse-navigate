@@ -80,6 +80,9 @@ final class PreferencesWindowController: NSObject {
     private var scrollSpeedSlider: NSSlider?
     private var scrollSpeedLabel: NSTextField?
     private var smoothScrollCheckbox: NSButton?
+    private var shiftSwapsAxesCheckbox: NSButton?
+    private var optionPreciseCheckbox: NSButton?
+    private var commandFastCheckbox: NSButton?
 
     private var recorders: [CursorBinding: KeyRecorderButton] = [:]
     private var sliders: [CursorSetting: NSSlider] = [:]
@@ -336,7 +339,25 @@ final class PreferencesWindowController: NSObject {
         smooth.toolTip = "Spreads each notch of the wheel over a few frames instead of jumping."
         smoothScrollCheckbox = smooth
 
-        let content = NSStackView(views: [reverse, speedRow, smooth])
+        let shift = NSButton(checkboxWithTitle: "⇧ scrolls sideways", target: self, action: #selector(scrollSettingChanged(_:)))
+        shift.toolTip = "Hold Shift and the wheel scrolls horizontally. Shift is used up, so apps "
+            + "that scroll sideways on Shift themselves do not do it twice."
+        shiftSwapsAxesCheckbox = shift
+
+        let option = NSButton(checkboxWithTitle: "⌥ scrolls precisely", target: self, action: #selector(scrollSettingChanged(_:)))
+        option.toolTip = "Hold Option and each notch moves a quarter as far."
+        optionPreciseCheckbox = option
+
+        let command = NSButton(checkboxWithTitle: "⌘ scrolls fast", target: self, action: #selector(scrollSettingChanged(_:)))
+        command.toolTip = "Hold Command and each notch moves three times as far. Command is used "
+            + "up, so a browser does not zoom as well."
+        commandFastCheckbox = command
+
+        let modifiers = NSStackView(views: [shift, option, command])
+        modifiers.orientation = .horizontal
+        modifiers.spacing = 14
+
+        let content = NSStackView(views: [reverse, speedRow, smooth, modifiers])
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = 8
@@ -349,13 +370,19 @@ final class PreferencesWindowController: NSObject {
         scrollSpeedSlider?.doubleValue = settings.speed
         scrollSpeedLabel?.stringValue = String(format: "%.1f×", settings.speed)
         smoothScrollCheckbox?.state = settings.isSmooth ? .on : .off
+        shiftSwapsAxesCheckbox?.state = settings.shiftSwapsAxes ? .on : .off
+        optionPreciseCheckbox?.state = settings.optionIsPrecise ? .on : .off
+        commandFastCheckbox?.state = settings.commandIsFast ? .on : .off
     }
 
     @objc private func scrollSettingChanged(_ sender: NSControl) {
         Preferences.shared.scrollSettings = ScrollSettings(
             isReversed: reverseScrollCheckbox?.state == .on,
             speed: scrollSpeedSlider?.doubleValue ?? 1,
-            isSmooth: smoothScrollCheckbox?.state == .on
+            isSmooth: smoothScrollCheckbox?.state == .on,
+            shiftSwapsAxes: shiftSwapsAxesCheckbox?.state == .on,
+            optionIsPrecise: optionPreciseCheckbox?.state == .on,
+            commandIsFast: commandFastCheckbox?.state == .on
         )
         refreshScrollUI()
     }

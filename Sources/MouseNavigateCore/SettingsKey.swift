@@ -21,6 +21,9 @@ public enum SettingsKey {
     public static let scrollReversed = "scroll.reversed"
     public static let scrollSpeed = "scroll.speed"
     public static let scrollSmooth = "scroll.smooth"
+    public static let scrollShiftSwapsAxes = "scroll.shiftSwapsAxes"
+    public static let scrollOptionPrecise = "scroll.optionPrecise"
+    public static let scrollCommandFast = "scroll.commandFast"
     public static let cursorModeEnabled = "cursorModeEnabled"
     public static let touchEnabled = "touchEnabled"
     public static let touchLeftHanded = "touchLeftHanded"
@@ -37,6 +40,9 @@ public enum SettingsKey {
         scrollReversed: .bool,
         scrollSpeed: .double,
         scrollSmooth: .bool,
+        scrollShiftSwapsAxes: .bool,
+        scrollOptionPrecise: .bool,
+        scrollCommandFast: .bool,
         cursorModeEnabled: .bool,
         touchEnabled: .bool,
         touchLeftHanded: .bool,

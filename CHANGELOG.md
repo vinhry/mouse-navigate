@@ -11,6 +11,9 @@ All notable changes to this project will be documented in this file.
 - **Modifier keys with mouse buttons.** `⌃`, `⌥`, `⇧` and `⌘` held with a side button make
   a combination with bindings of its own, chosen under **With:** on the Mouse tab. A
   combination that has not been bound does what the button does on its own.
+- **Modifier keys with the scroll wheel**, each its own option under Scroll Wheel: `⇧`
+  scrolls sideways, `⌥` scrolls precisely, `⌘` scrolls fast. A modifier an option acts on
+  is taken off the event, so an app does not act on it a second time.
 
 ### Fixed
 - When the helper that reopens MouseNavigate after an update could not start, the
