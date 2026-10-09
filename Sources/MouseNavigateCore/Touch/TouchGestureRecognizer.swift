@@ -152,8 +152,9 @@ private func restingFingers(
 ) -> [TrackedContact]? {
     let landed = Set(snapshot.landed.map(\.id))
     let others = snapshot.active.filter { !landed.contains($0.id) }
+    let tolerance = surface == .magicMouse ? tuning.restTolerance : tuning.fixTolerance
     guard (1...2).contains(others.count),
-          others.allSatisfy({ $0.isFixed(at: snapshot.time, tuning: tuning) })
+          others.allSatisfy({ $0.isFixed(at: snapshot.time, tuning: tuning, tolerance: tolerance) })
     else {
         return nil
     }
@@ -217,15 +218,16 @@ struct FixedTapDetector: GestureDetector {
             burst[contact.id] = contact
         }
 
-        // A resting finger that lifts or wanders cancels the burst. One that lifted in this
-        // very frame, after the taps did, was still resting while they were made: with a
-        // lift grace the taps are judged late, and the rest has to be judged as of then.
+        // A resting finger that lifts or wanders cancels the burst. One that lifted after
+        // the taps did, yet is only reported now, was still resting while they were made:
+        // a Magic Mouse lift grace judges taps late, and the rest is judged as of then. On
+        // a trackpad there is no grace, so fingers that all lift together stay nothing.
         let lastTapUp = burst.values.compactMap(\.upTime).max()
         let currentAnchors = anchors.compactMap { anchor -> TrackedContact? in
             if let active = snapshot.active(anchor.id) { return active }
             guard let lastTapUp,
                   let gone = snapshot.lifted.first(where: { $0.id == anchor.id }),
-                  let upTime = gone.upTime, upTime >= lastTapUp
+                  let upTime = gone.upTime, upTime > lastTapUp
             else {
                 return nil
             }
@@ -248,8 +250,9 @@ struct FixedTapDetector: GestureDetector {
             return []
         }
         // A light tap on a Magic Mouse can bounce, touching two or three times in a row
-        // faster than any hand could tap; the first touch is the tap.
-        if let lastTapTime, snapshot.time - lastTapTime < tuning.tapRefractory {
+        // faster than any hand could tap; the first touch is the tap. A trackpad does not
+        // bounce, and its double-tap can be quicker than the refractory.
+        if surface == .magicMouse, let lastTapTime, snapshot.time - lastTapTime < tuning.tapRefractory {
             return []
         }
         lastTapTime = snapshot.time
@@ -363,7 +366,9 @@ struct FixedSlideDetector: GestureDetector {
             // a mouse is held. So a session also starts when one resting finger sets off
             // while the one or two beside it stay put.
             let movers = snapshot.active.filter { $0.maxDisplacement > tuning.fixTolerance }
-            let resting = snapshot.active.filter { $0.isFixed(at: snapshot.time, tuning: tuning) }
+            let resting = snapshot.active.filter {
+                $0.isFixed(at: snapshot.time, tuning: tuning, tolerance: tuning.restTolerance)
+            }
             if movers.count == 1, (1...2).contains(resting.count),
                movers.count + resting.count == snapshot.active.count {
                 anchors = resting

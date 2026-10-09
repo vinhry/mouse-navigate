@@ -708,6 +708,16 @@ final class MagicMouseGestureTests: XCTestCase {
         XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexFarTap])
     }
 
+    func testMovedRestingFingerStillAnchorsOnTheMouse() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(2, 0.88, 0.2)
+        mouse.wait(0.2)
+        mouse.slide([2], by: Vector2(x: -0.04, y: 0), over: 0.05)
+        mouse.tap(1, 0.45, 0.22)
+        mouse.up(2)
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexNearTap])
+    }
+
     func testTapsSurviveTheRestingFingerRocking() {
         let mouse = TouchDriver(.magicMouse)
         mouse.down(2, 0.88, 0.2)
@@ -793,6 +803,49 @@ final class TouchGestureTests: XCTestCase {
 }
 
 final class TrackpadFalsePositiveTests: XCTestCase {
+    func testStaggeredTwoFingerTapLiftingTogetherIsNothing() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.4, 0.4)
+        pad.wait(0.15)
+        pad.down(2, 0.55, 0.4)
+        pad.wait(0.06)
+        pad.up(1, 2)
+        XCTAssertEqual(pad.events, [])
+    }
+
+    func testFingerThatHasMovedIsNotAnAnchor() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.4, 0.4)
+        pad.wait(0.1)
+        pad.slide([1], by: Vector2(x: 0, y: 0.05), over: 0.05)
+        pad.tap(2, 0.55, 0.42)
+        pad.up(1)
+        XCTAssertEqual(pad.events, [])
+    }
+
+    func testQuickAlternatingTapsBothFire() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.4, 0.4)
+        pad.wait(0.2)
+        pad.tap(2, 0.55, 0.4)
+        pad.wait(0.02)
+        pad.tap(3, 0.25, 0.4)
+        pad.up(1)
+        XCTAssertEqual(pad.gestures, [.trackpadOneFixRightTap, .trackpadOneFixLeftTap])
+    }
+
+    func testFastIndexDoubleTapFires() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(2, 0.5, 0.4)
+        pad.down(3, 0.6, 0.4)
+        pad.wait(0.2)
+        pad.tap(1, 0.35, 0.42)
+        pad.wait(0.03)
+        pad.tap(1, 0.35, 0.42)
+        pad.up(2, 3)
+        XCTAssertEqual(pad.gestures, [.trackpadTwoFixIndexDoubleTap])
+    }
+
     func testRestingThumbDoesNotTurnScrollIntoGesture() {
         let pad = TouchDriver(.trackpad)
         pad.down(9, 0.3, 0.95)

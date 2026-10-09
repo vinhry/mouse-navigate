@@ -313,7 +313,9 @@ finger is a click, not a tap.
 | One-Fix One-Slide Down | Rest the index, slide the middle down, then move with the index; tap the middle to switch to resizing; lift to finish | Move / Resize Window |
 
 A finger resting in the bottom edge of the trackpad is taken for a thumb and never starts a
-gesture, so resting your thumb while tapping or scrolling stays safe.
+gesture, so resting your thumb while tapping or scrolling stays safe. With **Tap to click**
+on, macOS also makes a click out of a tap beside a resting finger; once that tap has been a
+gesture, MouseNavigate holds the click back.
 
 ### Magic Mouse
 

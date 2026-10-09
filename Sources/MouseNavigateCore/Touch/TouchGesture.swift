@@ -43,6 +43,19 @@ public enum TouchGesture: String, CaseIterable {
         self == .trackpadOneFixOneSlideDown || self == .mouseCornerHold
     }
 
+    /// Gestures made by tapping. On a trackpad with Tap to click on, macOS makes a click
+    /// out of the same tap, which has to be held back once the tap has been a gesture.
+    public var isTap: Bool {
+        switch self {
+        case .trackpadOneFixLeftTap, .trackpadOneFixRightTap, .trackpadThreeFingerTap,
+             .trackpadOneFixTwoTap, .trackpadTwoFixIndexDoubleTap,
+             .mouseMiddleFixIndexNearTap, .mouseMiddleFixIndexFarTap:
+            return true
+        default:
+            return false
+        }
+    }
+
     public var displayName: String {
         switch self {
         case .trackpadOneFixLeftTap: return "One-Fix Left-Tap"

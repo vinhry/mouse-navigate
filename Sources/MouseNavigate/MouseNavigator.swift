@@ -25,6 +25,14 @@ final class MouseNavigator {
     private var installedEventMask: CGEventMask = 0
     /// Set when a Magic Mouse click became a gesture, so its release is swallowed too.
     private var isSwallowingLeftMouseUp = false
+    /// Until when the next left click is Tap to click's rendering of a trackpad tap that was
+    /// a gesture, and when the last left click arrived, both in system uptime.
+    private var tapClickDeadline: TimeInterval = 0
+    private var lastLeftClickTime: TimeInterval = 0
+    /// How long after a tap gesture its click may still arrive, and how recently a click
+    /// must have come to be taken for the tap's own click that arrived first.
+    private static let tapClickWindow: TimeInterval = 0.3
+    private static let tapClickLead: TimeInterval = 0.15
     /// Set once a touch gesture has taken a scroll, until the next scroll begins.
     private var isSuppressingScrollSession = false
 
@@ -141,6 +149,9 @@ final class MouseNavigator {
             self?.touchMonitor.cancelStroke()
         }
         touchMonitor.isDebugLogging = isTouchDebugEnabled
+        touchMonitor.trackpadTapGestureHandler = { [weak self] in
+            self?.trackpadTapBecameGesture()
+        }
         touchMonitor.start()
 
         FrontmostApp.shared.onChange = { [weak self] _ in
@@ -395,6 +406,7 @@ final class MouseNavigator {
         strokeCapture.cancel()
         isSwallowingLeftMouseUp = false
         isSuppressingScrollSession = false
+        tapClickDeadline = 0
         buttons.reset()
         wheel.stop()
     }
@@ -520,10 +532,33 @@ final class MouseNavigator {
         return !(phase == .ended || phase == .cancelled)
     }
 
+    /// A trackpad tap has just become a gesture. With Tap to click on, macOS makes a click
+    /// out of the same tap, which usually lands after the gesture's action. Terminal and
+    /// Finder tabs are windows, so a click aimed at the old tab brings it straight back
+    /// after a One-Fix tap has switched away from it. The next click, if it comes soon, is
+    /// that one and is held back. A click that already came a moment ago was that one
+    /// instead, and nothing is armed, so a real click after the tap is never lost.
+    private func trackpadTapBecameGesture() {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastLeftClickTime > MouseNavigator.tapClickLead else { return }
+        tapClickDeadline = now + MouseNavigator.tapClickWindow
+    }
+
     /// A Magic Mouse click with the fingers in the middle-click pose runs that gesture's
-    /// action instead of clicking.
+    /// action instead of clicking. A click that Tap to click made out of a trackpad tap
+    /// which has just been a gesture is held back, release and all: the tap was spoken for.
     private func handleLeftMouseDown(_ event: CGEvent) -> Unmanaged<CGEvent>? {
-        guard Preferences.shared.isTouchEnabled, touchMonitor.isMagicMouseMiddleClickPose else {
+        guard Preferences.shared.isTouchEnabled else {
+            return Unmanaged.passUnretained(event)
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        lastLeftClickTime = now
+        if now < tapClickDeadline {
+            tapClickDeadline = 0
+            isSwallowingLeftMouseUp = true
+            return nil
+        }
+        guard touchMonitor.isMagicMouseMiddleClickPose else {
             return Unmanaged.passUnretained(event)
         }
         let binding = Preferences.shared.binding(for: .touch(.mouseMiddleClick), app: FrontmostApp.shared.bundleID)

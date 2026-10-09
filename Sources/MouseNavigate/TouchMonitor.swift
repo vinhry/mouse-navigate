@@ -30,6 +30,12 @@ final class TouchMonitor {
 
     var isAvailable: Bool { bridge.isAvailable }
 
+    /// Called on the main thread whenever a trackpad tap has become a gesture with an
+    /// action, so the event tap can hold back the click Tap to click makes from it.
+    var trackpadTapGestureHandler: (() -> Void)?
+    /// Uptime when the monitor started, so debug lines can carry a time.
+    private let debugStart = ProcessInfo.processInfo.systemUptime
+
     /// Connected surfaces, for the preferences window.
     var surfaces: [(surface: TouchSurface, name: String)] {
         bridge.devices.map { ($0.surface, $0.name) }
@@ -304,16 +310,20 @@ final class TouchMonitor {
                 .sorted { $0.position.x < $1.position.x }
                 .map { String(format: "(%.2f, %.2f%@ s%d z%.1f)", $0.position.x, $0.position.y, $0.isTouching ? "" : " hover", $0.state, $0.size) }
                 .joined(separator: " ")
-            print("[touch] \(surface.displayName): \(contacts.count) finger(s) \(described)")
+            print("[touch \(debugTime(now))] \(surface.displayName): \(contacts.count) finger(s) \(described)")
         }
 
         guard !events.isEmpty else { return }
         DispatchQueue.main.async { [weak self] in
-            self?.handle(events, aspectRatio: aspectRatio)
+            self?.handle(events, on: surface, aspectRatio: aspectRatio)
         }
     }
 
-    private func handle(_ events: [TouchEvent], aspectRatio: Double) {
+    private func debugTime(_ uptime: TimeInterval) -> String {
+        String(format: "%8.3f", uptime - debugStart)
+    }
+
+    private func handle(_ events: [TouchEvent], on surface: TouchSurface, aspectRatio: Double) {
         guard isRunning else { return }
 
         let surfaceSpace = DrawingOverlay.Space.surface(aspectRatio: aspectRatio)
@@ -323,7 +333,10 @@ final class TouchMonitor {
             case .gesture(let gesture):
                 let binding = Preferences.shared.binding(for: .touch(gesture), app: FrontmostApp.shared.bundleID)
                 if isDebugLogging {
-                    print("[touch] \(gesture.displayName) -> \(binding.displayName)")
+                    print("[touch \(debugTime(ProcessInfo.processInfo.systemUptime))] \(gesture.displayName) -> \(binding.displayName)")
+                }
+                if surface == .trackpad, gesture.isTap, binding != .disabled {
+                    trackpadTapGestureHandler?()
                 }
                 if binding == .builtin(.moveResizeWindow) {
                     performer.windowManager.beginDrag()

@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- Trackpad taps beside a resting finger behave as they did in 0.4.1. Three allowances made
+  for the Magic Mouse in 0.4.2 had reached the trackpad too: a resting finger that had
+  started to move still counted as resting, so a two-finger tap whose fingers landed a beat
+  apart became a One-Fix tap; fingers all lifting together could be a tap; and taps within
+  100 ms of each other were dropped, which a quick index double-tap could hit. All three now
+  apply to the Magic Mouse only.
+- With **Tap to click** on, a trackpad tap that became a gesture was also a click. In
+  Terminal and Finder, whose tabs are windows, that click landed just after a One-Fix tap
+  had switched tab and brought the old tab straight back. The click macOS makes from a tap
+  that was a gesture is now held back.
+- `--touch-debug` lines carry the time in seconds since the monitor started.
+
 ## [0.4.2] - 2026-10-07
 
 ### Fixed

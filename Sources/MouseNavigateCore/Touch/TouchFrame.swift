@@ -182,9 +182,12 @@ public struct TrackedContact: Equatable {
         Vector2(x: position.x - start.x, y: position.y - start.y)
     }
 
-    /// Down long enough, and not strayed far from where it rests.
-    public func isFixed(at time: Double, tuning: TouchTuning) -> Bool {
-        upTime == nil && time - downTime >= tuning.fixDuration && maxDisplacement <= tuning.restTolerance
+    /// Down long enough, and not strayed further than `tolerance` from where it rests. A
+    /// trackpad finger must be quite still; a Magic Mouse one is allowed `restTolerance`,
+    /// since tapping rocks the mouse.
+    public func isFixed(at time: Double, tuning: TouchTuning, tolerance: Double? = nil) -> Bool {
+        upTime == nil && time - downTime >= tuning.fixDuration
+            && maxDisplacement <= (tolerance ?? tuning.fixTolerance)
     }
 
     public func isTap(tuning: TouchTuning) -> Bool {
