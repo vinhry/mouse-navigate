@@ -126,6 +126,63 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(preferences.globalBinding(for: .button(3, .mxMaster4)), .builtin(.back))
     }
 
+    // MARK: - Modifier combinations
+
+    func testAnUnboundCombinationFallsBackToThePlainButton() {
+        let preferences = makePreferences()
+        XCTAssertEqual(
+            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.shift], app: nil),
+            .builtin(.back)
+        )
+    }
+
+    func testABoundCombinationWins() {
+        let preferences = makePreferences()
+        preferences.setGlobalBinding(.builtin(.newTab), for: .button(3, .mxMaster4, .click, [.shift]))
+        XCTAssertEqual(
+            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.shift], app: nil),
+            .builtin(.newTab)
+        )
+        XCTAssertEqual(
+            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [], app: nil),
+            .builtin(.back)
+        )
+        XCTAssertEqual(
+            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.shift, .command], app: nil),
+            .builtin(.back),
+            "a different combination is not the bound one"
+        )
+    }
+
+    func testACombinationSetToDisabledFallsBackToThePlainButton() {
+        let preferences = makePreferences()
+        preferences.setGlobalBinding(.disabled, for: .button(3, .mxMaster4, .click, [.shift]))
+        XCTAssertEqual(
+            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.shift], app: nil),
+            .builtin(.back)
+        )
+    }
+
+    func testAnAppsCombinationBeatsThePlainBindingForAllApps() {
+        let preferences = makePreferences()
+        preferences.addApp(bundleID: "com.example.app", name: "Example")
+        preferences.setAppBinding(.builtin(.copy), for: .button(3, .mxMaster4, .click, [.command]), app: "com.example.app")
+
+        XCTAssertEqual(
+            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.command], app: "com.example.app"),
+            .builtin(.copy)
+        )
+        XCTAssertEqual(
+            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.command], app: "com.other"),
+            .builtin(.back)
+        )
+        preferences.setApp("com.example.app", disabled: true)
+        XCTAssertEqual(
+            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.command], app: "com.example.app"),
+            .disabled
+        )
+    }
+
     // MARK: - Per-app bindings
 
     func testAppBindingWinsAndInheritsOtherwise() {

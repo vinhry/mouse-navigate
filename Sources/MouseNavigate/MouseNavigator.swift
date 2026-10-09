@@ -38,9 +38,12 @@ final class MouseNavigator {
     private let strokeCapture = StrokeCapture()
     private lazy var performer = ActionPerformer(cursorEngine: cursorEngine, windowManager: WindowManager())
     private lazy var touchMonitor = TouchMonitor(performer: performer)
-    private lazy var buttons = ButtonPressController(performer: performer) { [unowned self] button, press in
-        Preferences.shared.binding(
-            for: .button(button, self.detector.activeProfile, press),
+    private lazy var buttons = ButtonPressController(performer: performer) { [unowned self] button, press, modifiers in
+        Preferences.shared.buttonBinding(
+            button,
+            profile: self.detector.activeProfile,
+            press: press,
+            modifiers: modifiers,
             app: FrontmostApp.shared.bundleID
         )
     }
@@ -484,7 +487,8 @@ final class MouseNavigator {
             guard Preferences.configurableButtons.contains(button) else {
                 return Unmanaged.passUnretained(event)
             }
-            return buttons.buttonDown(button, at: event.location) ? nil : Unmanaged.passUnretained(event)
+            let modifiers = Shortcut.Modifiers(event.flags)
+            return buttons.buttonDown(button, modifiers: modifiers, at: event.location) ? nil : Unmanaged.passUnretained(event)
         case .otherMouseDragged:
             // Only the middle button draws; a side button dragged mid-stroke is its own affair.
             guard event.getIntegerValueField(.mouseEventButtonNumber) == 2 else {

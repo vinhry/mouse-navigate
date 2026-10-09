@@ -8,6 +8,9 @@ All notable changes to this project will be documented in this file.
 - **Export Settings…** and **Import Settings…** on the About tab. Every setting goes to a
   JSON file that can be read and edited by hand, and comes back from one after the whole
   file has been checked.
+- **Modifier keys with mouse buttons.** `⌃`, `⌥`, `⇧` and `⌘` held with a side button make
+  a combination with bindings of its own, chosen under **With:** on the Mouse tab. A
+  combination that has not been bound does what the button does on its own.
 
 ### Fixed
 - When the helper that reopens MouseNavigate after an update could not start, the

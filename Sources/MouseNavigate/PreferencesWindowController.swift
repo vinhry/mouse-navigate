@@ -71,8 +71,10 @@ final class PreferencesWindowController: NSObject {
     private var selectedApp: String?
     private var scopeControls: [(popup: NSPopUpButton, remove: NSButton, disable: NSButton)] = []
     private var testerLabel: NSTextField?
-    /// Which press of each button the Mouse tab's pickers are showing.
+    /// Which press of each button the Mouse tab's pickers are showing, and with which
+    /// modifier keys held.
     private var buttonPress: ButtonPress = .click
+    private var buttonModifiers: Shortcut.Modifiers = []
 
     private var reverseScrollCheckbox: NSButton?
     private var scrollSpeedSlider: NSSlider?
@@ -248,7 +250,18 @@ final class PreferencesWindowController: NSObject {
         pressPicker.toolTip = "A button with a hold or double-click binding waits to see which "
             + "it was before acting, so bind those only where you want them."
 
-        var rows: [[NSView]] = [[overrideLabel, popup], [pressLabel, pressPicker]]
+        let withLabel = NSTextField(labelWithString: "With:")
+        withLabel.alignment = .right
+        let modifierPicker = NSSegmentedControl(
+            labels: PreferencesWindowController.modifierSegments.map(\.label),
+            trackingMode: .selectAny,
+            target: self,
+            action: #selector(buttonModifiersChanged(_:))
+        )
+        modifierPicker.toolTip = "Bind a button pressed with these keys held. Until a combination has "
+            + "a binding of its own, holding the keys does what the button does on its own."
+
+        var rows: [[NSView]] = [[overrideLabel, popup], [pressLabel, pressPicker], [withLabel, modifierPicker]]
 
         for button in Preferences.configurableButtons {
             let buttonLabel = NSTextField(labelWithString: "Button \(button):")
@@ -262,9 +275,10 @@ final class PreferencesWindowController: NSObject {
         let grid = makeFormGrid(rows, rowSpacing: 8)
         // Every picker takes the width of the widest, so the column reads as one edge.
         grid.column(at: 1).xPlacement = .fill
-        // Keep the profile and press pickers visually apart from the per-button rows.
-        grid.row(at: 1).bottomPadding = 8
+        // Keep the profile, press and modifier pickers visually apart from the per-button rows.
+        grid.row(at: 2).bottomPadding = 8
         grid.cell(for: pressPicker)?.xPlacement = .leading
+        grid.cell(for: modifierPicker)?.xPlacement = .leading
 
         let tester = NSTextField(labelWithString: "Press a mouse button to identify it…")
         tester.font = .systemFont(ofSize: 11)
@@ -344,6 +358,24 @@ final class PreferencesWindowController: NSObject {
             isSmooth: smoothScrollCheckbox?.state == .on
         )
         refreshScrollUI()
+    }
+
+    /// ⌃⌥⇧⌘ in menu order, one segment each.
+    private static let modifierSegments: [(label: String, modifier: Shortcut.Modifiers)] = [
+        ("⌃", .control), ("⌥", .option), ("⇧", .shift), ("⌘", .command),
+    ]
+
+    @objc private func buttonModifiersChanged(_ sender: NSSegmentedControl) {
+        var modifiers: Shortcut.Modifiers = []
+        for (index, segment) in PreferencesWindowController.modifierSegments.enumerated()
+        where sender.isSelected(forSegment: index) {
+            modifiers.insert(segment.modifier)
+        }
+        buttonModifiers = modifiers
+        refreshBindings { slot in
+            if case .button = slot { return true }
+            return false
+        }
     }
 
     @objc private func buttonPressChanged(_ sender: NSSegmentedControl) {
@@ -446,7 +478,7 @@ final class PreferencesWindowController: NSObject {
 
     private func trigger(for slot: BindingSlot) -> BindingTrigger {
         switch slot {
-        case .button(let number): return .button(number, detector.activeProfile, buttonPress)
+        case .button(let number): return .button(number, detector.activeProfile, buttonPress, buttonModifiers)
         case .touch(let gesture): return .touch(gesture)
         case .character(let gesture): return .character(gesture)
         }

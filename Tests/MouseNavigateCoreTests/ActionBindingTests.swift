@@ -71,6 +71,36 @@ final class ActionBindingTests: XCTestCase {
         XCTAssertEqual(BindingTrigger.character(.t).storageKey, "character.t")
     }
 
+    func testModifierCombinationsGetKeysOfTheirOwn() {
+        XCTAssertEqual(BindingTrigger.button(3, .mxMaster4, .click, []).storageKey, "button.mxMaster4.3")
+        XCTAssertEqual(BindingTrigger.button(3, .mxMaster4, .click, [.shift]).storageKey, "button.mxMaster4.3+shift")
+        XCTAssertEqual(
+            BindingTrigger.button(3, .mxMaster4, .click, [.command, .shift]).storageKey,
+            "button.mxMaster4.3+shift+cmd"
+        )
+        XCTAssertEqual(
+            BindingTrigger.button(5, .generic, .hold, [.control, .option, .shift, .command]).storageKey,
+            "buttonHold.generic.5+ctrl+opt+shift+cmd"
+        )
+        XCTAssertEqual(BindingTrigger.button(4, .mxMaster3, .doubleClick, [.option]).storageKey, "buttonDouble.mxMaster3.4+opt")
+    }
+
+    func testModifierSuffixRoundTrips() {
+        let sets: [Shortcut.Modifiers] = [[], [.shift], [.command], [.control, .option], [.control, .option, .shift, .command]]
+        for modifiers in sets {
+            XCTAssertEqual(Shortcut.Modifiers(storageSuffix: modifiers.storageSuffix), modifiers)
+        }
+        XCTAssertNil(Shortcut.Modifiers(storageSuffix: "shift"))
+        XCTAssertNil(Shortcut.Modifiers(storageSuffix: "+hyper"))
+        XCTAssertNil(Shortcut.Modifiers(storageSuffix: "+shift+shift"))
+        XCTAssertNil(Shortcut.Modifiers(storageSuffix: "+"))
+    }
+
+    func testACombinationStartsUnbound() {
+        XCTAssertEqual(BindingTrigger.button(3, .mxMaster4, .click, [.shift]).defaultBinding, .disabled)
+        XCTAssertEqual(BindingTrigger.button(3, .mxMaster4).defaultBinding, .builtin(.back))
+    }
+
     func testMoveResizeOnlyWhereItCanBeDriven() {
         let moveResize = ActionBinding.builtin(.moveResizeWindow)
         XCTAssertFalse(BindingTrigger.button(5, .generic).allows(moveResize))

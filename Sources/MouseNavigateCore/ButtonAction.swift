@@ -154,7 +154,7 @@ public enum ButtonAction: String, CaseIterable {
 
 /// A key plus modifiers, kept free of CoreGraphics so the core library stays testable.
 public struct Shortcut: Equatable {
-    public struct Modifiers: OptionSet {
+    public struct Modifiers: OptionSet, Hashable {
         public let rawValue: Int
         public init(rawValue: Int) { self.rawValue = rawValue }
 
@@ -171,6 +171,34 @@ public struct Shortcut: Equatable {
             if contains(.shift) { symbols += "⇧" }
             if contains(.command) { symbols += "⌘" }
             return symbols
+        }
+
+        private static let storageNames: [(Modifiers, String)] = [
+            (.control, "ctrl"), (.option, "opt"), (.shift, "shift"), (.command, "cmd"),
+        ]
+
+        /// How a modifier set is written into a settings key: nothing for none, so a
+        /// plain button keeps the key it always had, else "+ctrl+opt+shift+cmd" with the
+        /// ones held, always in that order. Names rather than the raw value, so a settings
+        /// file reads as what it is.
+        public var storageSuffix: String {
+            Modifiers.storageNames.filter { contains($0.0) }.map { "+" + $0.1 }.joined()
+        }
+
+        public init?(storageSuffix: String) {
+            var modifiers: Modifiers = []
+            guard !storageSuffix.isEmpty else {
+                self = modifiers
+                return
+            }
+            guard storageSuffix.hasPrefix("+") else { return nil }
+            for name in storageSuffix.dropFirst().split(separator: "+", omittingEmptySubsequences: false) {
+                guard let entry = Modifiers.storageNames.first(where: { $0.1 == name }), !modifiers.contains(entry.0) else {
+                    return nil
+                }
+                modifiers.insert(entry.0)
+            }
+            self = modifiers
         }
     }
 

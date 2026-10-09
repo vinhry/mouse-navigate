@@ -159,27 +159,36 @@ public enum ButtonPress: String, CaseIterable {
     }
 }
 
-/// Something that can be bound: a mouse button press on one device profile, a touch
-/// gesture or a drawn character.
+/// Something that can be bound: a mouse button press on one device profile, with or
+/// without modifier keys held, a touch gesture or a drawn character.
 public enum BindingTrigger: Hashable {
-    case button(Int, DeviceProfile, ButtonPress = .click)
+    case button(Int, DeviceProfile, ButtonPress = .click, Shortcut.Modifiers = [])
     case touch(TouchGesture)
     case character(CharacterGesture)
 
-    /// The settings key. A plain click keeps the key it had before bindings existed.
+    /// The settings key. A plain click keeps the key it had before bindings existed;
+    /// modifiers add a suffix, "button.mxMaster4.3+shift+cmd" for ⇧⌘ and button 3.
     public var storageKey: String {
         switch self {
-        case .button(let number, let profile, .click): return "\(SettingsKey.buttonPrefix)\(profile.rawValue).\(number)"
-        case .button(let number, let profile, .hold): return "\(SettingsKey.buttonHoldPrefix)\(profile.rawValue).\(number)"
-        case .button(let number, let profile, .doubleClick): return "\(SettingsKey.buttonDoublePrefix)\(profile.rawValue).\(number)"
+        case .button(let number, let profile, let press, let modifiers):
+            let prefix: String
+            switch press {
+            case .click: prefix = SettingsKey.buttonPrefix
+            case .hold: prefix = SettingsKey.buttonHoldPrefix
+            case .doubleClick: prefix = SettingsKey.buttonDoublePrefix
+            }
+            return "\(prefix)\(profile.rawValue).\(number)\(modifiers.storageSuffix)"
         case .touch(let gesture): return SettingsKey.touchPrefix + gesture.rawValue
         case .character(let gesture): return SettingsKey.characterPrefix + gesture.rawValue
         }
     }
 
+    /// A combination with modifiers starts unbound: the plain button's binding stands in
+    /// for it until it is given one of its own.
     public var defaultBinding: ActionBinding {
         switch self {
-        case .button(let number, let profile, .click): return .builtin(profile.defaultActions[number] ?? .disabled)
+        case .button(let number, let profile, .click, let modifiers) where modifiers.isEmpty:
+            return .builtin(profile.defaultActions[number] ?? .disabled)
         case .button: return .disabled
         case .touch(let gesture): return .builtin(gesture.defaultAction)
         case .character(let gesture): return .builtin(gesture.defaultAction)

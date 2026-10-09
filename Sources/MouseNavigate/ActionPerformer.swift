@@ -223,13 +223,8 @@ final class ActionPerformer {
     // MARK: - Keyboard shortcuts
 
     private func send(_ shortcut: Shortcut) {
-        var flags: CGEventFlags = []
-        if shortcut.modifiers.contains(.command) { flags.insert(.maskCommand) }
-        if shortcut.modifiers.contains(.shift) { flags.insert(.maskShift) }
-        if shortcut.modifiers.contains(.control) { flags.insert(.maskControl) }
-        if shortcut.modifiers.contains(.option) { flags.insert(.maskAlternate) }
         // A built-in shortcut names a letter; the key that types it depends on the layout.
-        sendShortcut(keyCode: CGKeyCode(KeyboardLayout.shared.keyCode(for: shortcut)), flags: flags)
+        sendShortcut(keyCode: CGKeyCode(KeyboardLayout.shared.keyCode(for: shortcut)), flags: CGEventFlags(shortcut.modifiers))
     }
 
     private func sendShortcut(keyCode: CGKeyCode, flags: CGEventFlags) {

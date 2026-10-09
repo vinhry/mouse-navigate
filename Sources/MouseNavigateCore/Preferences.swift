@@ -80,6 +80,26 @@ public final class Preferences {
         )
     }
 
+    /// What a button press made with `modifiers` held runs: the combination's own
+    /// binding, or, while that is unset or Disabled, the plain button's. Holding a
+    /// modifier never takes away what a button does on its own until the combination is
+    /// bound, so nothing changes for anyone who has not bound one.
+    public func buttonBinding(
+        _ button: Int,
+        profile: DeviceProfile,
+        press: ButtonPress,
+        modifiers: Shortcut.Modifiers,
+        app bundleID: String?
+    ) -> ActionBinding {
+        if !modifiers.isEmpty {
+            let combination = binding(for: .button(button, profile, press, modifiers), app: bundleID)
+            if combination != .disabled {
+                return combination
+            }
+        }
+        return binding(for: .button(button, profile, press), app: bundleID)
+    }
+
     /// The binding for all apps, or the trigger's default when none is stored or the
     /// stored one cannot be read.
     public func globalBinding(for trigger: BindingTrigger) -> ActionBinding {

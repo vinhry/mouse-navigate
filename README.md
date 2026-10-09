@@ -137,6 +137,18 @@ a hold or double-click too, it has to wait to see which you meant:
   a double-click. A press MouseNavigate swallowed never reaches an app as a release alone,
   not even if you pause or switch apps while the button is down.
 
+### Modifier keys
+
+A button pressed with `⌃`, `⌥`, `⇧` or `⌘` held can do something else. Tick the keys under
+**With:** on the Mouse tab and the pickers switch to that combination's bindings; every
+combination of keys, and each of its presses, is bound separately. A combination starts
+out unbound and does whatever the button does on its own, so holding a key never takes
+away a button's binding until the combination is given one; a combination set to
+**Disabled** likewise falls back to the plain button. A hold or double-click means the
+keys that were held when the button went down.
+
+In the settings file, a combination's key carries the modifiers: `button.mxMaster4.3+shift+cmd`.
+
 Not sure which physical button is which? Open **Preferences → Mouse** and press a button —
 the panel reports the number it reported, so you can map it directly.
 
