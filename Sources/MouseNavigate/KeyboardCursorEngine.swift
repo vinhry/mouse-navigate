@@ -77,8 +77,6 @@ final class KeyboardCursorEngine {
     /// Reports whether cursor mode is engaged, for the status bar icon.
     var onModeChange: ((Bool) -> Void)?
 
-    var isEngaged: Bool { gate.isEngaged }
-
     init() {
         reloadSettings()
 

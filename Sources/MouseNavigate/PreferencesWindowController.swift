@@ -98,8 +98,6 @@ final class PreferencesWindowController: NSObject {
     /// Each character row's picker, for working out which one the pointer is over.
     private var characterRows: [(gesture: CharacterGesture, row: NSView)] = []
 
-    private var lastButtonPressed: Int?
-
     init(detector: DeviceDetector, engine: KeyboardCursorEngine, touchMonitor: TouchMonitor, updater: Updater) {
         self.detector = detector
         self.engine = engine
@@ -1358,7 +1356,6 @@ final class PreferencesWindowController: NSObject {
 
     /// Called from the event tap so users can discover their own mouse's numbering.
     func reportButtonPress(_ button: Int) {
-        lastButtonPressed = button
         guard isVisible else { return }
 
         DispatchQueue.main.async { [weak self] in

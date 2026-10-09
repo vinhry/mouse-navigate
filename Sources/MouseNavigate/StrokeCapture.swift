@@ -48,8 +48,6 @@ final class StrokeCapture {
     /// The drag turned out to be a click, so nothing was drawn after all.
     var onCancelled: (() -> Void)?
 
-    var isCapturing: Bool { capture != nil }
-
     /// Returns true when the event was taken and must not reach the app.
     func handleDown(_ button: Button, at location: CGPoint) -> Bool {
         guard capture == nil else { return false }
