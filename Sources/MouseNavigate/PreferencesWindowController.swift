@@ -1199,7 +1199,7 @@ final class PreferencesWindowController: NSObject {
     @objc private func restoreTouchDefaultsTapped() {
         if let selectedApp {
             Preferences.shared.clearAppBindings(app: selectedApp) {
-                $0.hasPrefix("touch.") || $0.hasPrefix("character.")
+                $0.hasPrefix(SettingsKey.touchPrefix) || $0.hasPrefix(SettingsKey.characterPrefix)
             }
         } else {
             Preferences.shared.restoreTouchDefaults()

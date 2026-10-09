@@ -33,10 +33,10 @@ public final class Preferences {
     /// v1 stored a single global mapping under "button<n>". Those values came from the
     /// MX Master 4, so they seed that profile and the old keys are cleared.
     func migrateIfNeeded() {
-        guard store.integer(forKey: "configVersion") < currentConfigVersion else { return }
+        guard store.integer(forKey: SettingsKey.configVersion) < currentConfigVersion else { return }
 
         for button in Preferences.configurableButtons {
-            let legacyKey = "button\(button)"
+            let legacyKey = SettingsKey.legacyButton(button)
             guard let raw = store.string(forKey: legacyKey) else { continue }
 
             let newKey = BindingTrigger.button(button, .mxMaster4).storageKey
@@ -46,7 +46,7 @@ public final class Preferences {
             store.removeObject(forKey: legacyKey)
         }
 
-        store.set(currentConfigVersion, forKey: "configVersion")
+        store.set(currentConfigVersion, forKey: SettingsKey.configVersion)
     }
 
     // MARK: - Device profile
@@ -54,14 +54,14 @@ public final class Preferences {
     /// nil means "auto" — follow whatever the detector reports.
     public var deviceOverride: DeviceProfile? {
         get {
-            guard let raw = store.string(forKey: "deviceOverride") else { return nil }
+            guard let raw = store.string(forKey: SettingsKey.deviceOverride) else { return nil }
             return DeviceProfile(rawValue: raw)
         }
         set {
             if let newValue {
-                store.set(newValue.rawValue, forKey: "deviceOverride")
+                store.set(newValue.rawValue, forKey: SettingsKey.deviceOverride)
             } else {
-                store.removeObject(forKey: "deviceOverride")
+                store.removeObject(forKey: SettingsKey.deviceOverride)
             }
             notifyChange(.device)
         }
@@ -99,8 +99,6 @@ public final class Preferences {
 
     // MARK: - Per-app bindings
 
-    private static let appOverridesKey = "appOverrides"
-
     /// Decoded once per change rather than on every press: a single button press asks
     /// for its hold, double-click and click bindings in turn.
     private var cachedAppOverrides: [String: AppOverride]?
@@ -110,13 +108,13 @@ public final class Preferences {
         if let cachedAppOverrides {
             return cachedAppOverrides
         }
-        let overrides = AppOverride.decodeAll(store.dictionary(forKey: Preferences.appOverridesKey))
+        let overrides = AppOverride.decodeAll(store.dictionary(forKey: SettingsKey.appOverrides))
         cachedAppOverrides = overrides
         return overrides
     }
 
     private func saveAppOverrides(_ overrides: [String: AppOverride]) {
-        store.set(AppOverride.encodeAll(overrides), forKey: Preferences.appOverridesKey)
+        store.set(AppOverride.encodeAll(overrides), forKey: SettingsKey.appOverrides)
         notifyChange(.apps)
     }
 
@@ -177,15 +175,15 @@ public final class Preferences {
     public var scrollSettings: ScrollSettings {
         get {
             ScrollSettings(
-                isReversed: store.bool(forKey: "scroll.reversed"),
-                speed: store.object(forKey: "scroll.speed") as? Double ?? 1,
-                isSmooth: store.bool(forKey: "scroll.smooth")
+                isReversed: store.bool(forKey: SettingsKey.scrollReversed),
+                speed: store.object(forKey: SettingsKey.scrollSpeed) as? Double ?? 1,
+                isSmooth: store.bool(forKey: SettingsKey.scrollSmooth)
             )
         }
         set {
-            store.set(newValue.isReversed, forKey: "scroll.reversed")
-            store.set(newValue.speed, forKey: "scroll.speed")
-            store.set(newValue.isSmooth, forKey: "scroll.smooth")
+            store.set(newValue.isReversed, forKey: SettingsKey.scrollReversed)
+            store.set(newValue.speed, forKey: SettingsKey.scrollSpeed)
+            store.set(newValue.isSmooth, forKey: SettingsKey.scrollSmooth)
             notifyChange(.scroll)
         }
     }
@@ -194,31 +192,31 @@ public final class Preferences {
 
     /// nil until the user has been asked, which happens once.
     public var automaticUpdates: Bool? {
-        get { store.object(forKey: "update.automatic") as? Bool }
+        get { store.object(forKey: SettingsKey.automaticUpdates) as? Bool }
         set {
-            store.set(newValue, forKey: "update.automatic")
+            store.set(newValue, forKey: SettingsKey.automaticUpdates)
             notifyChange(.updates)
         }
     }
 
     /// Not a setting, so it changes without telling anyone.
     public var lastUpdateCheck: Date? {
-        get { store.object(forKey: "update.lastCheck") as? Date }
-        set { store.set(newValue, forKey: "update.lastCheck") }
+        get { store.object(forKey: SettingsKey.lastUpdateCheck) as? Date }
+        set { store.set(newValue, forKey: SettingsKey.lastUpdateCheck) }
     }
 
     // MARK: - Keyboard cursor
 
     public var isCursorModeEnabled: Bool {
-        get { store.object(forKey: "cursorModeEnabled") as? Bool ?? true }
+        get { store.object(forKey: SettingsKey.cursorModeEnabled) as? Bool ?? true }
         set {
-            store.set(newValue, forKey: "cursorModeEnabled")
+            store.set(newValue, forKey: SettingsKey.cursorModeEnabled)
             notifyChange(.cursor)
         }
     }
 
     public func keyCode(for binding: CursorBinding) -> UInt16 {
-        guard let stored = store.object(forKey: "key.\(binding.rawValue)") as? Int,
+        guard let stored = store.object(forKey: SettingsKey.cursorKey(binding)) as? Int,
               let keyCode = UInt16(exactly: stored)
         else {
             return binding.defaultKeyCode
@@ -227,19 +225,19 @@ public final class Preferences {
     }
 
     public func setKeyCode(_ keyCode: UInt16, for binding: CursorBinding) {
-        store.set(Int(keyCode), forKey: "key.\(binding.rawValue)")
+        store.set(Int(keyCode), forKey: SettingsKey.cursorKey(binding))
         notifyChange(.cursor)
     }
 
     public func value(for setting: CursorSetting) -> Double {
-        guard let stored = store.object(forKey: "cursor.\(setting.rawValue)") as? Double else {
+        guard let stored = store.object(forKey: SettingsKey.cursorSetting(setting)) as? Double else {
             return setting.defaultValue
         }
         return setting.clamp(stored)
     }
 
     public func setValue(_ value: Double, for setting: CursorSetting) {
-        store.set(setting.clamp(value), forKey: "cursor.\(setting.rawValue)")
+        store.set(setting.clamp(value), forKey: SettingsKey.cursorSetting(setting))
         notifyChange(.cursor)
     }
 
@@ -258,12 +256,12 @@ public final class Preferences {
     /// Reset only the cursor-mode keys and tunables; button mappings are untouched.
     public func restoreCursorDefaults() {
         for binding in CursorBinding.allCases {
-            store.removeObject(forKey: "key.\(binding.rawValue)")
+            store.removeObject(forKey: SettingsKey.cursorKey(binding))
         }
         for setting in CursorSetting.allCases {
-            store.removeObject(forKey: "cursor.\(setting.rawValue)")
+            store.removeObject(forKey: SettingsKey.cursorSetting(setting))
         }
-        store.removeObject(forKey: "cursorModeEnabled")
+        store.removeObject(forKey: SettingsKey.cursorModeEnabled)
         notifyChange(.cursor)
     }
 
@@ -271,17 +269,17 @@ public final class Preferences {
 
     /// Off until the user opts in: the gestures run alongside macOS's own and can overlap.
     public var isTouchEnabled: Bool {
-        get { store.object(forKey: "touchEnabled") as? Bool ?? false }
+        get { store.object(forKey: SettingsKey.touchEnabled) as? Bool ?? false }
         set {
-            store.set(newValue, forKey: "touchEnabled")
+            store.set(newValue, forKey: SettingsKey.touchEnabled)
             notifyChange(.touch)
         }
     }
 
     public var isLeftHanded: Bool {
-        get { store.bool(forKey: "touchLeftHanded") }
+        get { store.bool(forKey: SettingsKey.touchLeftHanded) }
         set {
-            store.set(newValue, forKey: "touchLeftHanded")
+            store.set(newValue, forKey: SettingsKey.touchLeftHanded)
             notifyChange(.touch)
         }
     }
@@ -290,9 +288,9 @@ public final class Preferences {
 
     /// Whether the stroke is drawn on screen as it is made.
     public var showsDrawingOverlay: Bool {
-        get { store.object(forKey: "touchShowsDrawing") as? Bool ?? true }
+        get { store.object(forKey: SettingsKey.touchShowsDrawing) as? Bool ?? true }
         set {
-            store.set(newValue, forKey: "touchShowsDrawing")
+            store.set(newValue, forKey: SettingsKey.touchShowsDrawing)
             notifyChange(.touch)
         }
     }
@@ -301,21 +299,21 @@ public final class Preferences {
     /// the trackpad's width.
     public var characterDrawSpread: Double {
         get {
-            let stored = store.object(forKey: "touchDrawSpread") as? Double ?? TouchTuning().drawSpread
+            let stored = store.object(forKey: SettingsKey.touchDrawSpread) as? Double ?? TouchTuning().drawSpread
             return TouchTuning.clampDrawSpread(stored)
         }
         set {
-            store.set(TouchTuning.clampDrawSpread(newValue), forKey: "touchDrawSpread")
+            store.set(TouchTuning.clampDrawSpread(newValue), forKey: SettingsKey.touchDrawSpread)
             notifyChange(.touch)
         }
     }
 
     public func isCharacterSourceEnabled(_ source: CharacterSource) -> Bool {
-        store.object(forKey: "characterSource.\(source.rawValue)") as? Bool ?? source.isEnabledByDefault
+        store.object(forKey: SettingsKey.characterSource(source)) as? Bool ?? source.isEnabledByDefault
     }
 
     public func setCharacterSource(_ source: CharacterSource, enabled: Bool) {
-        store.set(enabled, forKey: "characterSource.\(source.rawValue)")
+        store.set(enabled, forKey: SettingsKey.characterSource(source))
         notifyChange(.touch)
     }
 
@@ -328,11 +326,11 @@ public final class Preferences {
             store.removeObject(forKey: BindingTrigger.character(gesture).storageKey)
         }
         for source in CharacterSource.allCases {
-            store.removeObject(forKey: "characterSource.\(source.rawValue)")
+            store.removeObject(forKey: SettingsKey.characterSource(source))
         }
-        store.removeObject(forKey: "touchLeftHanded")
-        store.removeObject(forKey: "touchShowsDrawing")
-        store.removeObject(forKey: "touchDrawSpread")
+        store.removeObject(forKey: SettingsKey.touchLeftHanded)
+        store.removeObject(forKey: SettingsKey.touchShowsDrawing)
+        store.removeObject(forKey: SettingsKey.touchDrawSpread)
         notifyChange(.touch)
     }
 

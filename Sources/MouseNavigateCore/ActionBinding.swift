@@ -169,11 +169,11 @@ public enum BindingTrigger: Hashable {
     /// The settings key. A plain click keeps the key it had before bindings existed.
     public var storageKey: String {
         switch self {
-        case .button(let number, let profile, .click): return "button.\(profile.rawValue).\(number)"
-        case .button(let number, let profile, .hold): return "buttonHold.\(profile.rawValue).\(number)"
-        case .button(let number, let profile, .doubleClick): return "buttonDouble.\(profile.rawValue).\(number)"
-        case .touch(let gesture): return "touch.\(gesture.rawValue)"
-        case .character(let gesture): return "character.\(gesture.rawValue)"
+        case .button(let number, let profile, .click): return "\(SettingsKey.buttonPrefix)\(profile.rawValue).\(number)"
+        case .button(let number, let profile, .hold): return "\(SettingsKey.buttonHoldPrefix)\(profile.rawValue).\(number)"
+        case .button(let number, let profile, .doubleClick): return "\(SettingsKey.buttonDoublePrefix)\(profile.rawValue).\(number)"
+        case .touch(let gesture): return SettingsKey.touchPrefix + gesture.rawValue
+        case .character(let gesture): return SettingsKey.characterPrefix + gesture.rawValue
         }
     }
 
