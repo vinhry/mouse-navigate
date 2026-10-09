@@ -55,6 +55,8 @@ final class TouchMonitor {
     /// event without walking the recognizers.
     private var suppressScroll = false
     private var isLeftHanded = false
+    /// The Magic Mouse recognizer's tuning, for the pose check the event tap makes.
+    private var magicMouseTuning = TouchTuning()
 
     private final class RecognizerState {
         var recognizer: TouchGestureRecognizer
@@ -116,7 +118,11 @@ final class TouchMonitor {
         guard isRunning else { return false }
         lock.lock()
         defer { lock.unlock() }
-        return TouchGestureRecognizer.isMiddleClickPose(lastMagicMouseContacts, isLeftHanded: isLeftHanded)
+        return TouchGestureRecognizer.isMiddleClickPose(
+            lastMagicMouseContacts,
+            tuning: magicMouseTuning,
+            isLeftHanded: isLeftHanded
+        )
     }
 
     /// Recognizes a drawn stroke from any source, shows what it was, and runs its action.
@@ -166,6 +172,9 @@ final class TouchMonitor {
             state.recognizer.isLeftHanded = isLeftHanded
             state.recognizer.isDrawingEnabled = drawingEnabled
             state.recognizer.tuning.drawSpread = preferences.characterDrawSpread
+            if state.recognizer.surface == .magicMouse {
+                magicMouseTuning = state.recognizer.tuning
+            }
         }
         lock.unlock()
 
@@ -189,6 +198,9 @@ final class TouchMonitor {
             recognizer.isLeftHanded = preferences.isLeftHanded
             recognizer.isDrawingEnabled = preferences.isCharacterSourceEnabled(.trackpad)
             recognizer.tuning.drawSpread = preferences.characterDrawSpread
+            if device.surface == .magicMouse {
+                magicMouseTuning = recognizer.tuning
+            }
             recognizers[device.reference] = RecognizerState(recognizer: recognizer, aspectRatio: device.aspectRatio)
         }
         lock.unlock()
