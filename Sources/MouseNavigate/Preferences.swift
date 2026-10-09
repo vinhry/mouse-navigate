@@ -30,6 +30,8 @@ final class Preferences {
     static let shared = Preferences()
 
     static let didChangeNotification = Notification.Name("com.vinhry.MouseNavigate.preferencesDidChange")
+    /// `userInfo` key carrying the `SettingsArea` that changed.
+    static let areaUserInfoKey = "area"
 
     /// Buttons the preferences window offers. CGEvent numbers 0-2 are the primary,
     /// secondary and middle buttons, which are left alone.
@@ -82,7 +84,7 @@ final class Preferences {
             } else {
                 store.removeObject(forKey: "deviceOverride")
             }
-            notifyChange()
+            notifyChange(.device)
         }
     }
 
@@ -113,7 +115,7 @@ final class Preferences {
 
     func setGlobalBinding(_ binding: ActionBinding, for trigger: BindingTrigger) {
         store.set(binding.storageValue, forKey: trigger.storageKey)
-        notifyChange()
+        notifyChange(.bindings)
     }
 
     // MARK: - Per-app bindings
@@ -136,7 +138,7 @@ final class Preferences {
 
     private func saveAppOverrides(_ overrides: [String: AppOverride]) {
         store.set(AppOverride.encodeAll(overrides), forKey: Preferences.appOverridesKey)
-        notifyChange()
+        notifyChange(.apps)
     }
 
     /// Apps with bindings of their own, by name.
@@ -205,7 +207,7 @@ final class Preferences {
             store.set(newValue.isReversed, forKey: "scroll.reversed")
             store.set(newValue.speed, forKey: "scroll.speed")
             store.set(newValue.isSmooth, forKey: "scroll.smooth")
-            notifyChange()
+            notifyChange(.scroll)
         }
     }
 
@@ -216,7 +218,7 @@ final class Preferences {
         get { store.object(forKey: "update.automatic") as? Bool }
         set {
             store.set(newValue, forKey: "update.automatic")
-            notifyChange()
+            notifyChange(.updates)
         }
     }
 
@@ -232,7 +234,7 @@ final class Preferences {
         get { store.object(forKey: "cursorModeEnabled") as? Bool ?? true }
         set {
             store.set(newValue, forKey: "cursorModeEnabled")
-            notifyChange()
+            notifyChange(.cursor)
         }
     }
 
@@ -247,7 +249,7 @@ final class Preferences {
 
     func setKeyCode(_ keyCode: UInt16, for binding: CursorBinding) {
         store.set(Int(keyCode), forKey: "key.\(binding.rawValue)")
-        notifyChange()
+        notifyChange(.cursor)
     }
 
     func value(for setting: CursorSetting) -> Double {
@@ -259,7 +261,7 @@ final class Preferences {
 
     func setValue(_ value: Double, for setting: CursorSetting) {
         store.set(setting.clamp(value), forKey: "cursor.\(setting.rawValue)")
-        notifyChange()
+        notifyChange(.cursor)
     }
 
     func speedProfile() -> CursorSpeedProfile {
@@ -283,7 +285,7 @@ final class Preferences {
             store.removeObject(forKey: "cursor.\(setting.rawValue)")
         }
         store.removeObject(forKey: "cursorModeEnabled")
-        notifyChange()
+        notifyChange(.cursor)
     }
 
     // MARK: - Touch gestures
@@ -293,7 +295,7 @@ final class Preferences {
         get { store.object(forKey: "touchEnabled") as? Bool ?? false }
         set {
             store.set(newValue, forKey: "touchEnabled")
-            notifyChange()
+            notifyChange(.touch)
         }
     }
 
@@ -301,7 +303,7 @@ final class Preferences {
         get { store.bool(forKey: "touchLeftHanded") }
         set {
             store.set(newValue, forKey: "touchLeftHanded")
-            notifyChange()
+            notifyChange(.touch)
         }
     }
 
@@ -312,7 +314,7 @@ final class Preferences {
         get { store.object(forKey: "touchShowsDrawing") as? Bool ?? true }
         set {
             store.set(newValue, forKey: "touchShowsDrawing")
-            notifyChange()
+            notifyChange(.touch)
         }
     }
 
@@ -325,7 +327,7 @@ final class Preferences {
         }
         set {
             store.set(TouchTuning.clampDrawSpread(newValue), forKey: "touchDrawSpread")
-            notifyChange()
+            notifyChange(.touch)
         }
     }
 
@@ -335,7 +337,7 @@ final class Preferences {
 
     func setCharacterSource(_ source: CharacterSource, enabled: Bool) {
         store.set(enabled, forKey: "characterSource.\(source.rawValue)")
-        notifyChange()
+        notifyChange(.touch)
     }
 
     /// Reset every gesture binding and touch option; mouse buttons and cursor keys are untouched.
@@ -352,11 +354,37 @@ final class Preferences {
         store.removeObject(forKey: "touchLeftHanded")
         store.removeObject(forKey: "touchShowsDrawing")
         store.removeObject(forKey: "touchDrawSpread")
-        notifyChange()
+        notifyChange(.touch)
     }
 
-    private func notifyChange() {
+    private func notifyChange(_ area: SettingsArea) {
         cachedAppOverrides = nil
-        NotificationCenter.default.post(name: Preferences.didChangeNotification, object: nil)
+        NotificationCenter.default.post(
+            name: Preferences.didChangeNotification,
+            object: nil,
+            userInfo: [Preferences.areaUserInfoKey: area]
+        )
+    }
+}
+
+/// Which part of the settings a change touched, so an observer can tell a change it has
+/// to act on from one it can ignore. Cursor mode, for one, stands down when its own keys
+/// change and keeps going when a scroll slider moves.
+enum SettingsArea: String {
+    case bindings
+    case device
+    case apps
+    case scroll
+    case cursor
+    case touch
+    case updates
+    /// Everything at once, as after importing settings.
+    case all
+}
+
+extension Notification {
+    /// The area a `Preferences.didChangeNotification` reports; `.all` when it says nothing.
+    var settingsArea: SettingsArea {
+        userInfo?[Preferences.areaUserInfoKey] as? SettingsArea ?? .all
     }
 }

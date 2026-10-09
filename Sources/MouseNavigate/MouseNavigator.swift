@@ -386,6 +386,8 @@ final class MouseNavigator {
         updateFrontmostDisabled()
         guard let eventTap, desiredEventMask != installedEventMask else { return }
 
+        // The new tap would never see the key-up a hold is waiting on.
+        cursorEngine.forceExit()
         releaseHeldMouseInput()
         CGEvent.tapEnable(tap: eventTap, enable: false)
         if let runLoopSource {

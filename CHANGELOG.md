@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
   the unified log under the `tap` category, with what switched it off.
 - Per-app bindings are decoded once per settings change instead of three times per button
   press.
+- Dragging a scroll-speed slider, rebinding a mouse button, or changing any other setting
+  outside the Keyboard Cursor tab no longer ends cursor mode.
 
 ## [0.5.0] - 2026-10-09
 

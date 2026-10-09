@@ -101,7 +101,7 @@ final class KeyboardCursorEngine {
         // gate waiting on a key that no longer means anything.
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(preferencesDidChange),
+            selector: #selector(preferencesDidChange(_:)),
             name: Preferences.didChangeNotification,
             object: nil
         )
@@ -111,9 +111,16 @@ final class KeyboardCursorEngine {
         forceExit()
     }
 
-    @objc private func preferencesDidChange() {
+    /// Only a change to cursor mode's own keys and tunables ends a hold in progress. A
+    /// scroll slider being dragged, or a button rebound, is none of its business.
+    @objc private func preferencesDidChange(_ notification: Notification) {
         reloadSettings()
-        forceExit()
+        switch notification.settingsArea {
+        case .cursor, .all:
+            forceExit()
+        default:
+            break
+        }
     }
 
     private func reloadSettings() {
