@@ -386,9 +386,13 @@ final class MouseNavigator {
         updateFrontmostDisabled()
         guard let eventTap, desiredEventMask != installedEventMask else { return }
 
-        // The new tap would never see the key-up a hold is waiting on.
+        // The new tap would never see the key-up a hold is waiting on, nor a left
+        // release once touch gestures are off.
         cursorEngine.forceExit()
         releaseHeldMouseInput()
+        if !Preferences.shared.isTouchEnabled {
+            isSwallowingLeftMouseUp = false
+        }
         CGEvent.tapEnable(tap: eventTap, enable: false)
         if let runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
@@ -403,10 +407,11 @@ final class MouseNavigator {
         }
     }
 
-    /// Lets go of anything held back mid-gesture, so no click is ever lost.
+    /// Lets go of anything held back mid-gesture, so no click is ever lost. A left press
+    /// that was swallowed stays swallowed: its release must be too, whatever else is
+    /// forgotten, just as the side buttons' are.
     private func releaseHeldMouseInput() {
         strokeCapture.cancel()
-        isSwallowingLeftMouseUp = false
         isSuppressingScrollSession = false
         tapClickDeadline = 0
         buttons.reset()
@@ -443,9 +448,10 @@ final class MouseNavigator {
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
-            // The tap went deaf, so a key-up may have been missed entirely.
+            // The tap went deaf, so a key-up or a mouse-up may have been missed entirely.
             cursorEngine.forceExit()
             releaseHeldMouseInput()
+            isSwallowingLeftMouseUp = false
             return Unmanaged.passUnretained(event)
         }
 
@@ -459,6 +465,10 @@ final class MouseNavigator {
             // its release is swallowed too, so the app never gets half a click.
             let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
             return buttons.buttonUp(button) ? nil : Unmanaged.passUnretained(event)
+        }
+        if type == .leftMouseUp, isPaused, isSwallowingLeftMouseUp {
+            isSwallowingLeftMouseUp = false
+            return nil
         }
 
         guard !isPaused else {

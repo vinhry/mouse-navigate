@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
   press.
 - Dragging a scroll-speed slider, rebinding a mouse button, or changing any other setting
   outside the Keyboard Cursor tab no longer ends cursor mode.
+- A Magic Mouse click that became a gesture no longer hands the app its release alone if
+  MouseNavigate is paused, or the app switched, while the button is still down.
 
 ## [0.5.0] - 2026-10-09
 
