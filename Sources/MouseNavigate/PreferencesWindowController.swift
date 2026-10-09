@@ -71,9 +71,12 @@ final class PreferencesWindowController: NSObject {
     private(set) var selectedApp: String?
     private var scopeControls: [(popup: NSPopUpButton, remove: NSButton, disable: NSButton)] = []
     private var testerLabel: NSTextField?
-    /// Which press of each button the Mouse tab's pickers are showing, and with which
-    /// modifier keys held.
-    private var buttonPress: ButtonPress = .click
+    /// Which press or drag of each button the Mouse tab's pickers are showing, and with
+    /// which modifier keys held.
+    private var buttonInput: ButtonInput = .press(.click)
+    /// The Press picker's segments, presses first and then the four drags.
+    private static let buttonInputs: [ButtonInput] =
+        ButtonPress.allCases.map { .press($0) } + DragDirection.allCases.map { .drag($0) }
     private var buttonModifiers: Shortcut.Modifiers = []
 
     /// The Scroll Wheel section's controls, built and refreshed in their own file.
@@ -239,14 +242,20 @@ final class PreferencesWindowController: NSObject {
         let pressLabel = NSTextField(labelWithString: "Press:")
         pressLabel.alignment = .right
         let pressPicker = NSSegmentedControl(
-            labels: ButtonPress.allCases.map(\.displayName),
+            labels: PreferencesWindowController.buttonInputs.map { input in
+                switch input {
+                case .press(let press): return press.displayName
+                case .drag(let direction): return direction.displayName
+                }
+            },
             trackingMode: .selectOne,
             target: self,
             action: #selector(buttonPressChanged(_:))
         )
         pressPicker.selectedSegment = 0
-        pressPicker.toolTip = "A button with a hold or double-click binding waits to see which "
-            + "it was before acting, so bind those only where you want them."
+        pressPicker.toolTip = "A button with a hold, double-click or drag binding waits to see which "
+            + "it was before acting, so bind those only where you want them. A drag is the "
+            + "button held while the mouse moves that way."
 
         let withLabel = NSTextField(labelWithString: "With:")
         withLabel.alignment = .right
@@ -312,8 +321,8 @@ final class PreferencesWindowController: NSObject {
     }
 
     @objc private func buttonPressChanged(_ sender: NSSegmentedControl) {
-        guard ButtonPress.allCases.indices.contains(sender.selectedSegment) else { return }
-        buttonPress = ButtonPress.allCases[sender.selectedSegment]
+        guard PreferencesWindowController.buttonInputs.indices.contains(sender.selectedSegment) else { return }
+        buttonInput = PreferencesWindowController.buttonInputs[sender.selectedSegment]
         refreshBindings { slot in
             if case .button = slot { return true }
             return false
@@ -411,7 +420,7 @@ final class PreferencesWindowController: NSObject {
 
     private func trigger(for slot: BindingSlot) -> BindingTrigger {
         switch slot {
-        case .button(let number): return .button(number, detector.activeProfile, buttonPress, buttonModifiers)
+        case .button(let number): return .button(number, detector.activeProfile, input: buttonInput, modifiers: buttonModifiers)
         case .touch(let gesture): return .touch(gesture)
         case .character(let gesture): return .character(gesture)
         }

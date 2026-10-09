@@ -6,9 +6,9 @@ import MouseNavigateCore
 /// only, as the event tap is.
 final class ButtonPressController {
     private let performer: ActionPerformer
-    /// The binding for a press with the given modifiers held, resolved for the active
-    /// profile and frontmost app.
-    private let binding: (Int, ButtonPress, Shortcut.Modifiers) -> ActionBinding
+    /// The binding for a press or drag with the given modifiers held, resolved for the
+    /// active profile and frontmost app.
+    private let binding: (Int, ButtonInput, Shortcut.Modifiers) -> ActionBinding
 
     private var tracker = ButtonPressTracker()
     private var timers: [Int: DispatchWorkItem] = [:]
@@ -16,7 +16,7 @@ final class ButtonPressController {
     /// later, by a timer or a release, and means what the press meant.
     private var pressModifiers: [Int: Shortcut.Modifiers] = [:]
 
-    init(performer: ActionPerformer, binding: @escaping (Int, ButtonPress, Shortcut.Modifiers) -> ActionBinding) {
+    init(performer: ActionPerformer, binding: @escaping (Int, ButtonInput, Shortcut.Modifiers) -> ActionBinding) {
         self.performer = performer
         self.binding = binding
     }
@@ -25,15 +25,25 @@ final class ButtonPressController {
     func buttonDown(_ button: Int, modifiers: Shortcut.Modifiers, at location: CGPoint) -> Bool {
         pressModifiers[button] = modifiers
         let capabilities = ButtonPressTracker.Capabilities(
-            hasHold: binding(button, .hold, modifiers) != .disabled,
-            hasDoubleClick: binding(button, .doubleClick, modifiers) != .disabled
+            hasHold: binding(button, .press(.hold), modifiers) != .disabled,
+            hasDoubleClick: binding(button, .press(.doubleClick), modifiers) != .disabled,
+            hasDrag: DragDirection.allCases.contains { binding(button, .drag($0), modifiers) != .disabled }
         )
         let decision = tracker.buttonDown(
             button,
             capabilities: capabilities,
             location: Vector2(x: Double(location.x), y: Double(location.y))
-        ) { press in
-            performer.perform(binding(button, press, modifiers))
+        ) { input in
+            performer.perform(binding(button, input, modifiers))
+        }
+        return apply(decision, to: button)
+    }
+
+    /// Returns true when the event is swallowed.
+    func buttonDragged(_ button: Int, by delta: Vector2) -> Bool {
+        let modifiers = pressModifiers[button] ?? []
+        let decision = tracker.buttonDragged(button, by: delta) { input in
+            performer.perform(binding(button, input, modifiers))
         }
         return apply(decision, to: button)
     }
@@ -42,8 +52,8 @@ final class ButtonPressController {
     /// whose press was swallowed is swallowed too, and nothing else happens.
     func buttonUp(_ button: Int) -> Bool {
         let modifiers = pressModifiers[button] ?? []
-        let decision = tracker.buttonUp(button) { press in
-            performer.perform(binding(button, press, modifiers))
+        let decision = tracker.buttonUp(button) { input in
+            performer.perform(binding(button, input, modifiers))
         }
         return apply(decision, to: button)
     }
@@ -77,8 +87,8 @@ final class ButtonPressController {
     private func timerFired(for button: Int, generation: Int) {
         timers[button] = nil
         let modifiers = pressModifiers[button] ?? []
-        let decision = tracker.timerFired(button, generation: generation) { press in
-            performer.perform(binding(button, press, modifiers))
+        let decision = tracker.timerFired(button, generation: generation) { input in
+            performer.perform(binding(button, input, modifiers))
         }
         _ = apply(decision, to: button)
     }

@@ -232,12 +232,49 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(preferences.appBinding(for: .touch(.trackpadThreeFingerTap), app: "com.example.app"), .builtin(.copy))
     }
 
+    // MARK: - Drags
+
+    func testDragBindingsResolveLikePresses() {
+        let preferences = makePreferences()
+        XCTAssertFalse(preferences.hasAnyDragBinding)
+        preferences.setGlobalBinding(.builtin(.missionControl), for: .buttonDrag(5, .mxMaster4, .up))
+        XCTAssertTrue(preferences.hasAnyDragBinding)
+        XCTAssertEqual(
+            preferences.buttonBinding(5, profile: .mxMaster4, input: .drag(.up), modifiers: [], app: nil),
+            .builtin(.missionControl)
+        )
+        XCTAssertEqual(
+            preferences.buttonBinding(5, profile: .mxMaster4, input: .drag(.up), modifiers: [.shift], app: nil),
+            .builtin(.missionControl),
+            "an unbound combination falls back to the plain drag"
+        )
+        XCTAssertEqual(
+            preferences.buttonBinding(5, profile: .mxMaster4, input: .drag(.down), modifiers: [], app: nil),
+            .disabled
+        )
+        preferences.setGlobalBinding(.disabled, for: .buttonDrag(5, .mxMaster4, .up))
+        XCTAssertFalse(preferences.hasAnyDragBinding, "a drag set back to Disabled is not a binding")
+    }
+
+    func testAnAppsDragBindingCountsToo() {
+        let preferences = makePreferences()
+        preferences.addApp(bundleID: "com.example.app", name: "Example")
+        preferences.setAppBinding(.builtin(.copy), for: .buttonDrag(4, .generic, .left), app: "com.example.app")
+        XCTAssertTrue(preferences.hasAnyDragBinding)
+        XCTAssertEqual(
+            preferences.buttonBinding(4, profile: .generic, input: .drag(.left), modifiers: [], app: "com.example.app"),
+            .builtin(.copy)
+        )
+        preferences.removeApp(bundleID: "com.example.app")
+        XCTAssertFalse(preferences.hasAnyDragBinding)
+    }
+
     // MARK: - Modifier combinations
 
     func testAnUnboundCombinationFallsBackToThePlainButton() {
         let preferences = makePreferences()
         XCTAssertEqual(
-            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.shift], app: nil),
+            preferences.buttonBinding(3, profile: .mxMaster4, input: .press(.click), modifiers: [.shift], app: nil),
             .builtin(.back)
         )
     }
@@ -246,15 +283,15 @@ final class PreferencesTests: XCTestCase {
         let preferences = makePreferences()
         preferences.setGlobalBinding(.builtin(.newTab), for: .button(3, .mxMaster4, .click, [.shift]))
         XCTAssertEqual(
-            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.shift], app: nil),
+            preferences.buttonBinding(3, profile: .mxMaster4, input: .press(.click), modifiers: [.shift], app: nil),
             .builtin(.newTab)
         )
         XCTAssertEqual(
-            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [], app: nil),
+            preferences.buttonBinding(3, profile: .mxMaster4, input: .press(.click), modifiers: [], app: nil),
             .builtin(.back)
         )
         XCTAssertEqual(
-            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.shift, .command], app: nil),
+            preferences.buttonBinding(3, profile: .mxMaster4, input: .press(.click), modifiers: [.shift, .command], app: nil),
             .builtin(.back),
             "a different combination is not the bound one"
         )
@@ -264,7 +301,7 @@ final class PreferencesTests: XCTestCase {
         let preferences = makePreferences()
         preferences.setGlobalBinding(.disabled, for: .button(3, .mxMaster4, .click, [.shift]))
         XCTAssertEqual(
-            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.shift], app: nil),
+            preferences.buttonBinding(3, profile: .mxMaster4, input: .press(.click), modifiers: [.shift], app: nil),
             .builtin(.back)
         )
     }
@@ -275,16 +312,16 @@ final class PreferencesTests: XCTestCase {
         preferences.setAppBinding(.builtin(.copy), for: .button(3, .mxMaster4, .click, [.command]), app: "com.example.app")
 
         XCTAssertEqual(
-            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.command], app: "com.example.app"),
+            preferences.buttonBinding(3, profile: .mxMaster4, input: .press(.click), modifiers: [.command], app: "com.example.app"),
             .builtin(.copy)
         )
         XCTAssertEqual(
-            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.command], app: "com.other"),
+            preferences.buttonBinding(3, profile: .mxMaster4, input: .press(.click), modifiers: [.command], app: "com.other"),
             .builtin(.back)
         )
         preferences.setApp("com.example.app", disabled: true)
         XCTAssertEqual(
-            preferences.buttonBinding(3, profile: .mxMaster4, press: .click, modifiers: [.command], app: "com.example.app"),
+            preferences.buttonBinding(3, profile: .mxMaster4, input: .press(.click), modifiers: [.command], app: "com.example.app"),
             .disabled
         )
     }

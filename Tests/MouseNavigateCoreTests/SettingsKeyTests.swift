@@ -10,6 +10,9 @@ final class SettingsKeyTests: XCTestCase {
                 for press in ButtonPress.allCases {
                     keys.append(BindingTrigger.button(button, profile, press).storageKey)
                 }
+                for direction in DragDirection.allCases {
+                    keys.append(BindingTrigger.buttonDrag(button, profile, direction).storageKey)
+                }
             }
         }
         keys += TouchGesture.allCases.map { BindingTrigger.touch($0).storageKey }

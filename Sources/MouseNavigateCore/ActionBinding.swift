@@ -163,8 +163,18 @@ public enum ButtonPress: String, CaseIterable {
 /// without modifier keys held, a touch gesture or a drawn character.
 public enum BindingTrigger: Hashable {
     case button(Int, DeviceProfile, ButtonPress = .click, Shortcut.Modifiers = [])
+    /// A side button held while the mouse is moved that way.
+    case buttonDrag(Int, DeviceProfile, DragDirection, Shortcut.Modifiers = [])
     case touch(TouchGesture)
     case character(CharacterGesture)
+
+    /// The trigger for whatever a button was asked to do.
+    public static func button(_ number: Int, _ profile: DeviceProfile, input: ButtonInput, modifiers: Shortcut.Modifiers = []) -> BindingTrigger {
+        switch input {
+        case .press(let press): return .button(number, profile, press, modifiers)
+        case .drag(let direction): return .buttonDrag(number, profile, direction, modifiers)
+        }
+    }
 
     /// The settings key. A plain click keeps the key it had before bindings existed;
     /// modifiers add a suffix, "button.mxMaster4.3+shift+cmd" for ⇧⌘ and button 3.
@@ -178,6 +188,8 @@ public enum BindingTrigger: Hashable {
             case .doubleClick: prefix = SettingsKey.buttonDoublePrefix
             }
             return "\(prefix)\(profile.rawValue).\(number)\(modifiers.storageSuffix)"
+        case .buttonDrag(let number, let profile, let direction, let modifiers):
+            return "\(SettingsKey.buttonDragPrefix)\(profile.rawValue).\(number).\(direction.rawValue)\(modifiers.storageSuffix)"
         case .touch(let gesture): return SettingsKey.touchPrefix + gesture.rawValue
         case .character(let gesture): return SettingsKey.characterPrefix + gesture.rawValue
         }
@@ -189,7 +201,7 @@ public enum BindingTrigger: Hashable {
         switch self {
         case .button(let number, let profile, .click, let modifiers) where modifiers.isEmpty:
             return .builtin(profile.defaultActions[number] ?? .disabled)
-        case .button: return .disabled
+        case .button, .buttonDrag: return .disabled
         case .touch(let gesture): return .builtin(gesture.defaultAction)
         case .character(let gesture): return .builtin(gesture.defaultAction)
         }
@@ -200,7 +212,7 @@ public enum BindingTrigger: Hashable {
     public func allows(_ binding: ActionBinding) -> Bool {
         guard let action = binding.builtinAction else { return true }
         switch self {
-        case .button: return action.isAvailableForButtons
+        case .button, .buttonDrag: return action.isAvailableForButtons
         case .touch(let gesture): return gesture.allows(action)
         case .character: return action != .moveResizeWindow
         }

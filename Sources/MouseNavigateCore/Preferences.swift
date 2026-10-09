@@ -107,17 +107,39 @@ public final class Preferences {
     public func buttonBinding(
         _ button: Int,
         profile: DeviceProfile,
-        press: ButtonPress,
+        input: ButtonInput,
         modifiers: Shortcut.Modifiers,
         app bundleID: String?
     ) -> ActionBinding {
         if !modifiers.isEmpty {
-            let combination = binding(for: .button(button, profile, press, modifiers), app: bundleID)
+            let combination = binding(for: .button(button, profile, input: input, modifiers: modifiers), app: bundleID)
             if combination != .disabled {
                 return combination
             }
         }
-        return binding(for: .button(button, profile, press), app: bundleID)
+        return binding(for: .button(button, profile, input: input), app: bundleID)
+    }
+
+    private var cachedHasAnyDragBinding: Bool?
+
+    /// Whether any button, for any mouse in any app, is bound to a drag, which is what
+    /// decides whether side-button drags pass through the app at all. Cached like
+    /// `isAnyScrollSettingActive`, for the same reason.
+    public var hasAnyDragBinding: Bool {
+        if let cachedHasAnyDragBinding {
+            return cachedHasAnyDragBinding
+        }
+        func isBound(_ key: String, _ value: String) -> Bool {
+            key.hasPrefix(SettingsKey.buttonDragPrefix) && value != ButtonAction.disabled.rawValue
+        }
+        let global = SettingsKey.userSettingKeys(in: store).contains { key in
+            isBound(key, store.string(forKey: key) ?? "")
+        }
+        let apps = appOverrides.values.contains { override in
+            override.bindings.contains { isBound($0.key, $0.value) }
+        }
+        cachedHasAnyDragBinding = global || apps
+        return global || apps
     }
 
     /// The binding for all apps, or the trigger's default when none is stored or the
@@ -455,6 +477,7 @@ public final class Preferences {
     private func notifyChange(_ area: SettingsArea) {
         cachedAppOverrides = nil
         cachedAnyScrollSettingActive = nil
+        cachedHasAnyDragBinding = nil
         NotificationCenter.default.post(
             name: Preferences.didChangeNotification,
             object: nil,

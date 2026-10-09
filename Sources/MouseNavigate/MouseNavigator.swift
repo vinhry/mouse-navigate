@@ -41,11 +41,11 @@ final class MouseNavigator {
     private let strokeCapture = StrokeCapture()
     private lazy var performer = ActionPerformer(cursorEngine: cursorEngine, windowManager: WindowManager())
     private lazy var touchMonitor = TouchMonitor(performer: performer)
-    private lazy var buttons = ButtonPressController(performer: performer) { [unowned self] button, press, modifiers in
+    private lazy var buttons = ButtonPressController(performer: performer) { [unowned self] button, input, modifiers in
         Preferences.shared.buttonBinding(
             button,
             profile: self.detector.activeProfile,
-            press: press,
+            input: input,
             modifiers: modifiers,
             app: FrontmostApp.shared.bundleID
         )
@@ -368,6 +368,10 @@ final class MouseNavigator {
         } else if Preferences.shared.isAnyScrollSettingActive {
             types.append(.scrollWheel)
         }
+        // Side-button drags are only worth the trip while a button is bound to one.
+        if !types.contains(.otherMouseDragged), Preferences.shared.hasAnyDragBinding {
+            types.append(.otherMouseDragged)
+        }
         return types.reduce(CGEventMask(0)) { $0 | CGEventMask(1) << $1.rawValue }
     }
 
@@ -513,11 +517,19 @@ final class MouseNavigator {
             let modifiers = Shortcut.Modifiers(event.flags)
             return buttons.buttonDown(button, modifiers: modifiers, at: event.location) ? nil : Unmanaged.passUnretained(event)
         case .otherMouseDragged:
-            // Only the middle button draws; a side button dragged mid-stroke is its own affair.
-            guard event.getIntegerValueField(.mouseEventButtonNumber) == 2 else {
+            let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
+            if button == 2 {
+                // Only the middle button draws.
+                return strokeCapture.handleDragged(.middle, at: event.location) ? nil : Unmanaged.passUnretained(event)
+            }
+            guard Preferences.configurableButtons.contains(button) else {
                 return Unmanaged.passUnretained(event)
             }
-            return strokeCapture.handleDragged(.middle, at: event.location) ? nil : Unmanaged.passUnretained(event)
+            let delta = Vector2(
+                x: event.getDoubleValueField(.mouseEventDeltaX),
+                y: event.getDoubleValueField(.mouseEventDeltaY)
+            )
+            return buttons.buttonDragged(button, by: delta) ? nil : Unmanaged.passUnretained(event)
         case .otherMouseUp:
             let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
             if button == 2 {

@@ -19,6 +19,9 @@ All notable changes to this project will be documented in this file.
   can have its own scroll settings, under **For:** in the Scroll Wheel section, and so can
   an app, which follows **Applies to** like the pickers; an app's win over the mouse's,
   which win over the ones for all.
+- **Hold a side button and drag.** Each button has four more bindings under **Press** on
+  the Mouse tab, **Drag ↑ ↓ ← →**, which fire once the pointer has moved about 30 points
+  with the button held. A drag counts only before a hold has fired.
 
 ### Changed
 - **Reverse scrolling direction** became **Reverse: Both**, and the one **Speed** became

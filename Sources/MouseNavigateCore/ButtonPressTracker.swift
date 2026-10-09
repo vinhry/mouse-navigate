@@ -1,7 +1,7 @@
 import Foundation
 
 /// Runs the configurable mouse buttons: a click straight away when that is all a button is
-/// bound to, or through a `ButtonPressGate` when it also has a hold or double-click.
+/// bound to, or through a `ButtonPressGate` when it also has a hold, double-click or drag.
 ///
 /// Whatever the bindings decide, a press and its release are kept together: an app is never
 /// handed a release for a press it did not see, and a press no binding handled is replayed
@@ -47,15 +47,20 @@ public struct ButtonPressTracker {
     /// the button is still down whatever else has been forgotten.
     private var swallowRelease: Set<Int> = []
     private var pressLocations: [Int: Vector2] = [:]
+    /// One per button held back that can be dragged.
+    private var dragDetectors: [Int: DragDirectionDetector] = [:]
     private let holdDelay: TimeInterval
     private let doubleClickWindow: TimeInterval
+    private let dragThreshold: Double
 
     public init(
         holdDelay: TimeInterval = ButtonPressGate.defaultHoldDelay,
-        doubleClickWindow: TimeInterval = ButtonPressGate.defaultDoubleClickWindow
+        doubleClickWindow: TimeInterval = ButtonPressGate.defaultDoubleClickWindow,
+        dragThreshold: Double = DragDirectionDetector.defaultThreshold
     ) {
         self.holdDelay = holdDelay
         self.doubleClickWindow = doubleClickWindow
+        self.dragThreshold = dragThreshold
     }
 
     public func phase(of button: Int) -> ButtonPressGate.Phase {
@@ -67,12 +72,12 @@ public struct ButtonPressTracker {
         gates[button]?.timerGeneration
     }
 
-    /// `perform` runs a press and reports whether a binding handled it.
+    /// `perform` runs a press or drag and reports whether a binding handled it.
     public mutating func buttonDown(
         _ button: Int,
         capabilities: Capabilities,
         location: Vector2,
-        perform: (ButtonPress) -> Bool
+        perform: (ButtonInput) -> Bool
     ) -> Decision {
         // A release missed earlier must not swallow this press's own release.
         swallowRelease.remove(button)
@@ -82,22 +87,43 @@ public struct ButtonPressTracker {
 
         // A gesture already under way finishes in the gate, whatever the bindings say now.
         guard capabilities.needsGate || gate.phase != .idle else {
-            let handled = perform(.click)
+            let handled = perform(.press(.click))
             if handled {
                 swallowRelease.insert(button)
             }
             return Decision(consume: handled)
         }
 
+        let wasIdle = gate.phase == .idle
         let response = gate.buttonDown(capabilities: capabilities)
         gates[button] = gate
         if response.consume {
             swallowRelease.insert(button)
         }
+        if wasIdle, capabilities.hasDrag {
+            dragDetectors[button] = DragDirectionDetector(threshold: dragThreshold)
+        }
         return apply(response, to: button, perform: perform)
     }
 
-    public mutating func buttonUp(_ button: Int, perform: (ButtonPress) -> Bool) -> Decision {
+    /// The pointer moved with `button` down. Taken only while a press that can be dragged
+    /// is being held back; a button bound to a click alone passes its drags through, as
+    /// it passed its press.
+    public mutating func buttonDragged(_ button: Int, by delta: Vector2, perform: (ButtonInput) -> Bool) -> Decision {
+        guard var detector = dragDetectors[button], var gate = gates[button], gate.phase != .idle else {
+            return .pass
+        }
+        guard let direction = detector.moved(by: delta) else {
+            dragDetectors[button] = detector
+            return .consume
+        }
+        dragDetectors[button] = detector
+        let response = gate.dragFired(direction)
+        gates[button] = gate
+        return apply(response, to: button, perform: perform)
+    }
+
+    public mutating func buttonUp(_ button: Int, perform: (ButtonInput) -> Bool) -> Decision {
         guard var gate = gates[button], gate.phase != .idle else {
             return swallowRelease.remove(button) != nil ? .consume : .pass
         }
@@ -109,7 +135,7 @@ public struct ButtonPressTracker {
         return apply(response, to: button, perform: perform)
     }
 
-    public mutating func timerFired(_ button: Int, generation: Int, perform: (ButtonPress) -> Bool) -> Decision {
+    public mutating func timerFired(_ button: Int, generation: Int, perform: (ButtonInput) -> Bool) -> Decision {
         guard var gate = gates[button] else { return .consume }
         let response = gate.timerFired(generation: generation)
         gates[button] = gate
@@ -122,17 +148,19 @@ public struct ButtonPressTracker {
         for button in gates.keys {
             gates[button]?.reset()
         }
+        dragDetectors.removeAll()
     }
 
     private mutating func apply(
         _ response: ButtonPressGate.Response,
         to button: Int,
-        perform: (ButtonPress) -> Bool
+        perform: (ButtonInput) -> Bool
     ) -> Decision {
         var decision = Decision(consume: response.consume, armTimer: response.armTimer, cancelTimer: response.cancelTimer)
-        if let press = response.fire, !perform(press) {
+        if let input = response.fire, !perform(input), case .press(let press) = input {
             // The gate held the real press back, so nothing else will deliver it. A
-            // double-click that went nowhere is still two clicks to the app.
+            // double-click that went nowhere is still two clicks to the app. A drag that
+            // went nowhere is not replayed: a click was not what the user meant.
             decision.replay = Replay(
                 clicks: press == .doubleClick ? 2 : 1,
                 location: pressLocations[button] ?? .zero
@@ -140,6 +168,7 @@ public struct ButtonPressTracker {
         }
         if gates[button]?.phase == .idle {
             pressLocations[button] = nil
+            dragDetectors[button] = nil
         }
         return decision
     }

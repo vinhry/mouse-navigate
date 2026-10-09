@@ -75,6 +75,7 @@ public enum SettingsKey {
     public static let buttonPrefix = "button."
     public static let buttonHoldPrefix = "buttonHold."
     public static let buttonDoublePrefix = "buttonDouble."
+    public static let buttonDragPrefix = "buttonDrag."
     public static let touchPrefix = "touch."
     public static let characterPrefix = "character."
     public static let cursorKeyPrefix = "key."
@@ -85,6 +86,7 @@ public enum SettingsKey {
         Family(prefix: buttonPrefix, type: .string),
         Family(prefix: buttonHoldPrefix, type: .string),
         Family(prefix: buttonDoublePrefix, type: .string),
+        Family(prefix: buttonDragPrefix, type: .string),
         Family(prefix: touchPrefix, type: .string),
         Family(prefix: characterPrefix, type: .string),
         Family(prefix: cursorKeyPrefix, type: .int),

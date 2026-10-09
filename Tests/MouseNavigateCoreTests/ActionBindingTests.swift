@@ -96,6 +96,19 @@ final class ActionBindingTests: XCTestCase {
         XCTAssertNil(Shortcut.Modifiers(storageSuffix: "+"))
     }
 
+    func testDragTriggersHaveKeysOfTheirOwn() {
+        XCTAssertEqual(BindingTrigger.buttonDrag(5, .mxMaster4, .up).storageKey, "buttonDrag.mxMaster4.5.up")
+        XCTAssertEqual(
+            BindingTrigger.buttonDrag(5, .generic, .left, [.command]).storageKey,
+            "buttonDrag.generic.5.left+cmd"
+        )
+        XCTAssertEqual(BindingTrigger.buttonDrag(5, .mxMaster4, .down).defaultBinding, .disabled)
+        XCTAssertEqual(BindingTrigger.button(5, .mxMaster4, input: .drag(.right)), .buttonDrag(5, .mxMaster4, .right))
+        XCTAssertEqual(BindingTrigger.button(5, .mxMaster4, input: .press(.hold), modifiers: [.shift]), .button(5, .mxMaster4, .hold, [.shift]))
+        XCTAssertFalse(BindingTrigger.buttonDrag(5, .mxMaster4, .up).allows(.builtin(.moveResizeWindow)))
+        XCTAssertTrue(BindingTrigger.buttonDrag(5, .mxMaster4, .up).allows(.builtin(.missionControl)))
+    }
+
     func testACombinationStartsUnbound() {
         XCTAssertEqual(BindingTrigger.button(3, .mxMaster4, .click, [.shift]).defaultBinding, .disabled)
         XCTAssertEqual(BindingTrigger.button(3, .mxMaster4).defaultBinding, .builtin(.back))

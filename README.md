@@ -40,6 +40,8 @@ To see what MouseNavigate detects:
 ## Behavior
 
 - Buttons `3`–`9` are individually configurable via **Preferences** (see [Button Mapping](#button-mapping) below).
+- Hold a side button and move the mouse up, down, left or right to run something else
+  (see [Hold, double-click and drag](#hold-double-click-and-drag) below).
 - Hold `A` to drive the pointer from the keyboard (see [Keyboard Cursor](#keyboard-cursor) below).
 - Opt-in trackpad, Magic Mouse and drawn-letter gestures (see [Touch Gestures](#touch-gestures) below).
 - Bind anything to a keyboard shortcut, an app, a URL or a Shortcuts shortcut, for all apps
@@ -121,21 +123,29 @@ The custom actions each take a value of their own:
 Maximize Left / Right on a window that already fills that half carries it on to the next
 display. Window actions use the Accessibility permission the app already has.
 
-### Hold and double-click
+### Hold, double-click and drag
 
-Each button can also do something else when held or double-clicked. Switch **Press** on the
-Mouse tab to **Hold** or **Double-click** to bind those; both start as **Disabled**.
+Each button can also do something else when held, double-clicked, or held while the mouse
+is moved. Switch **Press** on the Mouse tab to **Hold**, **Double-click** or one of
+**Drag ↑ ↓ ← →** to bind those; all start as **Disabled**.
 
 A button bound only to a click acts the moment it goes down, exactly as before. Once it has
-a hold or double-click too, it has to wait to see which you meant:
+a hold, double-click or drag too, it has to wait to see which you meant:
 
 - **Hold** fires after about a third of a second while the button is still down.
 - **Double-click** fires on the second press, if it comes within 0.3 s of the first
   release. Because of that, a single click on such a button runs 0.3 s after release.
+- **Drag** fires once the pointer has moved about 30 points while the button is down,
+  in whichever direction it moved furthest, once per press. The pointer is not held still:
+  it travels those 30 points. A drag counts only before a hold has fired, and not on the
+  second press of a double-click.
 - A press the binding does not handle, such as Back outside a browser, is passed on as the
   button's own click, where the button went down: one click for a click or a hold, two for
-  a double-click. A press MouseNavigate swallowed never reaches an app as a release alone,
-  not even if you pause or switch apps while the button is down.
+  a double-click. A drag nobody handled is not passed on, since a click was not what you
+  meant. A press MouseNavigate swallowed never reaches an app as a release alone, not even
+  if you pause or switch apps while the button is down.
+
+Side-button drags only pass through MouseNavigate while some button is bound to one.
 
 ### Modifier keys
 
