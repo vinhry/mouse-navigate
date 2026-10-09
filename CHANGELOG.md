@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
 - A drawn stroke is matched against the letter templates once rather than twice.
 - An event tap that macOS switched off, and MouseNavigate switched back on, is noted in
   the unified log under the `tap` category, with what switched it off.
+- Per-app bindings are decoded once per settings change instead of three times per button
+  press.
 
 ## [0.5.0] - 2026-10-09
 

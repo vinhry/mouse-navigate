@@ -23,6 +23,9 @@ enum CharacterSource: String, CaseIterable {
 }
 
 /// UserDefaults-backed settings shared by the daemon and the preferences window.
+///
+/// Main thread only: the event tap, the preferences window and the touch monitor's
+/// gesture handling all run there, and the cache below is not locked.
 final class Preferences {
     static let shared = Preferences()
 
@@ -117,9 +120,18 @@ final class Preferences {
 
     private static let appOverridesKey = "appOverrides"
 
+    /// Decoded once per change rather than on every press: a single button press asks
+    /// for its hold, double-click and click bindings in turn.
+    private var cachedAppOverrides: [String: AppOverride]?
+
     /// Keyed by bundle identifier.
     var appOverrides: [String: AppOverride] {
-        AppOverride.decodeAll(store.dictionary(forKey: Preferences.appOverridesKey))
+        if let cachedAppOverrides {
+            return cachedAppOverrides
+        }
+        let overrides = AppOverride.decodeAll(store.dictionary(forKey: Preferences.appOverridesKey))
+        cachedAppOverrides = overrides
+        return overrides
     }
 
     private func saveAppOverrides(_ overrides: [String: AppOverride]) {
@@ -344,6 +356,7 @@ final class Preferences {
     }
 
     private func notifyChange() {
+        cachedAppOverrides = nil
         NotificationCenter.default.post(name: Preferences.didChangeNotification, object: nil)
     }
 }
