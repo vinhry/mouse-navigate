@@ -17,6 +17,10 @@ final class SettingsKeyTests: XCTestCase {
         keys += CursorBinding.allCases.map(SettingsKey.cursorKey)
         keys += CursorSetting.allCases.map(SettingsKey.cursorSetting)
         keys += CharacterSource.allCases.map(SettingsKey.characterSource)
+        for field in ScrollField.allCases {
+            keys.append(SettingsKey.scroll(field))
+            keys += DeviceProfile.allCases.map { SettingsKey.scroll(field, profile: $0) }
+        }
         return keys
     }
 
@@ -67,6 +71,18 @@ final class SettingsKeyTests: XCTestCase {
             XCTAssertTrue(SettingsKey.isSetting(key))
             XCTAssertFalse(SettingsKey.isExportable(key))
         }
+        XCTAssertEqual(SettingsKey.type(of: SettingsKey.legacyScrollReversed), .bool)
+        XCTAssertEqual(SettingsKey.type(of: SettingsKey.legacyScrollSpeed), .double)
+        XCTAssertFalse(SettingsKey.isExportable(SettingsKey.legacyScrollSpeed))
+    }
+
+    func testScrollKeysAreTypedByField() {
+        XCTAssertEqual(SettingsKey.scroll(.reverse), "scroll.reverse")
+        XCTAssertEqual(SettingsKey.scroll(.smooth, profile: .mxMaster4), "scroll.mxMaster4.smooth")
+        XCTAssertEqual(SettingsKey.type(of: "scroll.reverse"), .string)
+        XCTAssertEqual(SettingsKey.type(of: "scroll.generic.verticalSpeed"), .double)
+        XCTAssertEqual(SettingsKey.type(of: "scroll.mxMaster3.commandFast"), .bool)
+        XCTAssertNil(SettingsKey.type(of: "scroll.mxMaster3.unknown"))
     }
 
     func testForeignKeysAreNotSettings() {

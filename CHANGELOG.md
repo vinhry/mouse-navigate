@@ -14,6 +14,15 @@ All notable changes to this project will be documented in this file.
 - **Modifier keys with the scroll wheel**, each its own option under Scroll Wheel: `⇧`
   scrolls sideways, `⌥` scrolls precisely, `⌘` scrolls fast. A modifier an option acts on
   is taken off the event, so an app does not act on it a second time.
+- **Scroll settings per axis, per mouse and per app.** The wheel reverses vertically,
+  horizontally, both ways or neither, and each axis has a speed of its own. A mouse model
+  can have its own scroll settings, under **For:** in the Scroll Wheel section, and so can
+  an app, which follows **Applies to** like the pickers; an app's win over the mouse's,
+  which win over the ones for all.
+
+### Changed
+- **Reverse scrolling direction** became **Reverse: Both**, and the one **Speed** became
+  a vertical and a horizontal speed. Existing settings carry over.
 
 ### Fixed
 - When the helper that reopens MouseNavigate after an update could not start, the

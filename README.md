@@ -164,11 +164,12 @@ Safari, Finder, Chrome, Chrome Canary, Firefox, Firefox Developer Edition, Arc, 
 and the Magic Mouse scroll continuously and are never touched, so a trackpad can keep
 natural scrolling while the wheel goes the other way.
 
-- **Reverse scrolling direction** flips both axes, including a horizontal thumb wheel.
-- **Speed** scales each notch from 0.5× to 4×. Slowing down never makes a notch do nothing.
+- **Reverse** flips the vertical wheel, a horizontal thumb wheel, both or neither.
+- **Vertical speed** and **Horizontal speed** scale each notch of that axis from 0.5× to
+  4×. Slowing down never makes a notch do nothing.
 - **Smooth scrolling (experimental)** spreads each notch over a few frames instead of
   jumping. It covers the same distance a notch does in standard Mac apps; browsers pick their
-  own distance per notch, so use **Speed** if it feels slower there.
+  own distance per notch, so raise the speed if it feels slower there.
 
 - **⇧ scrolls sideways** turns the wheel horizontal while Shift is held.
 - **⌥ scrolls precisely** moves a quarter as far per notch while Option is held.
@@ -178,9 +179,20 @@ natural scrolling while the wheel goes the other way.
 A modifier a wheel option acts on is used up: it is taken off the event, so an app that
 scrolls sideways on Shift, or zooms on Command, by itself does not do that as well.
 
-With everything at its defaults, and touch gestures off, wheel events never pass through
-MouseNavigate. Logi Options+ smooth scrolling makes a Logitech wheel scroll continuously, like a trackpad, so
-turn that off to use these.
+### Per mouse and per app
+
+The section follows **Applies to** at the top of the tab, so with an app chosen it edits
+that app's wheel; its own **For:** popup picks a mouse model instead, for a mouse that
+should scroll differently from the rest. Either scope starts out following the settings
+beneath it: tick **Use its own scroll settings** to give it some, starting from what it was
+getting, and untick to hand them back. An app's settings win over the mouse's, which win
+over the ones for all mice. In the settings file, a mouse model's settings live under
+`scroll.<profile>.<setting>` and an app's under its entry in `appOverrides`; a file can set
+just one of them and leave the rest to follow.
+
+With everything at its defaults in every scope, and touch gestures off, wheel events never
+pass through MouseNavigate. Logi Options+ smooth scrolling makes a Logitech wheel scroll
+continuously, like a trackpad, so turn that off to use these.
 
 ## Per-App Bindings
 
@@ -190,6 +202,9 @@ and the pickers switch to that app's bindings. Each starts as **Same as All Apps
 what that is; change only the ones you want different. **Applies to → All Apps** goes back.
 
 Per-app bindings follow the frontmost app, the one your keystrokes go to.
+
+The Scroll Wheel section on the Mouse tab follows the chosen app too, so a wheel can
+scroll differently in one app (see [Per mouse and per app](#per-mouse-and-per-app)).
 
 **Turn off MouseNavigate in this app** stands everything aside while that app is in front:
 buttons, gestures and the keyboard cursor, so `A` types with no hold delay. That is for

@@ -27,7 +27,7 @@ final class SettingsSnapshotTests: XCTestCase {
         preferences.setKeyCode(40, for: .activate)
         preferences.setValue(0.75, for: .holdThreshold)
         preferences.isCursorModeEnabled = false
-        preferences.scrollSettings = ScrollSettings(isReversed: true, speed: 2, isSmooth: true)
+        preferences.scrollSettings = ScrollSettings(reverse: .both, verticalSpeed: 2, horizontalSpeed: 2, isSmooth: true)
         preferences.isTouchEnabled = true
         preferences.isLeftHanded = true
         preferences.setCharacterSource(.middleButtonDrag, enabled: true)
@@ -39,6 +39,8 @@ final class SettingsSnapshotTests: XCTestCase {
         preferences.setAppBinding(.builtin(.copy), for: .touch(.trackpadThreeFingerTap), app: "com.example.app")
         preferences.addApp(bundleID: "com.example.game", name: "Game")
         preferences.setApp("com.example.game", disabled: true)
+        preferences.setAppScrollOverride(ScrollOverride(reverse: .vertical), app: "com.example.game")
+        preferences.setScrollOverride(ScrollOverride(horizontalSpeed: 0.5, isSmooth: false), for: .generic)
         return (preferences, store)
     }
 
@@ -67,7 +69,9 @@ final class SettingsSnapshotTests: XCTestCase {
         XCTAssertEqual(target.binding(for: .touch(.trackpadThreeFingerTap), app: "com.example.app"), .builtin(.copy))
         XCTAssertTrue(target.isAppDisabled("com.example.game"))
         XCTAssertEqual(target.keyCode(for: .activate), 40)
-        XCTAssertEqual(target.scrollSettings, ScrollSettings(isReversed: true, speed: 2, isSmooth: true))
+        XCTAssertEqual(target.scrollSettings, ScrollSettings(reverse: .both, verticalSpeed: 2, horizontalSpeed: 2, isSmooth: true))
+        XCTAssertEqual(target.appScrollOverride("com.example.game"), ScrollOverride(reverse: .vertical))
+        XCTAssertEqual(target.scrollOverride(for: .generic), ScrollOverride(horizontalSpeed: 0.5, isSmooth: false))
     }
 
     func testExportLeavesTheUpdateStampOut() throws {
@@ -174,9 +178,10 @@ final class SettingsSnapshotTests: XCTestCase {
         {"format": "MouseNavigate settings", "schemaVersion": 1, "configVersion": 2,
          "settings": {"scroll.speed": 2, "key.activate": 40.0, "scroll.reversed": true}}
         """))
-        XCTAssertEqual(preferences.scrollSettings.speed, 2)
+        // A version-2 file: its one speed and reverse switch are migrated on import.
+        XCTAssertEqual(preferences.scrollSettings.verticalSpeed, 2)
         XCTAssertEqual(preferences.keyCode(for: .activate), 40)
-        XCTAssertTrue(preferences.scrollSettings.isReversed)
+        XCTAssertEqual(preferences.scrollSettings.reverse, .both)
     }
 
     func testMalformedAppOverridesAreRefused() {
@@ -229,6 +234,18 @@ final class SettingsSnapshotTests: XCTestCase {
         XCTAssertEqual(preferences.globalBinding(for: .button(3, .mxMaster4)), .builtin(.newTab))
         XCTAssertNil(store.object(forKey: "button3"))
         XCTAssertEqual(store.integer(forKey: SettingsKey.configVersion), preferences.currentConfigVersion)
+    }
+
+    func testAVersionTwoFileBringsItsWheelSettingsAlong() throws {
+        let preferences = Preferences(store: makeStore())
+        try preferences.importSettings(json("""
+        {"format": "MouseNavigate settings", "schemaVersion": 1, "configVersion": 2,
+         "settings": {"scroll.reversed": true, "scroll.speed": 3, "scroll.smooth": true}}
+        """))
+        XCTAssertEqual(
+            preferences.scrollSettings,
+            ScrollSettings(reverse: .both, verticalSpeed: 3, horizontalSpeed: 3, isSmooth: true)
+        )
     }
 
     // MARK: - Values

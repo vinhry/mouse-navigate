@@ -29,6 +29,9 @@ final class MouseNavigator {
     private var tapClicks = TapClickSuppressor()
     /// Set once a touch gesture has taken a scroll, until the next scroll begins.
     private var isSuppressingScrollSession = false
+    /// The wheel settings for the mouse in use and the app in front, worked out when
+    /// either changes rather than on every notch.
+    private var resolvedScroll = ScrollSettings.standard
 
     /// NSApplication holds its delegate weakly, so it lives here.
     private lazy var appDelegate = AppDelegate(navigator: self)
@@ -153,8 +156,16 @@ final class MouseNavigator {
 
         FrontmostApp.shared.onChange = { [weak self] _ in
             self?.updateFrontmostDisabled()
+            self?.refreshScrollCache()
         }
         updateFrontmostDisabled()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(deviceDidChange),
+            name: DeviceDetector.didChangeNotification,
+            object: nil
+        )
+        refreshScrollCache()
 
         // A press held across sleep would otherwise fire its hold on waking, and a click
         // waiting on its double-click window would run long after it was made.
@@ -354,7 +365,7 @@ final class MouseNavigator {
                 .rightMouseDown, .rightMouseDragged, .rightMouseUp,
                 .otherMouseDragged,
             ]
-        } else if Preferences.shared.scrollSettings.isActive {
+        } else if Preferences.shared.isAnyScrollSettingActive {
             types.append(.scrollWheel)
         }
         return types.reduce(CGEventMask(0)) { $0 | CGEventMask(1) << $1.rawValue }
@@ -379,8 +390,20 @@ final class MouseNavigator {
         releaseHeldMouseInput()
     }
 
+    @objc private func deviceDidChange() {
+        refreshScrollCache()
+    }
+
+    private func refreshScrollCache() {
+        resolvedScroll = Preferences.shared.resolvedScrollSettings(
+            profile: detector.activeProfile,
+            app: FrontmostApp.shared.bundleID
+        )
+    }
+
     @objc private func preferencesDidChange() {
         updateFrontmostDisabled()
+        refreshScrollCache()
         guard let eventTap, desiredEventMask != installedEventMask else { return }
 
         // The new tap would never see the key-up a hold is waiting on, nor a left
@@ -522,9 +545,8 @@ final class MouseNavigator {
             if isContinuous {
                 return shouldSuppressContinuousScroll(event) ? nil : Unmanaged.passUnretained(event)
             }
-            let settings = Preferences.shared.scrollSettings
-            guard settings.isActive else { return Unmanaged.passUnretained(event) }
-            return wheel.handle(event, settings: settings) ? nil : Unmanaged.passUnretained(event)
+            guard resolvedScroll.isActive else { return Unmanaged.passUnretained(event) }
+            return wheel.handle(event, settings: resolvedScroll) ? nil : Unmanaged.passUnretained(event)
         default:
             return Unmanaged.passUnretained(event)
         }

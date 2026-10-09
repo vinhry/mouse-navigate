@@ -8,14 +8,93 @@ final class ScrollWheelTests: XCTestCase {
 
     func testStandardSettingsLeaveTheWheelAlone() {
         XCTAssertFalse(ScrollSettings.standard.isActive)
-        XCTAssertTrue(ScrollSettings(isReversed: true, speed: 1, isSmooth: false).isActive)
-        XCTAssertTrue(ScrollSettings(isReversed: false, speed: 2, isSmooth: false).isActive)
-        XCTAssertTrue(ScrollSettings(isReversed: false, speed: 1, isSmooth: true).isActive)
+        XCTAssertTrue(ScrollSettings(reverse: .both, verticalSpeed: 1, horizontalSpeed: 1, isSmooth: false).isActive)
+        XCTAssertTrue(ScrollSettings(reverse: .off, verticalSpeed: 2, horizontalSpeed: 2, isSmooth: false).isActive)
+        XCTAssertTrue(ScrollSettings(reverse: .off, verticalSpeed: 1, horizontalSpeed: 1, isSmooth: true).isActive)
     }
 
     func testSpeedIsClamped() {
-        XCTAssertEqual(ScrollSettings(isReversed: false, speed: 100, isSmooth: false).speed, 4)
-        XCTAssertEqual(ScrollSettings(isReversed: false, speed: 0, isSmooth: false).speed, 0.5)
+        let fast = ScrollSettings(verticalSpeed: 100, horizontalSpeed: 100)
+        XCTAssertEqual(fast.verticalSpeed, 4)
+        XCTAssertEqual(fast.horizontalSpeed, 4)
+        let slow = ScrollSettings(verticalSpeed: 0, horizontalSpeed: 0)
+        XCTAssertEqual(slow.verticalSpeed, 0.5)
+        XCTAssertEqual(slow.horizontalSpeed, 0.5)
+    }
+
+    // MARK: - Per axis
+
+    func testEachAxisReversesOnItsOwn() {
+        let delta = ScrollDelta(lines: (2, -1), fixedLines: (2, -1), points: (20, -10))
+        XCTAssertEqual(
+            ScrollTransform.apply(delta, settings: ScrollSettings(reverse: .vertical)),
+            ScrollDelta(lines: (-2, -1), fixedLines: (-2, -1), points: (-20, -10))
+        )
+        XCTAssertEqual(
+            ScrollTransform.apply(delta, settings: ScrollSettings(reverse: .horizontal)),
+            ScrollDelta(lines: (2, 1), fixedLines: (2, 1), points: (20, 10))
+        )
+        XCTAssertTrue(ScrollReverse.both.reversesVertical && ScrollReverse.both.reversesHorizontal)
+        XCTAssertFalse(ScrollReverse.off.reversesVertical || ScrollReverse.off.reversesHorizontal)
+    }
+
+    func testEachAxisHasItsOwnSpeed() {
+        let delta = ScrollDelta(lines: (1, 1), fixedLines: (1, 1), points: (10, 10))
+        let result = ScrollTransform.apply(delta, settings: ScrollSettings(verticalSpeed: 3, horizontalSpeed: 0.5))
+        XCTAssertEqual(result, ScrollDelta(lines: (3, 1), fixedLines: (3, 0.5), points: (30, 5)))
+    }
+
+    func testReverseComesBeforeTheSwap() {
+        // The wheel was turned vertically; that axis is the reversed one, whichever way
+        // Shift then sends it.
+        let settings = ScrollSettings(reverse: .vertical, verticalSpeed: 2, shiftSwapsAxes: true)
+        let result = ScrollTransform.apply(notch, settings: settings, modifiers: [.shift])
+        XCTAssertEqual(result.delta, ScrollDelta(lines: (0, -2), fixedLines: (0, -2), points: (0, -20)))
+    }
+
+    // MARK: - Overrides
+
+    func testAnOverrideChangesOnlyWhatItSets() {
+        let base = ScrollSettings(reverse: .both, verticalSpeed: 2, horizontalSpeed: 3, isSmooth: true)
+        let override = ScrollOverride(reverse: .vertical, horizontalSpeed: 1)
+        XCTAssertEqual(
+            override.applied(to: base),
+            ScrollSettings(reverse: .vertical, verticalSpeed: 2, horizontalSpeed: 1, isSmooth: true)
+        )
+        XCTAssertEqual(ScrollOverride.none.applied(to: base), base)
+        XCTAssertTrue(ScrollOverride.none.isEmpty)
+        XCTAssertFalse(override.isEmpty)
+        XCTAssertEqual(ScrollOverride(settings: base).applied(to: .standard), base)
+    }
+
+    func testOverridePropertyListRoundTripsAndTolerates() {
+        let override = ScrollOverride(reverse: .horizontal, verticalSpeed: 2, commandIsFast: true)
+        let list = override.propertyList
+        XCTAssertEqual(Set(list.keys), ["reverse", "verticalSpeed", "commandFast"])
+        XCTAssertEqual(ScrollOverride(propertyList: list), override)
+
+        XCTAssertEqual(ScrollOverride(propertyList: nil), .none)
+        XCTAssertEqual(ScrollOverride(propertyList: "junk"), .none)
+        XCTAssertEqual(
+            ScrollOverride(propertyList: ["reverse": "sideways", "smooth": "yes", "verticalSpeed": 9, "optionPrecise": true] as [String: Any]),
+            ScrollOverride(verticalSpeed: 4, optionIsPrecise: true),
+            "unreadable fields are unset, a speed is clamped"
+        )
+    }
+
+    func testResolverLetsTheAppWinThenTheMouse() {
+        let global = ScrollSettings(verticalSpeed: 2)
+        let mouse = ScrollOverride(reverse: .both, isSmooth: true)
+        let app = ScrollOverride(reverse: .off)
+        XCTAssertEqual(
+            ScrollResolver.resolve(global: global, profile: mouse, app: app),
+            ScrollSettings(reverse: .off, verticalSpeed: 2, isSmooth: true)
+        )
+        XCTAssertEqual(
+            ScrollResolver.resolve(global: global, profile: mouse, app: nil),
+            ScrollSettings(reverse: .both, verticalSpeed: 2, isSmooth: true)
+        )
+        XCTAssertEqual(ScrollResolver.resolve(global: global, profile: nil, app: nil), global)
     }
 
     // MARK: - Transform
@@ -23,18 +102,18 @@ final class ScrollWheelTests: XCTestCase {
     func testReverseFlipsEveryForm() {
         let result = ScrollTransform.apply(
             ScrollDelta(lines: (2, -1), fixedLines: (2, -1), points: (20, -10)),
-            settings: ScrollSettings(isReversed: true, speed: 1, isSmooth: false)
+            settings: ScrollSettings(reverse: .both, verticalSpeed: 1, horizontalSpeed: 1, isSmooth: false)
         )
         XCTAssertEqual(result, ScrollDelta(lines: (-2, 1), fixedLines: (-2, 1), points: (-20, 10)))
     }
 
     func testSpeedScalesEveryForm() {
-        let result = ScrollTransform.apply(notch, settings: ScrollSettings(isReversed: false, speed: 3, isSmooth: false))
+        let result = ScrollTransform.apply(notch, settings: ScrollSettings(reverse: .off, verticalSpeed: 3, horizontalSpeed: 3, isSmooth: false))
         XCTAssertEqual(result, ScrollDelta(lines: (3, 0), fixedLines: (3, 0), points: (30, 0)))
     }
 
     func testSlowingDownNeverTurnsANotchIntoNothing() {
-        let result = ScrollTransform.apply(notch, settings: ScrollSettings(isReversed: true, speed: 0.5, isSmooth: false))
+        let result = ScrollTransform.apply(notch, settings: ScrollSettings(reverse: .both, verticalSpeed: 0.5, horizontalSpeed: 0.5, isSmooth: false))
         XCTAssertEqual(result.lines.vertical, -1)
         XCTAssertEqual(result.lines.horizontal, 0)
         XCTAssertEqual(result.points.vertical, -5)
@@ -45,35 +124,35 @@ final class ScrollWheelTests: XCTestCase {
     private let twoAxes = ScrollDelta(lines: (2, -1), fixedLines: (2, -1), points: (20, -10))
 
     func testShiftSwapsEveryFormWhenAsked() {
-        let settings = ScrollSettings(isReversed: false, speed: 1, isSmooth: false, shiftSwapsAxes: true)
+        let settings = ScrollSettings(reverse: .off, verticalSpeed: 1, horizontalSpeed: 1, isSmooth: false, shiftSwapsAxes: true)
         let result = ScrollTransform.apply(twoAxes, settings: settings, modifiers: [.shift])
         XCTAssertEqual(result.delta, ScrollDelta(lines: (-1, 2), fixedLines: (-1, 2), points: (-10, 20)))
         XCTAssertEqual(result.consumedModifiers, [.shift])
     }
 
     func testOptionScrollsPrecisely() {
-        let settings = ScrollSettings(isReversed: false, speed: 2, isSmooth: false, optionIsPrecise: true)
+        let settings = ScrollSettings(reverse: .off, verticalSpeed: 2, horizontalSpeed: 2, isSmooth: false, optionIsPrecise: true)
         let result = ScrollTransform.apply(twoAxes, settings: settings, modifiers: [.option])
         XCTAssertEqual(result.delta, ScrollDelta(lines: (1, -1), fixedLines: (1, -0.5), points: (10, -5)))
         XCTAssertEqual(result.consumedModifiers, [.option])
     }
 
     func testCommandScrollsFast() {
-        let settings = ScrollSettings(isReversed: true, speed: 1, isSmooth: false, commandIsFast: true)
+        let settings = ScrollSettings(reverse: .both, verticalSpeed: 1, horizontalSpeed: 1, isSmooth: false, commandIsFast: true)
         let result = ScrollTransform.apply(notch, settings: settings, modifiers: [.command])
         XCTAssertEqual(result.delta, ScrollDelta(lines: (-3, 0), fixedLines: (-3, 0), points: (-30, 0)))
         XCTAssertEqual(result.consumedModifiers, [.command])
     }
 
     func testOptionWinsOverCommand() {
-        let settings = ScrollSettings(isReversed: false, speed: 1, isSmooth: false, optionIsPrecise: true, commandIsFast: true)
+        let settings = ScrollSettings(reverse: .off, verticalSpeed: 1, horizontalSpeed: 1, isSmooth: false, optionIsPrecise: true, commandIsFast: true)
         let result = ScrollTransform.apply(notch, settings: settings, modifiers: [.option, .command])
         XCTAssertEqual(result.delta.points.vertical, 2.5)
         XCTAssertEqual(result.consumedModifiers, [.option], "⌘ stays on the event for the app")
     }
 
     func testSwapComesAfterScaling() {
-        let settings = ScrollSettings(isReversed: false, speed: 1, isSmooth: false, shiftSwapsAxes: true, commandIsFast: true)
+        let settings = ScrollSettings(reverse: .off, verticalSpeed: 1, horizontalSpeed: 1, isSmooth: false, shiftSwapsAxes: true, commandIsFast: true)
         let result = ScrollTransform.apply(notch, settings: settings, modifiers: [.shift, .command])
         XCTAssertEqual(result.delta, ScrollDelta(lines: (0, 3), fixedLines: (0, 3), points: (0, 30)))
         XCTAssertEqual(result.consumedModifiers, [.shift, .command])
@@ -86,15 +165,15 @@ final class ScrollWheelTests: XCTestCase {
     }
 
     func testNoModifiersMeansNoChange() {
-        let settings = ScrollSettings(isReversed: false, speed: 1, isSmooth: false, shiftSwapsAxes: true, optionIsPrecise: true, commandIsFast: true)
+        let settings = ScrollSettings(reverse: .off, verticalSpeed: 1, horizontalSpeed: 1, isSmooth: false, shiftSwapsAxes: true, optionIsPrecise: true, commandIsFast: true)
         XCTAssertEqual(ScrollTransform.apply(twoAxes, settings: settings, modifiers: []).delta, twoAxes)
         XCTAssertEqual(ScrollTransform.apply(twoAxes, settings: settings), twoAxes)
     }
 
     func testAWheelOptionAloneMakesTheSettingsActive() {
-        XCTAssertTrue(ScrollSettings(isReversed: false, speed: 1, isSmooth: false, shiftSwapsAxes: true).isActive)
-        XCTAssertTrue(ScrollSettings(isReversed: false, speed: 1, isSmooth: false, optionIsPrecise: true).isActive)
-        XCTAssertTrue(ScrollSettings(isReversed: false, speed: 1, isSmooth: false, commandIsFast: true).isActive)
+        XCTAssertTrue(ScrollSettings(reverse: .off, verticalSpeed: 1, horizontalSpeed: 1, isSmooth: false, shiftSwapsAxes: true).isActive)
+        XCTAssertTrue(ScrollSettings(reverse: .off, verticalSpeed: 1, horizontalSpeed: 1, isSmooth: false, optionIsPrecise: true).isActive)
+        XCTAssertTrue(ScrollSettings(reverse: .off, verticalSpeed: 1, horizontalSpeed: 1, isSmooth: false, commandIsFast: true).isActive)
     }
 
     // MARK: - Smoother

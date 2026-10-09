@@ -54,7 +54,7 @@ final class PreferencesWindowController: NSObject {
     private static let customItemTag = 1
     private(set) var window: NSWindow?
 
-    private let detector: DeviceDetector
+    let detector: DeviceDetector
     private let engine: KeyboardCursorEngine
     private let touchMonitor: TouchMonitor
     private let updater: Updater
@@ -68,7 +68,7 @@ final class PreferencesWindowController: NSObject {
     private lazy var editor = BindingEditor(engine: engine)
 
     /// nil edits the bindings for all apps; otherwise the app whose own bindings are shown.
-    private var selectedApp: String?
+    private(set) var selectedApp: String?
     private var scopeControls: [(popup: NSPopUpButton, remove: NSButton, disable: NSButton)] = []
     private var testerLabel: NSTextField?
     /// Which press of each button the Mouse tab's pickers are showing, and with which
@@ -76,13 +76,8 @@ final class PreferencesWindowController: NSObject {
     private var buttonPress: ButtonPress = .click
     private var buttonModifiers: Shortcut.Modifiers = []
 
-    private var reverseScrollCheckbox: NSButton?
-    private var scrollSpeedSlider: NSSlider?
-    private var scrollSpeedLabel: NSTextField?
-    private var smoothScrollCheckbox: NSButton?
-    private var shiftSwapsAxesCheckbox: NSButton?
-    private var optionPreciseCheckbox: NSButton?
-    private var commandFastCheckbox: NSButton?
+    /// The Scroll Wheel section's controls, built and refreshed in their own file.
+    var scrollSection: ScrollSectionControls?
 
     private var recorders: [CursorBinding: KeyRecorderButton] = [:]
     private var sliders: [CursorSetting: NSSlider] = [:]
@@ -296,95 +291,6 @@ final class PreferencesWindowController: NSObject {
         stack.setCustomSpacing(22, after: tester)
 
         return makePage(stack)
-    }
-
-    /// Wheel options for all apps. Trackpads and the Magic Mouse are never affected.
-    private func makeScrollSection() -> NSView {
-        let reverse = NSButton(
-            checkboxWithTitle: "Reverse scrolling direction",
-            target: self,
-            action: #selector(scrollSettingChanged(_:))
-        )
-        reverse.toolTip = "Only the mouse wheel changes, so a trackpad can keep natural scrolling."
-        reverseScrollCheckbox = reverse
-
-        let speedLabel = NSTextField(labelWithString: "Speed:")
-        let slider = NSSlider(
-            value: 1,
-            minValue: ScrollSettings.speedRange.lowerBound,
-            maxValue: ScrollSettings.speedRange.upperBound,
-            target: self,
-            action: #selector(scrollSettingChanged(_:))
-        )
-        slider.translatesAutoresizingMaskIntoConstraints = false
-        slider.widthAnchor.constraint(equalToConstant: 180).isActive = true
-        scrollSpeedSlider = slider
-
-        let value = NSTextField(labelWithString: "")
-        value.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        value.textColor = .secondaryLabelColor
-        value.translatesAutoresizingMaskIntoConstraints = false
-        value.widthAnchor.constraint(equalToConstant: 40).isActive = true
-        scrollSpeedLabel = value
-
-        let speedRow = NSStackView(views: [speedLabel, slider, value])
-        speedRow.orientation = .horizontal
-        speedRow.spacing = 8
-
-        let smooth = NSButton(
-            checkboxWithTitle: "Smooth scrolling (experimental)",
-            target: self,
-            action: #selector(scrollSettingChanged(_:))
-        )
-        smooth.toolTip = "Spreads each notch of the wheel over a few frames instead of jumping."
-        smoothScrollCheckbox = smooth
-
-        let shift = NSButton(checkboxWithTitle: "⇧ scrolls sideways", target: self, action: #selector(scrollSettingChanged(_:)))
-        shift.toolTip = "Hold Shift and the wheel scrolls horizontally. Shift is used up, so apps "
-            + "that scroll sideways on Shift themselves do not do it twice."
-        shiftSwapsAxesCheckbox = shift
-
-        let option = NSButton(checkboxWithTitle: "⌥ scrolls precisely", target: self, action: #selector(scrollSettingChanged(_:)))
-        option.toolTip = "Hold Option and each notch moves a quarter as far."
-        optionPreciseCheckbox = option
-
-        let command = NSButton(checkboxWithTitle: "⌘ scrolls fast", target: self, action: #selector(scrollSettingChanged(_:)))
-        command.toolTip = "Hold Command and each notch moves three times as far. Command is used "
-            + "up, so a browser does not zoom as well."
-        commandFastCheckbox = command
-
-        let modifiers = NSStackView(views: [shift, option, command])
-        modifiers.orientation = .horizontal
-        modifiers.spacing = 14
-
-        let content = NSStackView(views: [reverse, speedRow, smooth, modifiers])
-        content.orientation = .vertical
-        content.alignment = .leading
-        content.spacing = 8
-        return makeSection(title: "Scroll Wheel", content: content)
-    }
-
-    func refreshScrollUI() {
-        let settings = Preferences.shared.scrollSettings
-        reverseScrollCheckbox?.state = settings.isReversed ? .on : .off
-        scrollSpeedSlider?.doubleValue = settings.speed
-        scrollSpeedLabel?.stringValue = String(format: "%.1f×", settings.speed)
-        smoothScrollCheckbox?.state = settings.isSmooth ? .on : .off
-        shiftSwapsAxesCheckbox?.state = settings.shiftSwapsAxes ? .on : .off
-        optionPreciseCheckbox?.state = settings.optionIsPrecise ? .on : .off
-        commandFastCheckbox?.state = settings.commandIsFast ? .on : .off
-    }
-
-    @objc private func scrollSettingChanged(_ sender: NSControl) {
-        Preferences.shared.scrollSettings = ScrollSettings(
-            isReversed: reverseScrollCheckbox?.state == .on,
-            speed: scrollSpeedSlider?.doubleValue ?? 1,
-            isSmooth: smoothScrollCheckbox?.state == .on,
-            shiftSwapsAxes: shiftSwapsAxesCheckbox?.state == .on,
-            optionIsPrecise: optionPreciseCheckbox?.state == .on,
-            commandIsFast: commandFastCheckbox?.state == .on
-        )
-        refreshScrollUI()
     }
 
     /// ⌃⌥⇧⌘ in menu order, one segment each.
@@ -711,6 +617,7 @@ final class PreferencesWindowController: NSObject {
             control.disable.state = Preferences.shared.isAppDisabled(selectedApp) ? .on : .off
         }
         refreshBindings()
+        refreshScrollUI()
     }
 
     @objc private func scopeChanged(_ sender: NSPopUpButton) {

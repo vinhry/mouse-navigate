@@ -16,7 +16,7 @@ public final class Preferences {
     public static let configurableButtons = Array(3...9)
 
     private let store: UserDefaults
-    let currentConfigVersion = 2
+    let currentConfigVersion = 3
 
     /// The app uses `.standard`, not a suite: its own bundle identifier is not a valid
     /// suite name, so `UserDefaults(suiteName:)` returned nil and logged "does not make
@@ -30,20 +30,40 @@ public final class Preferences {
 
     // MARK: - Migration
 
-    /// v1 stored a single global mapping under "button<n>". Those values came from the
-    /// MX Master 4, so they seed that profile and the old keys are cleared.
+    /// Brings an older layout up to date, one version at a time, so a store from any
+    /// version arrives at the same place.
+    ///
+    /// - v1 stored a single global mapping under "button<n>". Those values came from the
+    ///   MX Master 4, so they seed that profile and the old keys are cleared.
+    /// - v2 had one reverse switch and one speed for the wheel; v3 reverses each axis on
+    ///   its own and has a speed for each, so the switch becomes "both" and the speed both.
     func migrateIfNeeded() {
-        guard store.integer(forKey: SettingsKey.configVersion) < currentConfigVersion else { return }
+        let version = store.integer(forKey: SettingsKey.configVersion)
+        guard version < currentConfigVersion else { return }
 
-        for button in Preferences.configurableButtons {
-            let legacyKey = SettingsKey.legacyButton(button)
-            guard let raw = store.string(forKey: legacyKey) else { continue }
+        if version < 2 {
+            for button in Preferences.configurableButtons {
+                let legacyKey = SettingsKey.legacyButton(button)
+                guard let raw = store.string(forKey: legacyKey) else { continue }
 
-            let newKey = BindingTrigger.button(button, .mxMaster4).storageKey
-            if store.string(forKey: newKey) == nil {
-                store.set(raw, forKey: newKey)
+                let newKey = BindingTrigger.button(button, .mxMaster4).storageKey
+                if store.string(forKey: newKey) == nil {
+                    store.set(raw, forKey: newKey)
+                }
+                store.removeObject(forKey: legacyKey)
             }
-            store.removeObject(forKey: legacyKey)
+        }
+
+        if version < 3 {
+            if store.bool(forKey: SettingsKey.legacyScrollReversed) {
+                store.set(ScrollReverse.both.rawValue, forKey: SettingsKey.scroll(.reverse))
+            }
+            if let speed = store.object(forKey: SettingsKey.legacyScrollSpeed) as? Double {
+                store.set(speed, forKey: SettingsKey.scroll(.verticalSpeed))
+                store.set(speed, forKey: SettingsKey.scroll(.horizontalSpeed))
+            }
+            store.removeObject(forKey: SettingsKey.legacyScrollReversed)
+            store.removeObject(forKey: SettingsKey.legacyScrollSpeed)
         }
 
         store.set(currentConfigVersion, forKey: SettingsKey.configVersion)
@@ -192,25 +212,79 @@ public final class Preferences {
 
     // MARK: - Scroll wheel
 
+    /// The wheel for all mice and all apps.
     public var scrollSettings: ScrollSettings {
-        get {
-            ScrollSettings(
-                isReversed: store.bool(forKey: SettingsKey.scrollReversed),
-                speed: store.object(forKey: SettingsKey.scrollSpeed) as? Double ?? 1,
-                isSmooth: store.bool(forKey: SettingsKey.scrollSmooth),
-                shiftSwapsAxes: store.bool(forKey: SettingsKey.scrollShiftSwapsAxes),
-                optionIsPrecise: store.bool(forKey: SettingsKey.scrollOptionPrecise),
-                commandIsFast: store.bool(forKey: SettingsKey.scrollCommandFast)
-            )
-        }
+        get { readScrollOverride(profile: nil).applied(to: .standard) }
         set {
-            store.set(newValue.isReversed, forKey: SettingsKey.scrollReversed)
-            store.set(newValue.speed, forKey: SettingsKey.scrollSpeed)
-            store.set(newValue.isSmooth, forKey: SettingsKey.scrollSmooth)
-            store.set(newValue.shiftSwapsAxes, forKey: SettingsKey.scrollShiftSwapsAxes)
-            store.set(newValue.optionIsPrecise, forKey: SettingsKey.scrollOptionPrecise)
-            store.set(newValue.commandIsFast, forKey: SettingsKey.scrollCommandFast)
+            writeScrollOverride(ScrollOverride(settings: newValue), profile: nil)
             notifyChange(.scroll)
+        }
+    }
+
+    /// What one mouse model changes about the wheel; `.none` when it follows all mice.
+    public func scrollOverride(for profile: DeviceProfile) -> ScrollOverride {
+        readScrollOverride(profile: profile)
+    }
+
+    public func setScrollOverride(_ override: ScrollOverride, for profile: DeviceProfile) {
+        writeScrollOverride(override, profile: profile)
+        notifyChange(.scroll)
+    }
+
+    /// What one app changes about the wheel; `.none` when it follows the mouse.
+    public func appScrollOverride(_ bundleID: String) -> ScrollOverride {
+        appOverrides[bundleID]?.scroll ?? .none
+    }
+
+    public func setAppScrollOverride(_ override: ScrollOverride, app bundleID: String) {
+        var overrides = appOverrides
+        guard overrides[bundleID] != nil else { return }
+        overrides[bundleID]?.scroll = override
+        saveAppOverrides(overrides)
+    }
+
+    /// The wheel with `profile` in use and `bundleID` in front: the app's own settings,
+    /// then the mouse model's, then the ones for all.
+    public func resolvedScrollSettings(profile: DeviceProfile, app bundleID: String?) -> ScrollSettings {
+        ScrollResolver.resolve(
+            global: scrollSettings,
+            profile: scrollOverride(for: profile),
+            app: bundleID.flatMap { appOverrides[$0]?.scroll }
+        )
+    }
+
+    private var cachedAnyScrollSettingActive: Bool?
+
+    /// Whether any mouse in any app has the wheel reshaped, which is what decides whether
+    /// wheel events pass through the app at all. Cached: it is asked whenever the event
+    /// tap's mask is reconsidered, and the answer only changes with the settings.
+    public var isAnyScrollSettingActive: Bool {
+        if let cachedAnyScrollSettingActive {
+            return cachedAnyScrollSettingActive
+        }
+        let active = scrollSettings.isActive
+            || DeviceProfile.allCases.contains { !scrollOverride(for: $0).isEmpty }
+            || appOverrides.values.contains { !$0.scroll.isEmpty }
+        cachedAnyScrollSettingActive = active
+        return active
+    }
+
+    private func readScrollOverride(profile: DeviceProfile?) -> ScrollOverride {
+        var override = ScrollOverride()
+        for field in ScrollField.allCases {
+            override.set(field, to: store.object(forKey: SettingsKey.scroll(field, profile: profile)))
+        }
+        return override
+    }
+
+    private func writeScrollOverride(_ override: ScrollOverride, profile: DeviceProfile?) {
+        for field in ScrollField.allCases {
+            let key = SettingsKey.scroll(field, profile: profile)
+            if let value = override.value(of: field) {
+                store.set(value, forKey: key)
+            } else {
+                store.removeObject(forKey: key)
+            }
         }
     }
 
@@ -380,6 +454,7 @@ public final class Preferences {
 
     private func notifyChange(_ area: SettingsArea) {
         cachedAppOverrides = nil
+        cachedAnyScrollSettingActive = nil
         NotificationCenter.default.post(
             name: Preferences.didChangeNotification,
             object: nil,

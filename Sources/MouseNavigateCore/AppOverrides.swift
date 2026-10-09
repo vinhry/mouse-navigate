@@ -11,12 +11,21 @@ public struct AppOverride: Equatable {
     /// Trigger storage key to binding storage value, in the same form as the global
     /// settings, so an entry never needs a format of its own.
     public var bindings: [String: String]
+    /// The wheel in this app, on top of the mouse model's settings and the ones for all.
+    public var scroll: ScrollOverride
 
-    public init(bundleID: String, name: String, isDisabled: Bool = false, bindings: [String: String] = [:]) {
+    public init(
+        bundleID: String,
+        name: String,
+        isDisabled: Bool = false,
+        bindings: [String: String] = [:],
+        scroll: ScrollOverride = .none
+    ) {
         self.bundleID = bundleID
         self.name = name
         self.isDisabled = isDisabled
         self.bindings = bindings
+        self.scroll = scroll
     }
 
     /// Unreadable values are treated as absent, so a bad entry falls through to the global
@@ -34,7 +43,11 @@ public struct AppOverride: Equatable {
     // MARK: - Property list
 
     public var propertyList: [String: Any] {
-        ["name": name, "disabled": isDisabled, "bindings": bindings]
+        var list: [String: Any] = ["name": name, "disabled": isDisabled, "bindings": bindings]
+        if !scroll.isEmpty {
+            list["scroll"] = scroll.propertyList
+        }
+        return list
     }
 
     public init?(bundleID: String, propertyList: Any) {
@@ -45,6 +58,7 @@ public struct AppOverride: Equatable {
         // Entry by entry: one value of another type must not read as "no bindings", which
         // the next save would then write back for good.
         bindings = (dictionary["bindings"] as? [String: Any])?.compactMapValues { $0 as? String } ?? [:]
+        scroll = ScrollOverride(propertyList: dictionary["scroll"])
     }
 
     /// Every entry that reads cleanly; the rest are dropped rather than failing the lot.

@@ -57,6 +57,49 @@ final class PreferencesTests: XCTestCase {
         XCTAssertNil(store.object(forKey: "button3"))
     }
 
+    func testVersionTwoScrollSettingsBecomePerAxis() {
+        store.set(2, forKey: SettingsKey.configVersion)
+        store.set(true, forKey: SettingsKey.legacyScrollReversed)
+        store.set(2.0, forKey: SettingsKey.legacyScrollSpeed)
+        store.set(true, forKey: SettingsKey.scroll(.smooth))
+
+        let preferences = makePreferences()
+
+        XCTAssertEqual(
+            preferences.scrollSettings,
+            ScrollSettings(reverse: .both, verticalSpeed: 2, horizontalSpeed: 2, isSmooth: true)
+        )
+        XCTAssertNil(store.object(forKey: SettingsKey.legacyScrollReversed))
+        XCTAssertNil(store.object(forKey: SettingsKey.legacyScrollSpeed))
+        XCTAssertEqual(store.integer(forKey: SettingsKey.configVersion), 3)
+    }
+
+    func testAVersionTwoStoreThatNeverReversedStaysThatWay() {
+        store.set(2, forKey: SettingsKey.configVersion)
+        store.set(false, forKey: SettingsKey.legacyScrollReversed)
+        let preferences = makePreferences()
+        XCTAssertEqual(preferences.scrollSettings.reverse, .off)
+        XCTAssertNil(store.object(forKey: SettingsKey.scroll(.reverse)))
+    }
+
+    func testAVersionOneStoreRunsEveryStage() {
+        store.set("newTab", forKey: "button5")
+        store.set(true, forKey: SettingsKey.legacyScrollReversed)
+
+        let preferences = makePreferences()
+
+        XCTAssertEqual(preferences.globalBinding(for: .button(5, .mxMaster4)), .builtin(.newTab))
+        XCTAssertEqual(preferences.scrollSettings.reverse, .both)
+        XCTAssertEqual(store.integer(forKey: SettingsKey.configVersion), 3)
+    }
+
+    func testACurrentStoreIsLeftAlone() {
+        store.set(3, forKey: SettingsKey.configVersion)
+        store.set(true, forKey: SettingsKey.legacyScrollReversed)
+        _ = makePreferences()
+        XCTAssertEqual(store.bool(forKey: SettingsKey.legacyScrollReversed), true, "nothing to migrate at version 3")
+    }
+
     func testMigrationIsIdempotent() {
         store.set("back", forKey: "button3")
         let preferences = makePreferences()
@@ -124,6 +167,69 @@ final class PreferencesTests: XCTestCase {
         preferences.setGlobalBinding(.builtin(.copy), for: .button(3, .mxMaster3))
         XCTAssertEqual(preferences.globalBinding(for: .button(3, .mxMaster3)), .builtin(.copy))
         XCTAssertEqual(preferences.globalBinding(for: .button(3, .mxMaster4)), .builtin(.back))
+    }
+
+    // MARK: - Scroll scopes
+
+    func testScrollSettingsResolveAppThenMouseThenAll() {
+        let preferences = makePreferences()
+        preferences.scrollSettings = ScrollSettings(verticalSpeed: 2)
+        preferences.setScrollOverride(ScrollOverride(reverse: .both), for: .mxMaster4)
+        preferences.addApp(bundleID: "com.example.app", name: "Example")
+        preferences.setAppScrollOverride(ScrollOverride(reverse: .vertical, isSmooth: true), app: "com.example.app")
+
+        XCTAssertEqual(
+            preferences.resolvedScrollSettings(profile: .mxMaster4, app: "com.example.app"),
+            ScrollSettings(reverse: .vertical, verticalSpeed: 2, isSmooth: true)
+        )
+        XCTAssertEqual(
+            preferences.resolvedScrollSettings(profile: .mxMaster4, app: nil),
+            ScrollSettings(reverse: .both, verticalSpeed: 2)
+        )
+        XCTAssertEqual(
+            preferences.resolvedScrollSettings(profile: .generic, app: "com.other"),
+            ScrollSettings(verticalSpeed: 2)
+        )
+        XCTAssertEqual(preferences.scrollOverride(for: .mxMaster4), ScrollOverride(reverse: .both))
+        XCTAssertEqual(preferences.scrollOverride(for: .generic), .none)
+        XCTAssertEqual(preferences.appScrollOverride("com.example.app"), ScrollOverride(reverse: .vertical, isSmooth: true))
+        XCTAssertEqual(preferences.appScrollOverride("com.other"), .none)
+    }
+
+    func testClearingAScopeHandsItBack() {
+        let preferences = makePreferences()
+        preferences.setScrollOverride(ScrollOverride(settings: ScrollSettings(reverse: .both)), for: .generic)
+        preferences.setScrollOverride(.none, for: .generic)
+        XCTAssertEqual(preferences.scrollOverride(for: .generic), .none)
+        XCTAssertFalse(storedKeys.contains { $0.hasPrefix("scroll.generic.") })
+    }
+
+    func testAnyScrollSettingActiveFollowsEveryScope() {
+        let preferences = makePreferences()
+        XCTAssertFalse(preferences.isAnyScrollSettingActive)
+
+        preferences.setScrollOverride(ScrollOverride(isSmooth: true), for: .mxMaster3)
+        XCTAssertTrue(preferences.isAnyScrollSettingActive, "the cache is dropped on change")
+        preferences.setScrollOverride(.none, for: .mxMaster3)
+        XCTAssertFalse(preferences.isAnyScrollSettingActive)
+
+        preferences.addApp(bundleID: "com.example.app", name: "Example")
+        preferences.setAppScrollOverride(ScrollOverride(reverse: .both), app: "com.example.app")
+        XCTAssertTrue(preferences.isAnyScrollSettingActive)
+        preferences.removeApp(bundleID: "com.example.app")
+        XCTAssertFalse(preferences.isAnyScrollSettingActive)
+
+        preferences.scrollSettings = ScrollSettings(verticalSpeed: 2)
+        XCTAssertTrue(preferences.isAnyScrollSettingActive)
+    }
+
+    func testAppScrollOverrideSurvivesTheOverridesPlist() {
+        let preferences = makePreferences()
+        preferences.addApp(bundleID: "com.example.app", name: "Example")
+        preferences.setAppScrollOverride(ScrollOverride(commandIsFast: true), app: "com.example.app")
+        preferences.setAppBinding(.builtin(.copy), for: .touch(.trackpadThreeFingerTap), app: "com.example.app")
+        XCTAssertEqual(preferences.appScrollOverride("com.example.app"), ScrollOverride(commandIsFast: true))
+        XCTAssertEqual(preferences.appBinding(for: .touch(.trackpadThreeFingerTap), app: "com.example.app"), .builtin(.copy))
     }
 
     // MARK: - Modifier combinations
@@ -264,7 +370,7 @@ final class PreferencesTests: XCTestCase {
         ) { areas.append($0.settingsArea) }
         defer { NotificationCenter.default.removeObserver(observer) }
 
-        preferences.scrollSettings = ScrollSettings(isReversed: true, speed: 1, isSmooth: false)
+        preferences.scrollSettings = ScrollSettings(reverse: .both, verticalSpeed: 1, horizontalSpeed: 1, isSmooth: false)
         preferences.setKeyCode(40, for: .activate)
         preferences.isTouchEnabled = true
         preferences.setGlobalBinding(.builtin(.copy), for: .button(3, .generic))

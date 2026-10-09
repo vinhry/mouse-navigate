@@ -1,10 +1,52 @@
 import Foundation
 
+/// Which axes a wheel scrolls the other way. Not `none`: that reads as `Optional.none`
+/// wherever an optional reverse is expected, and silently means "unset".
+public enum ScrollReverse: String, CaseIterable {
+    case off
+    case vertical
+    case horizontal
+    case both
+
+    public var displayName: String {
+        switch self {
+        case .off: return "Off"
+        case .vertical: return "Vertical"
+        case .horizontal: return "Horizontal"
+        case .both: return "Both"
+        }
+    }
+
+    public var reversesVertical: Bool { self == .vertical || self == .both }
+    public var reversesHorizontal: Bool { self == .horizontal || self == .both }
+}
+
+/// The settings a wheel has, by name: the names are the settings keys and the fields of
+/// a per-app override, so one list serves storage, export and the registry.
+public enum ScrollField: String, CaseIterable {
+    case reverse
+    case verticalSpeed
+    case horizontalSpeed
+    case smooth
+    case shiftSwapsAxes
+    case optionPrecise
+    case commandFast
+
+    public var valueType: SettingsKey.ValueType {
+        switch self {
+        case .reverse: return .string
+        case .verticalSpeed, .horizontalSpeed: return .double
+        case .smooth, .shiftSwapsAxes, .optionPrecise, .commandFast: return .bool
+        }
+    }
+}
+
 /// How a mouse wheel's scrolling is reshaped. Trackpads and the Magic Mouse scroll
 /// continuously and are never touched.
 public struct ScrollSettings: Equatable {
-    public var isReversed: Bool
-    public var speed: Double
+    public var reverse: ScrollReverse
+    public var verticalSpeed: Double
+    public var horizontalSpeed: Double
     public var isSmooth: Bool
     /// ⇧ held while scrolling turns the wheel sideways.
     public var shiftSwapsAxes: Bool
@@ -16,18 +58,20 @@ public struct ScrollSettings: Equatable {
     public static let speedRange: ClosedRange<Double> = 0.5...4
     public static let preciseFactor = 0.25
     public static let fastFactor = 3.0
-    public static let standard = ScrollSettings(isReversed: false, speed: 1, isSmooth: false)
+    public static let standard = ScrollSettings()
 
     public init(
-        isReversed: Bool,
-        speed: Double,
-        isSmooth: Bool,
+        reverse: ScrollReverse = .off,
+        verticalSpeed: Double = 1,
+        horizontalSpeed: Double = 1,
+        isSmooth: Bool = false,
         shiftSwapsAxes: Bool = false,
         optionIsPrecise: Bool = false,
         commandIsFast: Bool = false
     ) {
-        self.isReversed = isReversed
-        self.speed = ScrollSettings.clampSpeed(speed)
+        self.reverse = reverse
+        self.verticalSpeed = ScrollSettings.clampSpeed(verticalSpeed)
+        self.horizontalSpeed = ScrollSettings.clampSpeed(horizontalSpeed)
         self.isSmooth = isSmooth
         self.shiftSwapsAxes = shiftSwapsAxes
         self.optionIsPrecise = optionIsPrecise
@@ -41,6 +85,145 @@ public struct ScrollSettings: Equatable {
 
     public static func clampSpeed(_ speed: Double) -> Double {
         min(max(speed, speedRange.lowerBound), speedRange.upperBound)
+    }
+}
+
+/// What one scope, a mouse model or an app, sets for the wheel. A field left nil follows
+/// the scope beneath, so a hand-edited settings file can change one thing for one app.
+public struct ScrollOverride: Equatable {
+    public var reverse: ScrollReverse?
+    public var verticalSpeed: Double?
+    public var horizontalSpeed: Double?
+    public var isSmooth: Bool?
+    public var shiftSwapsAxes: Bool?
+    public var optionIsPrecise: Bool?
+    public var commandIsFast: Bool?
+
+    public static let none = ScrollOverride()
+
+    public init(
+        reverse: ScrollReverse? = nil,
+        verticalSpeed: Double? = nil,
+        horizontalSpeed: Double? = nil,
+        isSmooth: Bool? = nil,
+        shiftSwapsAxes: Bool? = nil,
+        optionIsPrecise: Bool? = nil,
+        commandIsFast: Bool? = nil
+    ) {
+        self.reverse = reverse
+        self.verticalSpeed = verticalSpeed.map(ScrollSettings.clampSpeed)
+        self.horizontalSpeed = horizontalSpeed.map(ScrollSettings.clampSpeed)
+        self.isSmooth = isSmooth
+        self.shiftSwapsAxes = shiftSwapsAxes
+        self.optionIsPrecise = optionIsPrecise
+        self.commandIsFast = commandIsFast
+    }
+
+    /// Every field set, as the preferences window writes a scope that has its own settings.
+    public init(settings: ScrollSettings) {
+        self.init(
+            reverse: settings.reverse,
+            verticalSpeed: settings.verticalSpeed,
+            horizontalSpeed: settings.horizontalSpeed,
+            isSmooth: settings.isSmooth,
+            shiftSwapsAxes: settings.shiftSwapsAxes,
+            optionIsPrecise: settings.optionIsPrecise,
+            commandIsFast: settings.commandIsFast
+        )
+    }
+
+    public var isEmpty: Bool {
+        self == .none
+    }
+
+    public func applied(to base: ScrollSettings) -> ScrollSettings {
+        ScrollSettings(
+            reverse: reverse ?? base.reverse,
+            verticalSpeed: verticalSpeed ?? base.verticalSpeed,
+            horizontalSpeed: horizontalSpeed ?? base.horizontalSpeed,
+            isSmooth: isSmooth ?? base.isSmooth,
+            shiftSwapsAxes: shiftSwapsAxes ?? base.shiftSwapsAxes,
+            optionIsPrecise: optionIsPrecise ?? base.optionIsPrecise,
+            commandIsFast: commandIsFast ?? base.commandIsFast
+        )
+    }
+
+    // MARK: - Fields
+
+    /// The field's value as a property list holds it, nil when the field is not set.
+    public func value(of field: ScrollField) -> Any? {
+        switch field {
+        case .reverse: return reverse?.rawValue
+        case .verticalSpeed: return verticalSpeed
+        case .horizontalSpeed: return horizontalSpeed
+        case .smooth: return isSmooth
+        case .shiftSwapsAxes: return shiftSwapsAxes
+        case .optionPrecise: return optionIsPrecise
+        case .commandFast: return commandIsFast
+        }
+    }
+
+    /// Sets a field from a property-list value. A value of the wrong kind leaves the
+    /// field unset rather than failing the lot.
+    public mutating func set(_ field: ScrollField, to value: Any?) {
+        switch field {
+        case .reverse: reverse = (value as? String).flatMap(ScrollReverse.init(rawValue:))
+        case .verticalSpeed: verticalSpeed = ScrollOverride.number(value).map(ScrollSettings.clampSpeed)
+        case .horizontalSpeed: horizontalSpeed = ScrollOverride.number(value).map(ScrollSettings.clampSpeed)
+        case .smooth: isSmooth = ScrollOverride.bool(value)
+        case .shiftSwapsAxes: shiftSwapsAxes = ScrollOverride.bool(value)
+        case .optionPrecise: optionIsPrecise = ScrollOverride.bool(value)
+        case .commandFast: commandIsFast = ScrollOverride.bool(value)
+        }
+    }
+
+    /// A number of any kind, as a hand-edited file writes "2" for a speed; never a boolean.
+    private static func number(_ value: Any?) -> Double? {
+        guard let value, CFGetTypeID(value as CFTypeRef) != CFBooleanGetTypeID() else { return nil }
+        if let number = value as? NSNumber { return number.doubleValue }
+        if let double = value as? Double { return double }
+        if let int = value as? Int { return Double(int) }
+        return nil
+    }
+
+    private static func bool(_ value: Any?) -> Bool? {
+        guard let value, CFGetTypeID(value as CFTypeRef) == CFBooleanGetTypeID() else { return nil }
+        return value as? Bool
+    }
+
+    /// Only the fields that are set, keyed by field name.
+    public var propertyList: [String: Any] {
+        var result: [String: Any] = [:]
+        for field in ScrollField.allCases {
+            if let value = value(of: field) {
+                result[field.rawValue] = value
+            }
+        }
+        return result
+    }
+
+    /// Tolerant: anything but a dictionary, or any entry of the wrong kind, reads as unset.
+    public init(propertyList: Any?) {
+        self.init()
+        guard let dictionary = propertyList as? [String: Any] else { return }
+        for field in ScrollField.allCases {
+            set(field, to: dictionary[field.rawValue])
+        }
+    }
+}
+
+/// Decides what the wheel does with a given mouse and app in front.
+public enum ScrollResolver {
+    /// The app's own settings win, then the mouse model's, then the ones for all.
+    public static func resolve(global: ScrollSettings, profile: ScrollOverride?, app: ScrollOverride?) -> ScrollSettings {
+        var settings = global
+        if let profile {
+            settings = profile.applied(to: settings)
+        }
+        if let app {
+            settings = app.applied(to: settings)
+        }
+        return settings
     }
 }
 
@@ -88,22 +271,26 @@ public enum ScrollTransform {
     }
 
     /// The same, with the modifiers held: ⌥ for precision wins over ⌘ for speed, as the
-    /// keyboard cursor's tiers do, and ⇧ swaps the axes after the scaling.
+    /// keyboard cursor's tiers do, and ⇧ swaps the axes last, after each axis has been
+    /// reversed and scaled on its own, so a reversed vertical wheel turned sideways is
+    /// still the reversed one.
     public static func apply(_ delta: ScrollDelta, settings: ScrollSettings, modifiers: Shortcut.Modifiers) -> ModifiedScroll {
-        var factor = settings.speed * (settings.isReversed ? -1 : 1)
+        var modifierFactor = 1.0
         var consumed: Shortcut.Modifiers = []
         if settings.optionIsPrecise, modifiers.contains(.option) {
-            factor *= ScrollSettings.preciseFactor
+            modifierFactor = ScrollSettings.preciseFactor
             consumed.insert(.option)
         } else if settings.commandIsFast, modifiers.contains(.command) {
-            factor *= ScrollSettings.fastFactor
+            modifierFactor = ScrollSettings.fastFactor
             consumed.insert(.command)
         }
+        let vertical = settings.verticalSpeed * modifierFactor * (settings.reverse.reversesVertical ? -1 : 1)
+        let horizontal = settings.horizontalSpeed * modifierFactor * (settings.reverse.reversesHorizontal ? -1 : 1)
 
         var result = ScrollDelta(
-            lines: (scaleLines(delta.lines.vertical, by: factor), scaleLines(delta.lines.horizontal, by: factor)),
-            fixedLines: (delta.fixedLines.vertical * factor, delta.fixedLines.horizontal * factor),
-            points: (delta.points.vertical * factor, delta.points.horizontal * factor)
+            lines: (scaleLines(delta.lines.vertical, by: vertical), scaleLines(delta.lines.horizontal, by: horizontal)),
+            fixedLines: (delta.fixedLines.vertical * vertical, delta.fixedLines.horizontal * horizontal),
+            points: (delta.points.vertical * vertical, delta.points.horizontal * horizontal)
         )
         if settings.shiftSwapsAxes, modifiers.contains(.shift) {
             result = ScrollDelta(
