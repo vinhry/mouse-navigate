@@ -28,6 +28,8 @@ public enum ScrollField: String, CaseIterable {
     case verticalSpeed
     case horizontalSpeed
     case smooth
+    /// Smooth scrolling that coasts on after a flick, the way a trackpad does.
+    case momentum
     case shiftSwapsAxes
     case optionPrecise
     case commandFast
@@ -36,7 +38,7 @@ public enum ScrollField: String, CaseIterable {
         switch self {
         case .reverse: return .string
         case .verticalSpeed, .horizontalSpeed: return .double
-        case .smooth, .shiftSwapsAxes, .optionPrecise, .commandFast: return .bool
+        case .smooth, .momentum, .shiftSwapsAxes, .optionPrecise, .commandFast: return .bool
         }
     }
 }
@@ -48,6 +50,9 @@ public struct ScrollSettings: Equatable, Sendable {
     public var verticalSpeed: Double
     public var horizontalSpeed: Double
     public var isSmooth: Bool
+    /// With `isSmooth`, a flick of the wheel coasts on as a trackpad does, and the scroll
+    /// carries a trackpad's gesture phases. Nothing without it.
+    public var hasMomentum: Bool
     /// ⇧ held while scrolling turns the wheel sideways.
     public var shiftSwapsAxes: Bool
     /// ⌥ held while scrolling slows the wheel to a quarter.
@@ -65,6 +70,7 @@ public struct ScrollSettings: Equatable, Sendable {
         verticalSpeed: Double = 1,
         horizontalSpeed: Double = 1,
         isSmooth: Bool = false,
+        hasMomentum: Bool = false,
         shiftSwapsAxes: Bool = false,
         optionIsPrecise: Bool = false,
         commandIsFast: Bool = false
@@ -73,6 +79,7 @@ public struct ScrollSettings: Equatable, Sendable {
         self.verticalSpeed = ScrollSettings.clampSpeed(verticalSpeed)
         self.horizontalSpeed = ScrollSettings.clampSpeed(horizontalSpeed)
         self.isSmooth = isSmooth
+        self.hasMomentum = hasMomentum
         self.shiftSwapsAxes = shiftSwapsAxes
         self.optionIsPrecise = optionIsPrecise
         self.commandIsFast = commandIsFast
@@ -95,6 +102,7 @@ public struct ScrollOverride: Equatable, Sendable {
     public var verticalSpeed: Double?
     public var horizontalSpeed: Double?
     public var isSmooth: Bool?
+    public var hasMomentum: Bool?
     public var shiftSwapsAxes: Bool?
     public var optionIsPrecise: Bool?
     public var commandIsFast: Bool?
@@ -106,6 +114,7 @@ public struct ScrollOverride: Equatable, Sendable {
         verticalSpeed: Double? = nil,
         horizontalSpeed: Double? = nil,
         isSmooth: Bool? = nil,
+        hasMomentum: Bool? = nil,
         shiftSwapsAxes: Bool? = nil,
         optionIsPrecise: Bool? = nil,
         commandIsFast: Bool? = nil
@@ -114,6 +123,7 @@ public struct ScrollOverride: Equatable, Sendable {
         self.verticalSpeed = verticalSpeed.map(ScrollSettings.clampSpeed)
         self.horizontalSpeed = horizontalSpeed.map(ScrollSettings.clampSpeed)
         self.isSmooth = isSmooth
+        self.hasMomentum = hasMomentum
         self.shiftSwapsAxes = shiftSwapsAxes
         self.optionIsPrecise = optionIsPrecise
         self.commandIsFast = commandIsFast
@@ -126,6 +136,7 @@ public struct ScrollOverride: Equatable, Sendable {
             verticalSpeed: settings.verticalSpeed,
             horizontalSpeed: settings.horizontalSpeed,
             isSmooth: settings.isSmooth,
+            hasMomentum: settings.hasMomentum,
             shiftSwapsAxes: settings.shiftSwapsAxes,
             optionIsPrecise: settings.optionIsPrecise,
             commandIsFast: settings.commandIsFast
@@ -142,6 +153,7 @@ public struct ScrollOverride: Equatable, Sendable {
             verticalSpeed: verticalSpeed ?? base.verticalSpeed,
             horizontalSpeed: horizontalSpeed ?? base.horizontalSpeed,
             isSmooth: isSmooth ?? base.isSmooth,
+            hasMomentum: hasMomentum ?? base.hasMomentum,
             shiftSwapsAxes: shiftSwapsAxes ?? base.shiftSwapsAxes,
             optionIsPrecise: optionIsPrecise ?? base.optionIsPrecise,
             commandIsFast: commandIsFast ?? base.commandIsFast
@@ -157,6 +169,7 @@ public struct ScrollOverride: Equatable, Sendable {
         case .verticalSpeed: return verticalSpeed
         case .horizontalSpeed: return horizontalSpeed
         case .smooth: return isSmooth
+        case .momentum: return hasMomentum
         case .shiftSwapsAxes: return shiftSwapsAxes
         case .optionPrecise: return optionIsPrecise
         case .commandFast: return commandIsFast
@@ -171,6 +184,7 @@ public struct ScrollOverride: Equatable, Sendable {
         case .verticalSpeed: verticalSpeed = ScrollOverride.number(value).map(ScrollSettings.clampSpeed)
         case .horizontalSpeed: horizontalSpeed = ScrollOverride.number(value).map(ScrollSettings.clampSpeed)
         case .smooth: isSmooth = ScrollOverride.bool(value)
+        case .momentum: hasMomentum = ScrollOverride.bool(value)
         case .shiftSwapsAxes: shiftSwapsAxes = ScrollOverride.bool(value)
         case .optionPrecise: optionIsPrecise = ScrollOverride.bool(value)
         case .commandFast: commandIsFast = ScrollOverride.bool(value)
@@ -320,7 +334,7 @@ public enum ScrollTransform {
 /// Every notch adds its distance to what is still to travel; each frame covers a share of
 /// that, so a quick run of notches speeds up and a pause lets it settle. Turning the wheel
 /// the other way drops whatever was left in the old direction.
-public struct ScrollSmoother {
+public struct ScrollSmoother: Sendable {
     /// How quickly the remaining distance is used up: after this long about 63% of it has
     /// been scrolled.
     public var timeConstant: TimeInterval
@@ -335,6 +349,11 @@ public struct ScrollSmoother {
 
     public var isIdle: Bool {
         remaining.vertical == 0 && remaining.horizontal == 0
+    }
+
+    /// What is still to travel, in points.
+    public var remainingDistance: (vertical: Double, horizontal: Double) {
+        remaining
     }
 
     public mutating func add(vertical: Double, horizontal: Double) {

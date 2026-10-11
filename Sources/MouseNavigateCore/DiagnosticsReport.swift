@@ -58,13 +58,19 @@ public struct DiagnosticsReport: Equatable {
         case listening(surfaces: [String])
     }
 
+    public enum Smoothing: String, Equatable, Sendable {
+        case off
+        case smooth
+        case momentum = "smooth with momentum"
+    }
+
     public struct Settings: Equatable {
         public var keyboardCursor = false
         public var touch = false
         public var leftHanded = false
         public var drawingSources = 0
         public var scrollOptions = false
-        public var smoothScrolling = false
+        public var smoothing = Smoothing.off
         /// Presses other than a plain click, for any button, bound to something of their own.
         public var boundButtonCombinations = 0
         public var appsWithOwnSettings = 0
@@ -135,7 +141,7 @@ public struct DiagnosticsReport: Equatable {
             "  Keyboard cursor: \(onOff(s.keyboardCursor))",
             "  Touch gestures: \(onOff(s.touch)), left-handed \(onOff(s.leftHanded)), "
                 + "\(s.drawingSources) drawing source(s)",
-            "  Scroll options: \(onOff(s.scrollOptions)), smooth scrolling \(onOff(s.smoothScrolling))",
+            "  Scroll options: \(onOff(s.scrollOptions)), smoothing \(s.smoothing.rawValue)",
             "  Holds, double-clicks, drags and modifier presses bound for this mouse: "
                 + "\(s.boundButtonCombinations)",
             "  Apps with their own settings: \(s.appsWithOwnSettings), turned off in: \(s.appsTurnedOff)",

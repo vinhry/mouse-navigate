@@ -242,4 +242,19 @@ final class ScrollWheelTests: XCTestCase {
         XCTAssertTrue(smoother.isIdle)
         XCTAssertEqual(smoother.step(elapsed: 1).vertical, 0)
     }
+
+    func testMomentumIsAFieldLikeAnyOther() {
+        XCTAssertEqual(ScrollField.momentum.valueType, .bool)
+        XCTAssertEqual(SettingsKey.type(of: SettingsKey.scroll(.momentum)), .bool)
+        XCTAssertTrue(SettingsKey.isExportable(SettingsKey.scroll(.momentum, profile: .mxMaster4)))
+
+        let override = ScrollOverride(isSmooth: true, hasMomentum: true)
+        XCTAssertEqual(ScrollOverride(propertyList: override.propertyList), override)
+        XCTAssertEqual(override.propertyList["momentum"] as? Bool, true)
+
+        let resolved = ScrollResolver.resolve(global: .standard, profile: nil, app: override)
+        XCTAssertTrue(resolved.isSmooth && resolved.hasMomentum)
+        XCTAssertTrue(resolved.isActive)
+    }
 }
+

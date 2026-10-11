@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import MouseNavigateCore
 
 /// The events MouseNavigate posts itself: one source, one tag, one place to post from.
 ///
@@ -40,16 +41,31 @@ enum SyntheticEvents {
     }
 
     /// Pixel units make the event continuous, as a trackpad's are, which apps scroll by
-    /// the exact amount rather than by lines.
-    static func scroll(verticalPixels: Int32, horizontalPixels: Int32) -> CGEvent? {
-        CGEvent(
+    /// the exact amount rather than by lines. A phase or momentum phase makes it part of a
+    /// gesture or a coast, as a trackpad's scrolls are.
+    static func scroll(
+        verticalPixels: Int32,
+        horizontalPixels: Int32,
+        phase: ScrollPhase? = nil,
+        momentum: MomentumPhase = .none
+    ) -> CGEvent? {
+        guard let event = CGEvent(
             scrollWheelEvent2Source: source,
             units: .pixel,
             wheelCount: 2,
             wheel1: verticalPixels,
             wheel2: horizontalPixels,
             wheel3: 0
-        )
+        ) else {
+            return nil
+        }
+        if let phase {
+            event.setIntegerValueField(.scrollWheelEventScrollPhase, value: Int64(phase.rawValue))
+        }
+        if momentum != .none {
+            event.setIntegerValueField(.scrollWheelEventMomentumPhase, value: Int64(momentum.rawValue))
+        }
+        return event
     }
 
     static func key(_ keyCode: CGKeyCode, down: Bool) -> CGEvent? {

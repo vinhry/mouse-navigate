@@ -184,9 +184,16 @@ natural scrolling while the wheel goes the other way.
 - **Reverse** flips the vertical wheel, a horizontal thumb wheel, both or neither.
 - **Vertical speed** and **Horizontal speed** scale each notch of that axis from 0.5× to
   4×. Slowing down never makes a notch do nothing.
-- **Smooth scrolling (experimental)** spreads each notch over a few frames instead of
-  jumping. It covers the same distance a notch does in standard Mac apps; browsers pick their
-  own distance per notch, so raise the speed if it feels slower there.
+- **Smoothing** is **Off**, **Smooth** or **Smooth with momentum**.
+  - **Smooth** spreads each notch over a few frames instead of jumping. It covers the same
+    distance a notch does in standard Mac apps; browsers pick their own distance per notch,
+    so raise the speed if it feels slower there.
+  - **Smooth with momentum** scrolls the way a trackpad does. A flick of the wheel coasts
+    on afterwards and slows to a stop, a page stretches at its ends and springs back, and
+    turning the wheel again during a coast stops it. A single notch or a slow turn never
+    coasts, so it still moves exactly as far as it says. Apps see a trackpad's scroll, so
+    one that swipes between pages on a sideways trackpad swipe may do the same for a
+    horizontal thumb wheel.
 
 - **⇧ scrolls sideways** turns the wheel horizontal while Shift is held.
 - **⌥ scrolls precisely** moves a quarter as far per notch while Option is held.

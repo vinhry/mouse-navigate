@@ -46,7 +46,7 @@ public enum EventTapPolicy {
 
 /// `kCGScrollWheelEventScrollPhase`: where a continuous scroll is, from fingers landing to
 /// lifting. Raw values are CoreGraphics's.
-public enum ScrollPhase: Int, Equatable {
+public enum ScrollPhase: Int, Equatable, Sendable {
     case began = 1
     case changed = 2
     case ended = 4
@@ -56,7 +56,7 @@ public enum ScrollPhase: Int, Equatable {
 
 /// `kCGScrollWheelEventMomentumPhase`: the coast after the fingers lift. Raw values are
 /// CoreGraphics's.
-public enum MomentumPhase: Int, Equatable {
+public enum MomentumPhase: Int, Equatable, Sendable {
     case none = 0
     case begin = 1
     case `continue` = 2

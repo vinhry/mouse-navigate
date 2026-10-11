@@ -60,7 +60,8 @@ enum DiagnosticsCollector {
         settings.leftHanded = preferences.isLeftHanded
         settings.drawingSources = CharacterSource.allCases.filter(preferences.isCharacterSourceEnabled).count
         settings.scrollOptions = preferences.isAnyScrollSettingActive
-        settings.smoothScrolling = preferences.scrollSettings.isSmooth
+        let wheel = preferences.scrollSettings
+        settings.smoothing = wheel.isSmooth ? (wheel.hasMomentum ? .momentum : .smooth) : .off
         settings.boundButtonCombinations = preferences
             .boundButtonCombinations(profile: detector.activeProfile, app: nil).count
         settings.appsWithOwnSettings = preferences.appOverrides.count

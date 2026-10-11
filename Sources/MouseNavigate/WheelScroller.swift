@@ -2,13 +2,13 @@ import CoreGraphics
 import Foundation
 import MouseNavigateCore
 
-/// Reverses, speeds up and smooths a mouse wheel. Only line-based wheel events come here;
-/// trackpads and the Magic Mouse scroll continuously and are left to macOS.
+/// Reverses, speeds up and smooths a mouse wheel, with momentum if asked. Only line-based
+/// wheel events come here; trackpads and the Magic Mouse scroll continuously and are left
+/// to macOS.
 @MainActor
 final class WheelScroller {
-    private var smoother = ScrollSmoother()
+    private var scroller = MomentumScroller(hasMomentum: false)
     private var timer: MainTimer?
-    private var lastFrame: TimeInterval = 0
     /// Modifiers a wheel option has used up, to keep off the frames posted while smoothing:
     /// the source would otherwise stamp the held ⇧ back on, and AppKit swap the axes again.
     private var consumedFlags: CGEventFlags = []
@@ -28,14 +28,26 @@ final class WheelScroller {
             return false
         }
 
-        smoother.add(vertical: delta.points.vertical, horizontal: delta.points.horizontal)
+        // Momentum switched on or off, or a scope with the other setting in front, takes
+        // effect from the next scroll rather than half way through this one.
+        if scroller.hasMomentum != settings.hasMomentum, scroller.isIdle {
+            scroller = MomentumScroller(hasMomentum: settings.hasMomentum)
+        }
+        scroller.add(
+            vertical: delta.points.vertical,
+            horizontal: delta.points.horizontal,
+            at: ProcessInfo.processInfo.systemUptime
+        )
         startTimerIfNeeded()
         return true
     }
 
+    /// Stops at once, closing a gesture or coast that apps have been told has begun.
     func stop() {
         timer = nil
-        smoother.stop()
+        if let closing = scroller.cancel() {
+            post(closing)
+        }
     }
 
     // MARK: - Event fields
@@ -72,30 +84,26 @@ final class WheelScroller {
 
     private func startTimerIfNeeded() {
         guard timer == nil else { return }
-
-        lastFrame = ProcessInfo.processInfo.systemUptime
         timer = MainTimer(after: 0, repeating: WheelScroller.frameInterval, leeway: .milliseconds(1)) { [weak self] in
             self?.frame()
         }
     }
 
     private func frame() {
-        let now = ProcessInfo.processInfo.systemUptime
-        let step = smoother.step(elapsed: now - lastFrame)
-        lastFrame = now
-
-        if step.vertical != 0 || step.horizontal != 0 {
-            postPixels(vertical: step.vertical, horizontal: step.horizontal)
+        if let next = scroller.frame(at: ProcessInfo.processInfo.systemUptime) {
+            post(next)
         }
-        if smoother.isIdle {
+        if scroller.isIdle {
             timer = nil
         }
     }
 
-    private func postPixels(vertical: Int, horizontal: Int) {
+    private func post(_ frame: MomentumScroller.Frame) {
         guard let event = SyntheticEvents.scroll(
-            verticalPixels: Int32(clamping: vertical),
-            horizontalPixels: Int32(clamping: horizontal)
+            verticalPixels: Int32(clamping: frame.vertical),
+            horizontalPixels: Int32(clamping: frame.horizontal),
+            phase: frame.phase,
+            momentum: frame.momentum
         ) else {
             return
         }

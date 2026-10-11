@@ -13,7 +13,7 @@ final class ScrollSectionControls {
     var verticalLabel: NSTextField!
     var horizontalSlider: NSSlider!
     var horizontalLabel: NSTextField!
-    var smooth: NSButton!
+    var smoothingPopup: NSPopUpButton!
     var shift: NSButton!
     var option: NSButton!
     var command: NSButton!
@@ -22,7 +22,7 @@ final class ScrollSectionControls {
     var profile: DeviceProfile?
 
     var settingControls: [NSControl] {
-        [reversePopup, verticalSlider, horizontalSlider, smooth, shift, option, command]
+        [reversePopup, verticalSlider, horizontalSlider, smoothingPopup, shift, option, command]
     }
 
     /// What the controls show, as settings.
@@ -31,7 +31,8 @@ final class ScrollSectionControls {
             reverse: ScrollReverse.allCases[max(reversePopup.indexOfSelectedItem, 0)],
             verticalSpeed: verticalSlider.doubleValue,
             horizontalSpeed: horizontalSlider.doubleValue,
-            isSmooth: smooth.state == .on,
+            isSmooth: smoothingPopup.indexOfSelectedItem >= 1,
+            hasMomentum: smoothingPopup.indexOfSelectedItem == 2,
             shiftSwapsAxes: shift.state == .on,
             optionIsPrecise: option.state == .on,
             commandIsFast: command.state == .on
@@ -44,7 +45,8 @@ final class ScrollSectionControls {
         verticalLabel.stringValue = String(format: "%.1f×", settings.verticalSpeed)
         horizontalSlider.doubleValue = settings.horizontalSpeed
         horizontalLabel.stringValue = String(format: "%.1f×", settings.horizontalSpeed)
-        smooth.state = settings.isSmooth ? .on : .off
+        // Momentum is part of smoothing: without it, it does nothing, and reads as Off.
+        smoothingPopup.selectItem(at: settings.isSmooth ? (settings.hasMomentum ? 2 : 1) : 0)
         shift.state = settings.shiftSwapsAxes ? .on : .off
         option.state = settings.optionIsPrecise ? .on : .off
         command.state = settings.commandIsFast ? .on : .off
@@ -117,13 +119,19 @@ extension PreferencesWindowController {
         controls.horizontalSlider = horizontalSlider
         controls.horizontalLabel = horizontalLabel
 
-        let smooth = NSButton(
-            checkboxWithTitle: "Smooth scrolling (experimental)",
-            target: self,
-            action: #selector(scrollSettingChanged(_:))
-        )
-        smooth.toolTip = "Spreads each notch of the wheel over a few frames instead of jumping."
-        controls.smooth = smooth
+        let smoothingLabel = NSTextField(labelWithString: "Smoothing:")
+        let smoothingPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        smoothingPopup.target = self
+        smoothingPopup.action = #selector(scrollSettingChanged(_:))
+        smoothingPopup.addItems(withTitles: ["Off", "Smooth", "Smooth with momentum"])
+        smoothingPopup.toolTip = "Smooth spreads each notch of the wheel over a few frames instead of "
+            + "jumping. With momentum, a flick of the wheel coasts on and slows to a stop, and pages "
+            + "stretch at their ends, as they do with a trackpad."
+        controls.smoothingPopup = smoothingPopup
+        let smoothingRow = NSStackView(views: [smoothingLabel, smoothingPopup])
+        smoothingRow.orientation = .horizontal
+        smoothingRow.spacing = 8
+        PreferencesWindowController.titleControls(in: [smoothingLabel, smoothingPopup])
 
         let shift = NSButton(checkboxWithTitle: "⇧ scrolls sideways", target: self, action: #selector(scrollSettingChanged(_:)))
         shift.toolTip = "Hold Shift and the wheel scrolls horizontally. Shift is used up, so apps "
@@ -143,7 +151,7 @@ extension PreferencesWindowController {
         modifiers.orientation = .horizontal
         modifiers.spacing = 14
 
-        let content = NSStackView(views: [scopeRow, reverseRow, verticalRow, horizontalRow, smooth, modifiers])
+        let content = NSStackView(views: [scopeRow, reverseRow, verticalRow, horizontalRow, smoothingRow, modifiers])
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = 8
