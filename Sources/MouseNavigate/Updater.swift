@@ -112,35 +112,19 @@ final class Updater {
         guard !hasAskedThisLaunch, canSelfUpdate, AXIsProcessTrusted() else { return }
         hasAskedThisLaunch = true
 
-        let alert = NSAlert()
-        alert.messageText = "Keep MouseNavigate up to date?"
-        alert.informativeText = "MouseNavigate can check GitHub once a day for a new version and download it "
-            + "in the background. Nothing is installed until you choose Install and Relaunch from the menu, "
-            + "and only a version signed and notarized for MouseNavigate is ever installed.\n\n"
-            + "You can change this in Settings → About."
-        alert.addButton(withTitle: "Check Automatically")
-        alert.addButton(withTitle: "Don't Check")
-
-        present(alert) { [weak self] response in
+        AlertPresenter.modal(
+            "Keep MouseNavigate up to date?",
+            "MouseNavigate can check GitHub once a day for a new version and download it "
+                + "in the background. Nothing is installed until you choose Install and Relaunch from the menu, "
+                + "and only a version signed and notarized for MouseNavigate is ever installed.\n\n"
+                + "You can change this in Settings → About.",
+            buttons: ["Check Automatically", "Don't Check"]
+        ) { [weak self] response in
             let automatic = response == .alertFirstButtonReturn
             Preferences.shared.automaticUpdates = automatic
             if automatic {
                 self?.check(userInitiated: false)
             }
-        }
-    }
-
-    /// Shows a modal alert from run-loop context, whatever context the caller is in.
-    ///
-    /// `NSAlert.runModal()` spins a nested run loop. Entered from a block on the main
-    /// dispatch queue, that loop serves no other main-queue block until the alert closes,
-    /// so the keyboard cursor's hold timer never fires, side buttons with a hold binding
-    /// swallow their presses and gesture actions queue up. Entered from the run loop
-    /// itself, it serves everything as usual.
-    private func present(_ alert: NSAlert, then handle: @escaping (NSApplication.ModalResponse) -> Void = { _ in }) {
-        RunLoop.main.perform(inModes: [.common]) {
-            NSApp.activate(ignoringOtherApps: true)
-            handle(alert.runModal())
         }
     }
 
@@ -262,12 +246,11 @@ final class Updater {
             state = .failed(message)
             if userInitiated {
                 // This copy cannot install it, so the way forward is the release page.
-                let alert = NSAlert()
-                alert.messageText = "Version \(candidate.version) is available"
-                alert.informativeText = message + " Download it from the release page instead."
-                alert.addButton(withTitle: "Open Release Page")
-                alert.addButton(withTitle: "Not Now")
-                present(alert) { response in
+                AlertPresenter.modal(
+                    "Version \(candidate.version) is available",
+                    message + " Download it from the release page instead.",
+                    buttons: ["Open Release Page", "Not Now"]
+                ) { response in
                     if response == .alertFirstButtonReturn {
                         NSWorkspace.shared.open(candidate.releasePage)
                     }
@@ -424,15 +407,12 @@ final class Updater {
     }
 
     private func offerInstall(_ staged: StagedUpdate) {
-        let alert = NSAlert()
-        alert.messageText = "MouseNavigate \(staged.version) is ready"
-        alert.informativeText = "It has been downloaded and checked. Install it now? MouseNavigate "
-            + "quits and reopens, which takes a moment."
-        alert.addButton(withTitle: "Install and Relaunch")
-        alert.addButton(withTitle: "Later")
-        alert.addButton(withTitle: "Release Notes")
-
-        present(alert) { [weak self] response in
+        AlertPresenter.modal(
+            "MouseNavigate \(staged.version) is ready",
+            "It has been downloaded and checked. Install it now? MouseNavigate "
+                + "quits and reopens, which takes a moment.",
+            buttons: ["Install and Relaunch", "Later", "Release Notes"]
+        ) { [weak self] response in
             switch response {
             case .alertFirstButtonReturn:
                 self?.installAndRelaunch()
@@ -532,10 +512,9 @@ final class Updater {
         } catch {
             // The alert is shown from the run loop, so quitting here would end the process
             // before it appeared. The new version is already in place either way.
-            let alert = NSAlert()
-            alert.messageText = "Installed, but couldn't relaunch"
-            alert.informativeText = "Open MouseNavigate again to finish updating."
-            present(alert) { [weak self] _ in self?.onQuit?() }
+            AlertPresenter.modal("Installed, but couldn't relaunch", "Open MouseNavigate again to finish updating.") { [weak self] _ in
+                self?.onQuit?()
+            }
             return
         }
         onQuit?()
@@ -585,10 +564,7 @@ final class Updater {
     // MARK: - Helpers
 
     private func showAlert(_ title: String, _ message: String) {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
-        present(alert)
+        AlertPresenter.modal(title, message)
     }
 
     private static func run(_ tool: String, _ arguments: [String], timeout: TimeInterval) throws {

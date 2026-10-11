@@ -436,21 +436,20 @@ final class PreferencesWindowController: NSObject {
     @objc private func restoreMouseDefaultsTapped() {
         guard let window else { return }
         let profile = detector.activeProfile
-        let alert = NSAlert()
+        let title: String
+        let message: String
         if let selectedApp, let app = Preferences.shared.appOverrides[selectedApp] {
-            alert.messageText = "Restore the mouse defaults for \(app.name)?"
-            alert.informativeText = "\(app.name) gives up its own button bindings and scroll settings and "
+            title = "Restore the mouse defaults for \(app.name)?"
+            message = "\(app.name) gives up its own button bindings and scroll settings and "
                 + "goes back to the ones for all apps. Its gestures are kept."
         } else {
-            alert.messageText = "Restore the mouse defaults for the \(profile.displayName)?"
-            alert.informativeText = "Every button binding of the \(profile.displayName), for every press "
+            title = "Restore the mouse defaults for the \(profile.displayName)?"
+            message = "Every button binding of the \(profile.displayName), for every press "
                 + "and modifier combination, goes back to its default, and so do the scroll settings "
                 + "for all mice and for this mouse. Other mice, apps' own settings, gestures and the "
                 + "keyboard cursor are kept."
         }
-        alert.addButton(withTitle: "Restore")
-        alert.addButton(withTitle: "Cancel")
-        alert.beginSheetModal(for: window) { [weak self] response in
+        AlertPresenter.sheet(title, message, buttons: ["Restore", "Cancel"], on: window) { [weak self] response in
             guard let self, response == .alertFirstButtonReturn else { return }
             if let selectedApp = self.selectedApp {
                 Preferences.shared.clearAppBindings(app: selectedApp) { key in
@@ -880,13 +879,13 @@ final class PreferencesWindowController: NSObject {
             return
         }
 
-        let alert = NSAlert()
-        alert.messageText = "Remove \(app.name)?"
-        alert.informativeText = "Its own bindings and scroll settings are deleted, MouseNavigate is "
-            + "turned back on in it, and it goes back to the settings for all apps."
-        alert.addButton(withTitle: "Remove")
-        alert.addButton(withTitle: "Cancel")
-        alert.beginSheetModal(for: window) { [weak self] response in
+        AlertPresenter.sheet(
+            "Remove \(app.name)?",
+            "Its own bindings and scroll settings are deleted, MouseNavigate is "
+                + "turned back on in it, and it goes back to the settings for all apps.",
+            buttons: ["Remove", "Cancel"],
+            on: window
+        ) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
             Preferences.shared.removeApp(bundleID: selectedApp)
             self?.selectedApp = nil

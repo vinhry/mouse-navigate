@@ -252,15 +252,13 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         } catch {
             // Typically an unsigned or unbundled build, which macOS will not start at login.
             Log.launch.error("Launch at Login could not be changed: \(error.localizedDescription, privacy: .public)")
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "Launch at Login couldn't be changed"
-            alert.informativeText = error.localizedDescription
-                + "\n\nmacOS starts only a signed copy that runs from an app bundle at login, "
-                + "so a build run from source or from the Terminal cannot be registered."
-            alert.addButton(withTitle: "OK")
-            NSApp.activate(ignoringOtherApps: true)
-            alert.runModal()
+            AlertPresenter.modal(
+                "Launch at Login couldn't be changed",
+                error.localizedDescription
+                    + "\n\nmacOS starts only a signed copy that runs from an app bundle at login, "
+                    + "so a build run from source or from the Terminal cannot be registered.",
+                style: .warning
+            )
         }
         updateLaunchAtLoginState()
     }

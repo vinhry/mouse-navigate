@@ -140,12 +140,7 @@ final class BindingEditor: NSObject, NSTextFieldDelegate, NSComboBoxDelegate {
     // MARK: - Helpers
 
     private func makeAlert(title: String, message: String) -> NSAlert {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
-        alert.addButton(withTitle: "OK")
-        alert.addButton(withTitle: "Cancel")
-        return alert
+        AlertPresenter.make(title, message, buttons: ["OK", "Cancel"])
     }
 
     private func watch(_ field: NSTextField, confirm: NSButton, acceptable: @escaping (String) -> Bool) {

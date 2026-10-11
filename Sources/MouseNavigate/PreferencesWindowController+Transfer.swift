@@ -87,13 +87,13 @@ extension PreferencesWindowController {
             return
         }
 
-        let alert = NSAlert()
-        alert.messageText = "Replace your settings with the ones in “\(url.lastPathComponent)”?"
-        alert.informativeText = "Every button, gesture, keyboard cursor and scroll setting on this Mac "
-            + "will be replaced. There is no undo, so export first to keep a copy."
-        alert.addButton(withTitle: "Replace")
-        alert.addButton(withTitle: "Cancel")
-        alert.beginSheetModal(for: window) { [weak self] response in
+        AlertPresenter.sheet(
+            "Replace your settings with the ones in “\(url.lastPathComponent)”?",
+            "Every button, gesture, keyboard cursor and scroll setting on this Mac "
+                + "will be replaced. There is no undo, so export first to keep a copy.",
+            buttons: ["Replace", "Cancel"],
+            on: window
+        ) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }
             // The sheet has to be gone before another can be shown.
             DispatchQueue.main.async {
@@ -107,24 +107,16 @@ extension PreferencesWindowController {
         refreshAllUI()
 
         guard let window else { return }
-        let alert = NSAlert()
-        alert.messageText = "Settings imported"
-        if result.ignoredKeys.isEmpty {
-            alert.informativeText = "Every setting now comes from the file."
-        } else {
-            alert.informativeText = "Settings this version of MouseNavigate does not know were left out:\n"
+        let message = result.ignoredKeys.isEmpty
+            ? "Every setting now comes from the file."
+            : "Settings this version of MouseNavigate does not know were left out:\n"
                 + result.ignoredKeys.joined(separator: "\n")
-        }
-        alert.beginSheetModal(for: window)
+        AlertPresenter.sheet("Settings imported", message, on: window)
     }
 
     private func showTransferError(_ title: String, _ message: String) {
         guard let window else { return }
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = title
-        alert.informativeText = message
-        alert.beginSheetModal(for: window)
+        AlertPresenter.sheet(title, message, style: .warning, on: window)
     }
 
     private static func describe(_ error: SettingsSnapshot.ReadError) -> String {
