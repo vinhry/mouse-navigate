@@ -22,6 +22,13 @@ public enum DragDirection: String, CaseIterable {
 public enum ButtonInput: Hashable {
     case press(ButtonPress)
     case drag(DragDirection)
+
+    public var displayName: String {
+        switch self {
+        case .press(let press): return press.displayName
+        case .drag(let direction): return direction.displayName
+        }
+    }
 }
 
 /// Watches the pointer while a side button is held and says which way it was dragged,

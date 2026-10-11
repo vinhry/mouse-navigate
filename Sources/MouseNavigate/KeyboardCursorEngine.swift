@@ -480,7 +480,7 @@ final class KeyboardCursorEngine {
     /// For the Click Hints and Grid Jump actions on a mouse button or gesture: switches
     /// cursor mode on for as long as the modal is up, if it was not on already.
     func showFromMouseButton(hints: Bool) {
-        guard isCursorModeEnabled, !isSuspended, !isRecordingSuspended else { return }
+        guard isEnabled else { return }
 
         if !gate.isEngaged {
             engageExternally()
@@ -495,7 +495,7 @@ final class KeyboardCursorEngine {
 
     /// Engages cursor mode from a mouse button rather than the keyboard, or ends it.
     func toggleFromMouseButton() {
-        guard isCursorModeEnabled, !isSuspended, !isRecordingSuspended else { return }
+        guard isEnabled else { return }
 
         if gate.isEngaged {
             _ = gate.toggleExternally()

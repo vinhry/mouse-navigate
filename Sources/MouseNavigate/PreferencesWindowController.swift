@@ -20,6 +20,11 @@ final class PreferencesWindowController: NSObject {
             }
         }
 
+        var isButton: Bool {
+            if case .button = self { return true }
+            return false
+        }
+
         init?(identifier: String) {
             let parts = identifier.split(separator: ":", maxSplits: 1).map(String.init)
             guard parts.count == 2 else { return nil }
@@ -302,12 +307,7 @@ final class PreferencesWindowController: NSObject {
         let pressLabel = NSTextField(labelWithString: "Press:")
         pressLabel.alignment = .right
         let pressPicker = NSSegmentedControl(
-            labels: PreferencesWindowController.buttonInputs.map { input in
-                switch input {
-                case .press(let press): return press.displayName
-                case .drag(let direction): return direction.displayName
-                }
-            },
+            labels: PreferencesWindowController.buttonInputs.map(\.displayName),
             trackingMode: .selectOne,
             target: self,
             action: #selector(buttonPressChanged(_:))
@@ -409,23 +409,16 @@ final class PreferencesWindowController: NSObject {
     private func updateBindingMarkers() {
         guard let pressPicker, let modifierPicker else { return }
         let bound = Preferences.shared.boundButtonCombinations(profile: detector.activeProfile, app: selectedApp)
-
-        func name(of input: ButtonInput) -> String {
-            switch input {
-            case .press(let press): return press.displayName
-            case .drag(let direction): return direction.displayName
-            }
-        }
         for (index, input) in PreferencesWindowController.buttonInputs.enumerated() {
             let marked = bound.contains(ButtonCombination(input: input, modifiers: buttonModifiers))
-            pressPicker.setLabel(name(of: input) + (marked ? Self.boundMarker : ""), forSegment: index)
+            pressPicker.setLabel(input.displayName + (marked ? Self.boundMarker : ""), forSegment: index)
         }
         for (index, segment) in PreferencesWindowController.modifierSegments.enumerated() {
             let marked = bound.contains { $0.input == buttonInput && $0.modifiers.contains(segment.modifier) }
             modifierPicker.setLabel(segment.label + (marked ? Self.boundMarker : ""), forSegment: index)
         }
 
-        let shown = name(of: buttonInput)
+        let shown = buttonInput.displayName
         slotCaption?.stringValue = buttonModifiers.isEmpty
             ? "Showing the \(shown) bindings"
             : "Showing the \(shown) bindings with \(buttonModifiers.symbols) held"
@@ -478,19 +471,13 @@ final class PreferencesWindowController: NSObject {
             modifiers.insert(segment.modifier)
         }
         buttonModifiers = modifiers
-        refreshBindings { slot in
-            if case .button = slot { return true }
-            return false
-        }
+        refreshBindings(where: \.isButton)
     }
 
     @objc private func buttonPressChanged(_ sender: NSSegmentedControl) {
         guard PreferencesWindowController.buttonInputs.indices.contains(sender.selectedSegment) else { return }
         buttonInput = PreferencesWindowController.buttonInputs[sender.selectedSegment]
-        refreshBindings { slot in
-            if case .button = slot { return true }
-            return false
-        }
+        refreshBindings(where: \.isButton)
     }
 
     // MARK: - Layout helpers
@@ -762,7 +749,7 @@ final class PreferencesWindowController: NSObject {
     private func store(_ binding: ActionBinding?, for slot: BindingSlot, cancelled: Bool = false) {
         defer {
             refreshBinding(slot)
-            if case .button = slot { updateBindingMarkers() }
+            if slot.isButton { updateBindingMarkers() }
             // Binding or freeing a gesture macOS also uses changes what there is to warn of.
             if case .touch = slot { refreshTrackpadConflictUI() }
         }
@@ -1502,10 +1489,7 @@ final class PreferencesWindowController: NSObject {
             preview.isMirrored = preferences.isLeftHanded
         }
 
-        refreshBindings { slot in
-            if case .button = slot { return false }
-            return true
-        }
+        refreshBindings { !$0.isButton }
         for (source, checkbox) in characterSourceCheckboxes {
             checkbox.state = preferences.isCharacterSourceEnabled(source) ? .on : .off
         }
@@ -1811,10 +1795,7 @@ final class PreferencesWindowController: NSObject {
             overridePopup?.selectItem(at: 0)
         }
 
-        refreshBindings { slot in
-            if case .button = slot { return true }
-            return false
-        }
+        refreshBindings(where: \.isButton)
     }
 
     @objc private func overrideChanged(_ sender: NSPopUpButton) {
