@@ -16,6 +16,7 @@ final class GridMode: CursorModal {
     private let gridKey: UInt16
     private let move: (Vector2) -> Void
     private let overlay = ScreenOverlay()
+    private var isClosed = false
 
     init(pointer: Vector2, exitKey: UInt16, gridKey: UInt16, move: @escaping (Vector2) -> Void) {
         startingPoint = pointer
@@ -31,7 +32,13 @@ final class GridMode: CursorModal {
         overlay.draw = { [weak self] display in
             self?.draw(on: display)
         }
-        overlay.show()
+        // The grid is opened by a key or button the event tap is still holding, and making a
+        // window for every display takes long enough to hold up the keys typed after it. The
+        // keys work at once; the grid appears a moment later, unless it is already gone.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.isClosed else { return }
+            self.overlay.show()
+        }
     }
 
     func keyDown(_ keyCode: UInt16, flags: CGEventFlags) -> CursorModalResult {
@@ -70,6 +77,7 @@ final class GridMode: CursorModal {
     }
 
     func close() {
+        isClosed = true
         overlay.hide()
         overlay.draw = nil
     }

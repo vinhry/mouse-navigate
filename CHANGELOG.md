@@ -24,6 +24,9 @@ All notable changes to this project will be documented in this file.
   forward for every movement the mouse reported, while the pointer waited, and recognised
   the letter and ran its action before the release was answered. The ink is drawn at most
   once a display frame, and the letter is read once the button is up.
+- Opening **Grid Jump** made its window on every display while the key that opened it was
+  still being held up, so keys typed straight after it waited. The grid now appears a
+  moment after the key has been answered.
 
 ## [0.7.0] - 2026-10-11
 
