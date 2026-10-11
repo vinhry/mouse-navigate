@@ -23,17 +23,14 @@ final class KeyboardCursorEngine {
     /// are swallowed too, however cursor mode ends in between: the frontmost app never saw
     /// the press, so it must not see the rest.
     private var heldKeys = HeldKeySwallower()
-    private var heldDirections: Set<CursorBinding> = []
-    private var isScrollModifierHeld = false
+    /// The movement keys held, the speed ramp and the fractions of a point between ticks.
+    private var motion = CursorMotionIntegrator()
     private var tier: SpeedTier = []
 
     private var motionTimer: MainTimer?
     private var holdTimer: MainTimer?
     private var watchdogTimer: MainTimer?
 
-    private var motionStart: TimeInterval = 0
-    private var accumulator = SubPixelAccumulator()
-    private var scrollAccumulator = SubPixelAccumulator()
     private var lastPosition = Vector2.zero
     private var speedProfile = CursorSpeedProfile()
     private var screens: [Rect] = []
@@ -315,11 +312,9 @@ final class KeyboardCursorEngine {
         case .middleClick:
             output.pressButton(.middle)
         case .scrollModifier:
-            isScrollModifierHeld = true
-            restartMotionRamp()
+            motion.setScrolling(true, at: ProcessInfo.processInfo.systemUptime)
         case .moveUp, .moveDown, .moveLeft, .moveRight:
-            if heldDirections.insert(binding).inserted {
-                restartMotionRamp()
+            if motion.press(binding, at: ProcessInfo.processInfo.systemUptime) {
                 startMotionTimer()
             }
         case .grid:
@@ -346,14 +341,11 @@ final class KeyboardCursorEngine {
         case .middleClick:
             output.releaseButton(.middle)
         case .scrollModifier:
-            isScrollModifierHeld = false
-            restartMotionRamp()
+            motion.setScrolling(false, at: ProcessInfo.processInfo.systemUptime)
         case .moveUp, .moveDown, .moveLeft, .moveRight:
-            heldDirections.remove(binding)
-            if heldDirections.isEmpty {
+            motion.release(binding, at: ProcessInfo.processInfo.systemUptime)
+            if !motion.isMoving {
                 stopMotionTimer()
-            } else {
-                restartMotionRamp()
             }
         case .activate, .exit, .lock, .grid, .hints:
             break
@@ -428,8 +420,7 @@ final class KeyboardCursorEngine {
     private func present(_ newModal: CursorModal) {
         dismissModal()
         // Movement stops while the keys belong to the modal.
-        heldDirections.removeAll()
-        isScrollModifierHeld = false
+        motion.reset()
         stopMotionTimer()
 
         newModal.onFinish = { [weak self, weak newModal] in
@@ -549,10 +540,7 @@ final class KeyboardCursorEngine {
         stopWatchdog()
         output.releaseAllButtons()
 
-        heldDirections.removeAll()
-        isScrollModifierHeld = false
-        accumulator.reset()
-        scrollAccumulator.reset()
+        motion.reset()
 
         if reporting {
             onModeChange?(false)
@@ -572,12 +560,6 @@ final class KeyboardCursorEngine {
 
     // MARK: - Motion
 
-    private func restartMotionRamp() {
-        motionStart = ProcessInfo.processInfo.systemUptime
-        accumulator.reset()
-        scrollAccumulator.reset()
-    }
-
     private func startMotionTimer() {
         guard motionTimer == nil else { return }
 
@@ -585,7 +567,6 @@ final class KeyboardCursorEngine {
         screens = output.screenRects()
         lastPosition = output.location
 
-        lastTick = 0
         motionTimer = MainTimer(after: 0, repeating: 0.008, leeway: .milliseconds(1)) { [weak self] in
             self?.tick()
         }
@@ -593,57 +574,22 @@ final class KeyboardCursorEngine {
 
     private func stopMotionTimer() {
         motionTimer = nil
-        lastTick = 0
     }
 
-    private var lastTick: TimeInterval = 0
-
-    /// The tick interval the scroll budget is written for.
-    private static let nominalTick: TimeInterval = 0.008
-
     private func tick() {
-        let now = ProcessInfo.processInfo.systemUptime
-        let dt = lastTick == 0 ? 1.0 / 120.0 : min(now - lastTick, 0.1)
-        lastTick = now
-
-        let direction = CursorMotion.direction(
-            up: heldDirections.contains(.moveUp),
-            down: heldDirections.contains(.moveDown),
-            left: heldDirections.contains(.moveLeft),
-            right: heldDirections.contains(.moveRight)
-        )
-        guard !direction.isZero else { return }
-
-        let held = now - motionStart
-
-        if isScrollModifierHeld {
-            let eased = CursorMotion.easedRamp(
-                heldDuration: held,
-                acceleration: speedProfile.acceleration
-            )
-            let multiplier = tier.multiplier(using: speedProfile)
-            // Scroll runs on the same ramp, scaled to a per-tick pixel budget. Scaled by
-            // the real tick length too, so a busy main thread slows nothing down.
-            let perTick = speedProfile.scrollSpeed * (0.35 + 0.65 * eased) * multiplier
-                * (dt / KeyboardCursorEngine.nominalTick)
-            let delta = Vector2(x: direction.x * perTick, y: direction.y * perTick)
-            let step = scrollAccumulator.take(delta)
-            // Positive wheel1 scrolls the content up, which is the opposite sign to the
-            // downward-positive cursor axis.
-            output.scroll(deltaX: -step.dx, deltaY: -step.dy)
-            return
+        let step = motion.tick(at: ProcessInfo.processInfo.systemUptime, tier: tier, profile: speedProfile)
+        switch step {
+        case .none:
+            break
+        case .scroll(let dx, let dy):
+            output.scroll(deltaX: dx, deltaY: dy)
+        case .move(let dx, let dy):
+            let current = output.location
+            let target = Vector2(x: current.x + Double(dx), y: current.y + Double(dy))
+            let clamped = CursorMotion.clamp(point: target, previous: lastPosition, screens: screens)
+            lastPosition = clamped
+            output.move(to: clamped, delta: (clamped.x - current.x, clamped.y - current.y))
         }
-
-        let speed = CursorMotion.speed(heldDuration: held, tier: tier, profile: speedProfile)
-        let delta = Vector2(x: direction.x * speed * dt, y: direction.y * speed * dt)
-        let step = accumulator.take(delta)
-        guard step.dx != 0 || step.dy != 0 else { return }
-
-        let current = output.location
-        let target = Vector2(x: current.x + Double(step.dx), y: current.y + Double(step.dy))
-        let clamped = CursorMotion.clamp(point: target, previous: lastPosition, screens: screens)
-        lastPosition = clamped
-        output.move(to: clamped, delta: (clamped.x - current.x, clamped.y - current.y))
     }
 
     // MARK: - Watchdog

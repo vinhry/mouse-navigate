@@ -128,7 +128,7 @@ public enum CursorMotion {
 
 /// Carries the sub-pixel remainder between ticks so slow movement still advances
 /// smoothly instead of rounding away to nothing.
-public struct SubPixelAccumulator {
+public struct SubPixelAccumulator: Equatable {
     private var remainder = Vector2.zero
 
     public init() {}
