@@ -31,8 +31,8 @@ final class MouseNavigator {
     private var isSwallowingLeftMouseUp = false
     /// Holds back the click Tap to click makes out of a trackpad tap that was a gesture.
     private var tapClicks = TapClickSuppressor()
-    /// Set once a touch gesture has taken a scroll, until the next scroll begins.
-    private var isSuppressingScrollSession = false
+    /// Holds back the rest of a scroll a touch gesture has taken.
+    private var scrollSession = ScrollSessionSuppressor()
     /// The wheel settings for the mouse in use and the app in front, worked out when
     /// either changes rather than on every notch.
     private var resolvedScroll = ScrollSettings.standard
@@ -421,29 +421,33 @@ final class MouseNavigator {
         isSwallowingLeftMouseUp = false
     }
 
-    /// Clicks, keystrokes and scrolls only pass through the tap while something needs them,
-    /// so with the keyboard cursor, gestures and scroll options off neither the pointer nor
-    /// the keyboard ever waits on this process. Side-button releases are rare enough to take
-    /// always: a hold or double-click needs them.
+    /// See `EventTapPolicy`.
     private var desiredEventMask: CGEventMask {
-        var types: [CGEventType] = [.otherMouseDown, .otherMouseUp]
-        if Preferences.shared.isCursorModeEnabled {
-            types += [.keyDown, .keyUp, .flagsChanged]
+        let preferences = Preferences.shared
+        let kinds = EventTapPolicy.kinds(
+            cursorMode: preferences.isCursorModeEnabled,
+            touch: preferences.isTouchEnabled,
+            scrollOptions: preferences.isAnyScrollSettingActive,
+            dragBindings: preferences.hasAnyDragBinding
+        )
+        return kinds.reduce(CGEventMask(0)) { $0 | CGEventMask(1) << MouseNavigator.eventType(for: $1).rawValue }
+    }
+
+    private static func eventType(for kind: TapEventKind) -> CGEventType {
+        switch kind {
+        case .otherMouseDown: return .otherMouseDown
+        case .otherMouseUp: return .otherMouseUp
+        case .otherMouseDragged: return .otherMouseDragged
+        case .keyDown: return .keyDown
+        case .keyUp: return .keyUp
+        case .flagsChanged: return .flagsChanged
+        case .scrollWheel: return .scrollWheel
+        case .leftMouseDown: return .leftMouseDown
+        case .leftMouseUp: return .leftMouseUp
+        case .rightMouseDown: return .rightMouseDown
+        case .rightMouseDragged: return .rightMouseDragged
+        case .rightMouseUp: return .rightMouseUp
         }
-        if Preferences.shared.isTouchEnabled {
-            types += [
-                .scrollWheel, .leftMouseDown, .leftMouseUp,
-                .rightMouseDown, .rightMouseDragged, .rightMouseUp,
-                .otherMouseDragged,
-            ]
-        } else if Preferences.shared.isAnyScrollSettingActive {
-            types.append(.scrollWheel)
-        }
-        // Side-button drags are only worth the trip while a button is bound to one.
-        if !types.contains(.otherMouseDragged), Preferences.shared.hasAnyDragBinding {
-            types.append(.otherMouseDragged)
-        }
-        return types.reduce(CGEventMask(0)) { $0 | CGEventMask(1) << $1.rawValue }
     }
 
     /// Pausing, an app with MouseNavigate turned off, and a session that is asleep, locked or
@@ -550,7 +554,7 @@ final class MouseNavigator {
     /// forgotten, just as the side buttons' are.
     private func releaseHeldMouseInput() {
         strokeCapture.cancel()
-        isSuppressingScrollSession = false
+        scrollSession.reset()
         tapClicks.reset()
         buttons.reset()
         wheel.stop()
@@ -677,20 +681,10 @@ final class MouseNavigator {
         }
     }
 
-    /// Once a touch gesture has claimed a scroll, the rest of that scroll is its too: the
-    /// moves that follow and the momentum after the fingers lift, which would otherwise
-    /// fling the page the moment the drawn letter was done. The gesture's end still
-    /// reaches the app, so a scroll it had begun is finished rather than left hanging.
+    /// See `ScrollSessionSuppressor`.
     private func shouldSuppressContinuousScroll(_ event: CGEvent) -> Bool {
-        let phase = CGScrollPhase(rawValue: UInt32(event.getIntegerValueField(.scrollWheelEventScrollPhase)))
-        if phase == .began || phase == .mayBegin {
-            isSuppressingScrollSession = false
-        }
-        if touchMonitor.shouldSuppressScroll {
-            isSuppressingScrollSession = true
-        }
-        guard isSuppressingScrollSession else { return false }
-        return !(phase == .ended || phase == .cancelled)
+        let phase = ScrollPhase(rawValue: Int(event.getIntegerValueField(.scrollWheelEventScrollPhase)))
+        return scrollSession.shouldSuppress(phase: phase, gestureClaims: touchMonitor.shouldSuppressScroll)
     }
 
     /// A trackpad tap has just become a gesture; see `TapClickSuppressor` for why the
