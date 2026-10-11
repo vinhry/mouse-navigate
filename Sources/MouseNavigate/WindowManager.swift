@@ -18,7 +18,7 @@ final class WindowManager {
     }
 
     private var drag: DragSession?
-    private var dragTimer: DispatchSourceTimer?
+    private var dragTimer: MainTimer?
 
     /// Frames saved before "Maximize Window" so a second use restores them.
     private var framesBeforeZoom: [(window: AXUIElement, frame: Rect)] = []
@@ -81,11 +81,9 @@ final class WindowManager {
 
         drag = DragSession(window: window, mode: mode, anchorCursor: cursorLocation(), anchorFrame: frame)
 
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(16))
-        timer.setEventHandler { [weak self] in self?.updateDrag() }
-        timer.resume()
-        dragTimer = timer
+        dragTimer = MainTimer(after: 0, repeating: 0.016) { [weak self] in
+            self?.updateDrag()
+        }
     }
 
     /// Switches between moving and resizing, re-anchoring so the window does not jump.
@@ -98,7 +96,6 @@ final class WindowManager {
     }
 
     func endDrag() {
-        dragTimer?.cancel()
         dragTimer = nil
         drag = nil
     }

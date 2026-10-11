@@ -27,9 +27,9 @@ final class KeyboardCursorEngine {
     private var isScrollModifierHeld = false
     private var tier: SpeedTier = []
 
-    private var motionTimer: DispatchSourceTimer?
-    private var holdTimer: DispatchSourceTimer?
-    private var watchdogTimer: DispatchSourceTimer?
+    private var motionTimer: MainTimer?
+    private var holdTimer: MainTimer?
+    private var watchdogTimer: MainTimer?
 
     private var motionStart: TimeInterval = 0
     private var accumulator = SubPixelAccumulator()
@@ -237,17 +237,12 @@ final class KeyboardCursorEngine {
     private func startHoldTimer() {
         cancelHoldTimer()
 
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + holdThreshold)
-        timer.setEventHandler { [weak self] in
+        holdTimer = MainTimer(after: holdThreshold) { [weak self] in
             self?.enterCursorMode()
         }
-        timer.resume()
-        holdTimer = timer
     }
 
     private func cancelHoldTimer() {
-        holdTimer?.cancel()
         holdTimer = nil
     }
 
@@ -591,17 +586,12 @@ final class KeyboardCursorEngine {
         lastPosition = output.location
 
         lastTick = 0
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(8), leeway: .milliseconds(1))
-        timer.setEventHandler { [weak self] in
+        motionTimer = MainTimer(after: 0, repeating: 0.008, leeway: .milliseconds(1)) { [weak self] in
             self?.tick()
         }
-        timer.resume()
-        motionTimer = timer
     }
 
     private func stopMotionTimer() {
-        motionTimer?.cancel()
         motionTimer = nil
         lastTick = 0
     }
@@ -664,9 +654,7 @@ final class KeyboardCursorEngine {
     private func startWatchdog() {
         stopWatchdog()
 
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + 0.5, repeating: .milliseconds(500))
-        timer.setEventHandler { [weak self] in
+        watchdogTimer = MainTimer(after: 0.5, repeating: 0.5) { [weak self] in
             guard let self else { return }
             // Only the held phase depends on the key still being down; a latched
             // mode is meant to outlive it.
@@ -684,12 +672,9 @@ final class KeyboardCursorEngine {
                 self.tearDownCursorMode()
             }
         }
-        timer.resume()
-        watchdogTimer = timer
     }
 
     private func stopWatchdog() {
-        watchdogTimer?.cancel()
         watchdogTimer = nil
     }
 

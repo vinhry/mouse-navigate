@@ -6,7 +6,7 @@ import MouseNavigateCore
 /// trackpads and the Magic Mouse scroll continuously and are left to macOS.
 final class WheelScroller {
     private var smoother = ScrollSmoother()
-    private var timer: DispatchSourceTimer?
+    private var timer: MainTimer?
     private var lastFrame: TimeInterval = 0
     /// Modifiers a wheel option has used up, to keep off the frames posted while smoothing:
     /// the source would otherwise stamp the held ⇧ back on, and AppKit swap the axes again.
@@ -33,7 +33,6 @@ final class WheelScroller {
     }
 
     func stop() {
-        timer?.cancel()
         timer = nil
         smoother.stop()
     }
@@ -74,13 +73,9 @@ final class WheelScroller {
         guard timer == nil else { return }
 
         lastFrame = ProcessInfo.processInfo.systemUptime
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: WheelScroller.frameInterval, leeway: .milliseconds(1))
-        timer.setEventHandler { [weak self] in
+        timer = MainTimer(after: 0, repeating: WheelScroller.frameInterval, leeway: .milliseconds(1)) { [weak self] in
             self?.frame()
         }
-        timer.resume()
-        self.timer = timer
     }
 
     private func frame() {
@@ -92,7 +87,6 @@ final class WheelScroller {
             postPixels(vertical: step.vertical, horizontal: step.horizontal)
         }
         if smoother.isIdle {
-            timer?.cancel()
             timer = nil
         }
     }

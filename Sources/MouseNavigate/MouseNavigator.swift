@@ -13,7 +13,7 @@ final class MouseNavigator {
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    private var permissionTimer: DispatchSourceTimer?
+    private var permissionTimer: MainTimer?
     /// Runs while the tap is installed; see `checkTapHealth`.
     private var tapHealthTimer: MainTimer?
     private var lockFileDescriptor: CInt = -1
@@ -370,7 +370,7 @@ final class MouseNavigator {
         CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: eventTap, enable: true)
         installedEventMask = mask
-        tapHealthTimer = MainTimer(after: 10, repeating: .seconds(10)) { [weak self] in
+        tapHealthTimer = MainTimer(after: 10, repeating: 10) { [weak self] in
             self?.checkTapHealth()
         }
         Log.permissions.info("Event tap installed.")
@@ -563,18 +563,13 @@ final class MouseNavigator {
         statusBarController?.isAwaitingPermission = true
         guard permissionTimer == nil else { return }
 
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + 1, repeating: .seconds(1))
-        timer.setEventHandler { [weak self] in
+        permissionTimer = MainTimer(after: 1, repeating: 1) { [weak self] in
             guard let self, AXIsProcessTrusted(), self.installEventTap() else { return }
 
-            self.permissionTimer?.cancel()
             self.permissionTimer = nil
             self.statusBarController?.isAwaitingPermission = false
             Log.permissions.info("Accessibility granted; now listening.")
         }
-        timer.resume()
-        permissionTimer = timer
     }
 
     private func handle(type: CGEventType, event: CGEvent, proxy: CGEventTapProxy) -> Unmanaged<CGEvent>? {

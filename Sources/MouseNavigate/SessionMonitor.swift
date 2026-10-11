@@ -95,7 +95,7 @@ final class SessionMonitor {
         } else {
             Log.session.info("Session out of reach (\(reason, privacy: .public)); standing down.")
             if recheckTimer == nil {
-                recheckTimer = MainTimer(after: 5, repeating: .seconds(5)) { [weak self] in
+                recheckTimer = MainTimer(after: 5, repeating: 5) { [weak self] in
                     self?.reconcile()
                 }
             }
