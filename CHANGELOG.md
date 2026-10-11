@@ -66,8 +66,22 @@ All notable changes to this project will be documented in this file.
 - **Remove App** says that the app's scroll settings and turned-off state go too.
 - **Reverse scrolling direction** became **Reverse: Both**, and the one **Speed** became
   a vertical and a horizontal speed. Existing settings carry over.
+- The Trackpad and Magic Mouse panes draw the empty device before any gesture is hovered,
+  so the preview column is never blank.
+- Tabbing to a gesture or character picker with keyboard navigation shows its picture and
+  how-to, as hovering does, and VoiceOver reads the how-to as the picker's help.
+- VoiceOver reads each picker, slider, segmented control and key recorder with the label
+  beside it: "Button 3", "Vertical speed", "Activate (hold)".
 
 ### Fixed
+- The Settings window was 858 points wide: the Keyboard Cursor tab's hint was one long line
+  and set the width of every tab, leaving the Touch and About tabs mostly empty. The hint
+  wraps and the window is 120 points narrower.
+- With an app chosen under **Applies to**, the Scroll Wheel section's checkbox sat far to
+  the right, in the room the hidden mouse picker kept.
+- The Touch tab's previews now stop or start when Reduce Motion is changed while the
+  window is open, rather than at the next hover.
+- The Export and Import buttons on the About tab stand apart from the update status line.
 - Recording a keyboard shortcut for a button or gesture while MouseNavigate was paused
   resumed the keyboard cursor when the sheet closed.
 - With an app chosen under **Applies to**, the Scroll Wheel section showed a stray **For:**

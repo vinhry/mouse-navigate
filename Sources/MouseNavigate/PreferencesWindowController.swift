@@ -484,14 +484,27 @@ final class PreferencesWindowController: NSObject {
         let naturalHeight = grid.heightAnchor.constraint(equalToConstant: grid.fittingSize.height)
         naturalHeight.priority = .init(999)
         naturalHeight.isActive = true
+        for row in rows {
+            PreferencesWindowController.titleControls(in: row)
+        }
         return grid
+    }
+
+    /// Hands the row's leading label to accessibility as the title of each control beside
+    /// it. A grid does not do this itself, so VoiceOver would read a picker as "pop up
+    /// button, Back" with no button number, and a slider as nothing but its value.
+    static func titleControls(in row: [NSView]) {
+        guard let label = row.first as? NSTextField, !label.isEditable, !label.stringValue.isEmpty else { return }
+        for control in row.dropFirst() where control is NSControl && !(control is NSTextField) {
+            control.setAccessibilityTitleUIElement(label)
+        }
     }
 
     /// Every action the slot can take, grouped by category, then the custom kinds. Items
     /// carry a binding's storage value or a `PickerCommand`, so selection never depends on
     /// item positions, which separators would throw off.
-    private func makeBindingPopup(for slot: BindingSlot) -> NSPopUpButton {
-        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private func makeBindingPopup(for slot: BindingSlot) -> FocusReportingPopUpButton {
+        let popup = FocusReportingPopUpButton(frame: .zero, pullsDown: false)
         popup.target = self
         popup.action = #selector(bindingChanged(_:))
         popup.identifier = NSUserInterfaceItemIdentifier(slot.identifier)
@@ -739,6 +752,7 @@ final class PreferencesWindowController: NSObject {
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 8
+        PreferencesWindowController.titleControls(in: [label, popup])
 
         let stack = NSStackView(views: [row, disable])
         stack.orientation = .vertical
@@ -854,13 +868,19 @@ final class PreferencesWindowController: NSObject {
         checkbox.state = Preferences.shared.isCursorModeEnabled ? .on : .off
         enableCheckbox = checkbox
 
+        // Wrapped to the width of the two sections below: on one line it is wider than
+        // anything else in the window, and would set the width of every tab. A wrapping
+        // label still asks for its whole text in one line, at the same priority the
+        // sections hug their grids, so it has to ask more weakly than anything else.
         let hint = NSTextField(
-            labelWithString: "Hold the activate key, then use the movement keys. "
+            wrappingLabelWithString: "Hold the activate key, then use the movement keys. "
                 + "Shift is faster, Shift+Ctrl fastest, Option precise. "
                 + "Tap it and press again to type its letter instead."
         )
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        hint.setContentCompressionResistancePriority(.init(1), for: .horizontal)
 
         var keyRows: [[NSView]] = []
 
@@ -954,6 +974,7 @@ final class PreferencesWindowController: NSObject {
         stack.setCustomSpacing(18, after: hint)
         stack.setCustomSpacing(16, after: sections)
         footer.widthAnchor.constraint(equalTo: sections.widthAnchor).isActive = true
+        hint.widthAnchor.constraint(equalTo: sections.widthAnchor).isActive = true
 
         return makePage(stack)
     }
@@ -1061,6 +1082,12 @@ final class PreferencesWindowController: NSObject {
             label.alignment = .right
 
             let popup = makeBindingPopup(for: .touch(gesture))
+            // Keyboard focus shows the gesture as hovering does, and VoiceOver gets the
+            // how-to as the picker's help, since neither can hover.
+            popup.onFocus = { [weak self] in
+                self?.show(gesture, on: surface)
+            }
+            popup.setAccessibilityHelp(gesture.hint)
             tracked.append((gesture, popup))
             return [label, popup]
         }
@@ -1109,6 +1136,7 @@ final class PreferencesWindowController: NSObject {
     /// grey and the ones that act in red.
     private func makeGesturePreviewColumn(for surface: TouchSurface) -> NSView {
         let preview = TouchGesturePreviewView()
+        preview.surfaceType = surface
         preview.isMirrored = Preferences.shared.isLeftHanded
         gesturePreviews[surface] = preview
 
@@ -1180,10 +1208,14 @@ final class PreferencesWindowController: NSObject {
             return point.y >= frame.minY && point.y <= frame.maxY
         }
         guard let hit else { return }
-        gesturePreviews[surface]?.gesture = hit.gesture
-        gesturePreviewNames[surface]?.stringValue = hit.gesture.displayName
+        show(hit.gesture, on: surface)
+    }
+
+    private func show(_ gesture: TouchGesture, on surface: TouchSurface) {
+        gesturePreviews[surface]?.gesture = gesture
+        gesturePreviewNames[surface]?.stringValue = gesture.displayName
         gesturePreviewHints[surface]?.isHidden = false
-        gestureHintLabels[surface]?.stringValue = hit.gesture.hint
+        gestureHintLabels[surface]?.stringValue = gesture.hint
     }
 
     private func makeCharacterPane() -> NSView {
@@ -1216,6 +1248,9 @@ final class PreferencesWindowController: NSObject {
             label.alignment = .right
 
             let popup = makeBindingPopup(for: .character(gesture))
+            popup.onFocus = { [weak self] in
+                self?.show(gesture)
+            }
             characterRows.append((gesture, popup))
             return [label, popup]
         }
@@ -1275,6 +1310,7 @@ final class PreferencesWindowController: NSObject {
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 8
+        PreferencesWindowController.titleControls(in: [caption, slider])
         // Indented under the checkbox it belongs to.
         row.edgeInsets = NSEdgeInsets(top: 2, left: 18, bottom: 2, right: 0)
         return row
@@ -1315,9 +1351,12 @@ final class PreferencesWindowController: NSObject {
             return point.y >= frame.minY && point.y <= frame.maxY
         }
         guard let hit else { return }
+        show(hit.gesture)
+    }
 
-        strokePreview?.gesture = hit.gesture
-        strokePreviewName?.stringValue = hit.gesture.displayName
+    private func show(_ gesture: CharacterGesture) {
+        strokePreview?.gesture = gesture
+        strokePreviewName?.stringValue = gesture.displayName
         strokePreviewHint?.isHidden = false
     }
 
@@ -1496,7 +1535,8 @@ final class PreferencesWindowController: NSObject {
         legal.font = .systemFont(ofSize: 11)
         legal.textColor = .secondaryLabelColor
 
-        let stack = NSStackView(views: [iconView, name, version, tagline, developer, links, legal, makeUpdatesSection(), makeTransferSection()])
+        let updates = makeUpdatesSection()
+        let stack = NSStackView(views: [iconView, name, version, tagline, developer, links, legal, updates, makeTransferSection()])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 6
@@ -1506,6 +1546,7 @@ final class PreferencesWindowController: NSObject {
         stack.setCustomSpacing(12, after: developer)
         stack.setCustomSpacing(18, after: links)
         stack.setCustomSpacing(28, after: legal)
+        stack.setCustomSpacing(18, after: updates)
 
         return makePage(stack)
     }
@@ -1708,6 +1749,20 @@ final class PreferencesWindowController: NSObject {
         refreshCursorUI()
         refreshTouchUI()
         refreshUpdatesUI()
+    }
+}
+
+/// A picker that says when it takes keyboard focus, so what hovering shows can be shown
+/// for the row that was tabbed to.
+final class FocusReportingPopUpButton: NSPopUpButton {
+    var onFocus: (() -> Void)?
+
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted {
+            onFocus?()
+        }
+        return accepted
     }
 }
 

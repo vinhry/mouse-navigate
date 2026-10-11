@@ -89,7 +89,10 @@ extension PreferencesWindowController {
         let scopeRow = NSStackView(views: [forLabel, profilePopup, own])
         scopeRow.orientation = .horizontal
         scopeRow.spacing = 8
-        scopeRow.detachesHiddenViews = false
+        PreferencesWindowController.titleControls(in: [forLabel, profilePopup])
+        // In an app's scope the mouse picker goes and the checkbox stays: it moves to the
+        // leading edge, and the row keeps the picker's height so nothing below it shifts.
+        scopeRow.heightAnchor.constraint(equalToConstant: scopeRow.fittingSize.height).isActive = true
 
         let reverseLabel = NSTextField(labelWithString: "Reverse:")
         let reversePopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -104,6 +107,7 @@ extension PreferencesWindowController {
         let reverseRow = NSStackView(views: [reverseLabel, reversePopup])
         reverseRow.orientation = .horizontal
         reverseRow.spacing = 8
+        PreferencesWindowController.titleControls(in: [reverseLabel, reversePopup])
 
         let (verticalRow, verticalSlider, verticalLabel) = makeSpeedRow(title: "Vertical speed:")
         controls.verticalSlider = verticalSlider
@@ -170,6 +174,7 @@ extension PreferencesWindowController {
         let row = NSStackView(views: [label, slider, value])
         row.orientation = .horizontal
         row.spacing = 8
+        PreferencesWindowController.titleControls(in: [label, slider])
         return (row, slider, value)
     }
 

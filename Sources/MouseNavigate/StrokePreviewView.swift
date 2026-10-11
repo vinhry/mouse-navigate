@@ -45,11 +45,27 @@ final class StrokePreviewView: NSView {
         dot.lineWidth = 3
         layer?.addSublayer(dot)
         applyColors()
+        // Reduce Motion is read when the animation is built, so it has to be rebuilt when
+        // the setting changes while the stroke is on show.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(displayOptionsDidChange),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil
+        )
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+    }
+
+    @objc private func displayOptionsDidChange() {
+        updateAnimation()
     }
 
     override var isFlipped: Bool { false }

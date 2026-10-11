@@ -45,6 +45,14 @@ final class TouchGesturePreviewView: NSView {
         }
     }
 
+    /// The device drawn empty before any gesture is shown, so the column is never blank.
+    var surfaceType: TouchSurface = .trackpad {
+        didSet {
+            guard surfaceType != oldValue else { return }
+            rebuild()
+        }
+    }
+
     /// Off while the pane is hidden, so nothing animates out of sight.
     var isAnimating = true {
         didSet {
@@ -68,11 +76,27 @@ final class TouchGesturePreviewView: NSView {
         surface.lineWidth = 1.5
         content.addSublayer(surface)
         applyColors()
+        // Reduce Motion is read when the animation is built, so it has to be rebuilt when
+        // the setting changes while the picture is on show.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(displayOptionsDidChange),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil
+        )
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+    }
+
+    @objc private func displayOptionsDidChange() {
+        updateAnimation()
     }
 
     override var isFlipped: Bool { false }
@@ -133,14 +157,17 @@ final class TouchGesturePreviewView: NSView {
         content.frame = bounds
         content.transform = CATransform3DIdentity
 
-        guard let gesture, bounds.width > 0, bounds.height > 0 else {
+        guard bounds.width > 0, bounds.height > 0 else {
             surface.path = nil
             return
         }
 
-        let frame = surfaceFrame(for: gesture.surface)
-        let cornerRadius = gesture.surface == .magicMouse ? frame.width * 0.45 : 10
+        // The device is drawn with or without a gesture; only the fingers need one.
+        let shownSurface = gesture?.surface ?? surfaceType
+        let frame = surfaceFrame(for: shownSurface)
+        let cornerRadius = shownSurface == .magicMouse ? frame.width * 0.45 : 10
         surface.path = CGPath(roundedRect: frame, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+        guard let gesture else { return }
 
         let radius = TouchGesturePreviewView.fingerRadius
         let dotPath = CGPath(ellipseIn: CGRect(x: -radius, y: -radius, width: radius * 2, height: radius * 2), transform: nil)
