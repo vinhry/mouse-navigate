@@ -21,7 +21,7 @@ final class WindowManager {
     private var dragTimer: MainTimer?
 
     /// Frames saved before "Maximize Window" so a second use restores them.
-    private var framesBeforeZoom: [(window: AXUIElement, frame: Rect)] = []
+    private var zoomHistory = ZoomHistory<AXUIElement> { CFEqual($0, $1) }
 
     /// How long one Accessibility request may wait on the other app. The actions run inside
     /// the event tap's callback, and a hung app must not take every keystroke on the Mac
@@ -36,26 +36,10 @@ final class WindowManager {
     }
 
     func zoom() {
-        guard let window = focusedWindow(), let frame = frame(of: window) else { return }
-        let screens = visibleScreenRects()
-        guard let index = WindowLayout.screenIndex(for: frame, in: screens) else { return }
-
-        let target = screens[index]
-        if frame.approximatelyEquals(target),
-           let saved = framesBeforeZoom.lastIndex(where: { CFEqual($0.window, window) }) {
-            let restored = framesBeforeZoom.remove(at: saved).frame
-            // Saved before a display was unplugged or moved, the frame may now be off every
-            // screen; a window sent there could not be reached again.
-            if screens.contains(where: { $0.intersectionArea(with: restored) > 0 }) {
-                setFrame(restored, of: window)
-                return
-            }
-        }
-
-        framesBeforeZoom.removeAll { CFEqual($0.window, window) }
-        framesBeforeZoom.append((window, frame))
-        if framesBeforeZoom.count > 20 {
-            framesBeforeZoom.removeFirst()
+        guard let window = focusedWindow(), let frame = frame(of: window),
+              let target = zoomHistory.zoom(window, from: frame, screens: visibleScreenRects())
+        else {
+            return
         }
         setFrame(target, of: window)
     }
