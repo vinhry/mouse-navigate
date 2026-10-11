@@ -3,17 +3,16 @@ import IOKit.hid
 import IOKit.hidsystem
 import MouseNavigateCore
 
-/// Sets each mouse's pointer speed and acceleration, where macOS keeps them for it.
+/// Sets each mouse's acceleration, where macOS keeps it for it.
 ///
-/// They live on the mouse's HID service, beside the Tracking speed System Settings puts
-/// there, so they last only while the mouse stays connected and until System Settings
-/// writes its own again. So they are set whenever a mouse arrives, after waking, when the
+/// It lives on the mouse's HID service, where System Settings puts its Tracking speed, so
+/// it lasts only while the mouse stays connected and until System Settings writes its own
+/// again. So they are set whenever a mouse arrives, after waking, when the
 /// settings change, and every few seconds while any mouse has settings of its own. A mouse
 /// going back to standard, and every mouse on quit, is put back as System Settings has it.
 /// Trackpads, keyboards and built-in devices are never touched.
 @MainActor
 final class PointerDeviceManager {
-    private static let resolutionKey = kIOHIDPointerResolutionKey as String
     private static let accelerationTypeKey = "HIDPointerAccelerationType"
     private static let mouseAccelerationKey = "HIDMouseAcceleration"
     /// How often the values are checked while any mouse has its own, since System Settings
@@ -109,7 +108,6 @@ final class PointerDeviceManager {
     }
 
     private func set(_ settings: PointerSettings, on service: IOHIDServiceClient) {
-        write(PointerMath.resolution(speed: settings.speed), to: Self.resolutionKey, of: service)
         write(
             PointerMath.acceleration(for: settings, systemAcceleration: systemAcceleration),
             to: accelerationKey(of: service),
@@ -118,7 +116,6 @@ final class PointerDeviceManager {
     }
 
     private func restore(_ service: IOHIDServiceClient) {
-        write(PointerMath.resolution(speed: 1), to: Self.resolutionKey, of: service)
         write(PointerMath.fixed(systemAcceleration), to: accelerationKey(of: service), of: service)
     }
 

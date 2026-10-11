@@ -157,12 +157,11 @@ public struct DiagnosticsReport: Equatable {
     }
 
     private func describe(_ pointer: PointerSettings) -> String {
-        guard pointer.isActive else { return "as it comes" }
-        var acceleration = pointer.accelerationMode.displayName.lowercased()
-        if pointer.accelerationMode == .custom {
-            acceleration += String(format: " %.2f", pointer.acceleration)
+        switch pointer.accelerationMode {
+        case .system: return "as in System Settings"
+        case .off: return "acceleration off"
+        case .custom: return String(format: "custom tracking speed %.2f", pointer.acceleration)
         }
-        return String(format: "speed %.2f×, acceleration ", pointer.speed) + acceleration
     }
 
     private func onOff(_ value: Bool) -> String {

@@ -20,7 +20,10 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
     private var loginCheckbox: NSButton?
     private var updatesCheckbox: NSButton?
 
-    private static let textWidth: CGFloat = 340
+    /// The window's content, inside its margins; everything is laid out to it.
+    private static let contentWidth: CGFloat = 480
+    /// The intro beside the icon.
+    private static let textWidth: CGFloat = contentWidth - 56 - 16
 
     init(updater: Updater) {
         self.updater = updater
@@ -133,8 +136,10 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
         stack.setCustomSpacing(24, after: choices)
         stack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 20, right: 24)
         stack.translatesAutoresizingMaskIntoConstraints = false
+        // A fixed width, so the wrapping text knows its room rather than the window guessing.
+        stack.widthAnchor.constraint(equalToConstant: Self.contentWidth + 48).isActive = true
         for row in [accessibility.view, inputMonitoring.view, buttons] {
-            row.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
+            row.widthAnchor.constraint(equalToConstant: Self.contentWidth).isActive = true
         }
 
         let content = NSView()

@@ -236,18 +236,20 @@ continuously, like a trackpad, so turn that off to use these.
 
 ## Pointer
 
-**Settings → Mouse → Pointer** changes how a mouse moves the pointer, for all mice or for
-one mouse model under **For:**. Trackpads and built-in devices are never changed.
+**Settings → Mouse → Pointer** changes a mouse's acceleration, for all mice or for one mouse
+model under **For:**. Trackpads and built-in devices are never changed.
 
-- **Speed** sets how far the pointer goes for the same movement, from 0.25× to 4×.
-  1× leaves the mouse as it comes; **Tracking speed** in System Settings still applies.
-- **Acceleration** is **As in System Settings**, **Off**, which moves the pointer in
-  proportion to the mouse however fast it goes, as games and drawing want, or **Custom**,
-  a curve of your own on System Settings' scale.
+- **As in System Settings** leaves it to **Tracking speed** there.
+- **Off** moves the pointer in proportion to the mouse however fast it goes, as games and
+  drawing want.
+- **Custom** sets a **Tracking speed** of the mouse's own, on System Settings' scale. That
+  scale stops at 3; Custom goes on to 5, faster than System Settings allows.
 
-macOS keeps these on the mouse itself, so MouseNavigate sets them again whenever the mouse
-connects or the Mac wakes, and puts back what System Settings says when a mouse returns to
-standard or MouseNavigate quits. **Restore Defaults** on the Mouse tab includes them.
+Acceleration is all macOS lets an app change about a mouse: it refuses the resolution a
+separate speed setting would need. macOS keeps it on the mouse itself, so MouseNavigate sets
+it again whenever the mouse connects or the Mac wakes, and puts back what System Settings
+says when a mouse returns to standard or MouseNavigate quits. **Restore Defaults** on the
+Mouse tab includes it.
 
 ## Per-App Bindings
 

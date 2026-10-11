@@ -10,10 +10,11 @@ All notable changes to this project will be documented in this file.
   buttons, with holds, double-clicks, modifier keys and per-app settings. A button is taken
   from the mouse over Bluetooth only while it has a binding, given back while paused and on
   quit, and never changed on the mouse for good.
-- **Pointer** on **Settings → Mouse**: **Speed** from 0.25× to 4×, and **Acceleration**
-  as in System Settings, **Off**, or a **Custom** curve, for all mice or one mouse model.
-  Trackpads are never changed, and quitting puts every mouse back as System Settings has
-  it. **Restore Defaults** on the Mouse tab now includes the pointer.
+- **Pointer** on **Settings → Mouse**: **Acceleration** as in System Settings, **Off**, or a
+  **Custom** tracking speed of the mouse's own that goes beyond System Settings' fastest,
+  for all mice or one mouse model. Trackpads are never changed, and quitting puts every
+  mouse back as System Settings has it. **Restore Defaults** on the Mouse tab now includes
+  the pointer.
 - A **Welcome** window on first launch, in place of the Accessibility prompt and the
   update question that used to arrive one after the other with nothing to explain them.
   It says what Accessibility and Input Monitoring are for, shows whether each is allowed

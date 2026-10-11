@@ -6,8 +6,6 @@ import MouseNavigateCore
 final class PointerSectionControls {
     var profilePopup: NSPopUpButton!
     var ownSettings: NSButton!
-    var speedSlider: NSSlider!
-    var speedLabel: NSTextField!
     var accelerationPopup: NSPopUpButton!
     var accelerationSlider: NSSlider!
     var accelerationLabel: NSTextField!
@@ -17,30 +15,27 @@ final class PointerSectionControls {
     var profile: DeviceProfile?
 
     var settingControls: [NSControl] {
-        [speedSlider, accelerationPopup, accelerationSlider]
+        [accelerationPopup, accelerationSlider]
     }
 
     var settings: PointerSettings {
         PointerSettings(
-            speed: speedSlider.doubleValue,
             accelerationMode: PointerAccelerationMode.allCases[max(accelerationPopup.indexOfSelectedItem, 0)],
             acceleration: accelerationSlider.doubleValue
         )
     }
 
     func show(_ settings: PointerSettings) {
-        speedSlider.doubleValue = settings.speed
-        speedLabel.stringValue = String(format: "%.2f×", settings.speed)
         accelerationPopup.selectItem(at: PointerAccelerationMode.allCases.firstIndex(of: settings.accelerationMode) ?? 0)
         accelerationSlider.doubleValue = settings.acceleration
         accelerationLabel.stringValue = String(format: "%.2f", settings.acceleration)
-        // The curve's own slider only means something once a curve of its own is chosen.
+        // The slider only means something once a curve of its own is chosen.
         accelerationRow.isHidden = settings.accelerationMode != .custom
     }
 }
 
-/// The Pointer section of the Mouse tab: how far and how fast a mouse moves the pointer,
-/// for all mice or one mouse model. It is the same in every app, so it ignores "Applies to".
+/// The Pointer section of the Mouse tab: a mouse's acceleration, for all mice or one mouse
+/// model. It is the same in every app, so it ignores "Applies to".
 extension PreferencesWindowController {
     func makePointerSection() -> NSView {
         let controls = PointerSectionControls()
@@ -60,44 +55,28 @@ extension PreferencesWindowController {
         own.toolTip = "Untick to follow the settings for all mice."
         controls.ownSettings = own
 
-        let speedTitle = NSTextField(labelWithString: "Speed:")
-        let speedSlider = makeSlider(
-            value: 1,
-            range: PointerSettings.speedRange,
-            width: 140,
-            action: #selector(pointerSettingChanged(_:))
-        )
-        speedSlider.toolTip = "How far the pointer goes for the same movement of the mouse. 1× leaves it "
-            + "as it comes; Tracking speed in System Settings still applies on top."
-        controls.speedSlider = speedSlider
-        let speedLabel = PreferencesWindowController.makeValueLabel(width: 44)
-        controls.speedLabel = speedLabel
-        let speedRow = NSStackView(views: [speedTitle, speedSlider, speedLabel])
-        speedRow.orientation = .horizontal
-        speedRow.spacing = 8
-        PreferencesWindowController.titleControls(in: [speedTitle, speedSlider])
-
         let accelerationTitle = NSTextField(labelWithString: "Acceleration:")
         let accelerationPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         accelerationPopup.target = self
         accelerationPopup.action = #selector(pointerSettingChanged(_:))
         accelerationPopup.addItems(withTitles: PointerAccelerationMode.allCases.map(\.displayName))
-        accelerationPopup.toolTip = "How much faster the pointer goes the faster the mouse moves. Off moves "
-            + "it in proportion, as games and drawing want."
+        accelerationPopup.toolTip = "How much further the pointer goes the faster the mouse moves. Off moves "
+            + "it in proportion, as games and drawing want; Custom sets a tracking speed of its own."
         controls.accelerationPopup = accelerationPopup
         let accelerationModeRow = NSStackView(views: [accelerationTitle, accelerationPopup])
         accelerationModeRow.orientation = .horizontal
         accelerationModeRow.spacing = 8
         PreferencesWindowController.titleControls(in: [accelerationTitle, accelerationPopup])
 
-        let curveTitle = NSTextField(labelWithString: "Curve:")
+        let curveTitle = NSTextField(labelWithString: "Tracking speed:")
         let accelerationSlider = makeSlider(
             value: 1,
             range: PointerSettings.accelerationRange,
             width: 140,
             action: #selector(pointerSettingChanged(_:))
         )
-        accelerationSlider.toolTip = "On System Settings' own scale, from none to the most."
+        accelerationSlider.toolTip = "On System Settings' own Tracking speed scale, which stops at 3; "
+            + "higher is faster still."
         controls.accelerationSlider = accelerationSlider
         let accelerationLabel = PreferencesWindowController.makeValueLabel(width: 44)
         controls.accelerationLabel = accelerationLabel
@@ -111,7 +90,7 @@ extension PreferencesWindowController {
         note.font = .systemFont(ofSize: 11)
         note.textColor = .secondaryLabelColor
 
-        let content = NSStackView(views: [scopeRow, own, speedRow, accelerationModeRow, curveRow, note])
+        let content = NSStackView(views: [scopeRow, own, accelerationModeRow, curveRow, note])
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = 8

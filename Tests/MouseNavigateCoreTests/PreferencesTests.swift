@@ -450,9 +450,9 @@ final class PreferencesTests: XCTestCase {
         global.isSmooth = true
         preferences.scrollSettings = global
 
-        preferences.pointerSettings = PointerSettings(speed: 2)
+        preferences.pointerSettings = PointerSettings(accelerationMode: .custom, acceleration: 2)
         preferences.setPointerOverride(PointerOverride(accelerationMode: .off), for: .mxMaster4)
-        preferences.setPointerOverride(PointerOverride(speed: 0.5), for: .mxMaster3)
+        preferences.setPointerOverride(PointerOverride(acceleration: 0.5), for: .mxMaster3)
 
         preferences.restoreMouseDefaults(profile: .mxMaster4)
 
@@ -498,13 +498,13 @@ final class PreferencesTests: XCTestCase {
         let preferences = makePreferences()
         XCTAssertFalse(preferences.isAnyPointerSettingActive)
 
-        preferences.pointerSettings = PointerSettings(speed: 1.5)
+        preferences.pointerSettings = PointerSettings(accelerationMode: .off)
         preferences.setPointerOverride(PointerOverride(accelerationMode: .custom, acceleration: 2), for: .mxMaster4)
 
-        XCTAssertEqual(preferences.resolvedPointerSettings(profile: .generic), PointerSettings(speed: 1.5))
+        XCTAssertEqual(preferences.resolvedPointerSettings(profile: .generic), PointerSettings(accelerationMode: .off))
         XCTAssertEqual(
             preferences.resolvedPointerSettings(profile: .mxMaster4),
-            PointerSettings(speed: 1.5, accelerationMode: .custom, acceleration: 2)
+            PointerSettings(accelerationMode: .custom, acceleration: 2)
         )
         XCTAssertTrue(preferences.isAnyPointerSettingActive)
 
