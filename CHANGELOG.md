@@ -39,6 +39,9 @@ All notable changes to this project will be documented in this file.
   release published after it was never noticed while the app ran. The daily check carries
   on, and a newer release takes the waiting one's place once it has been downloaded and
   checked; **Install and Relaunch** stays in the menu throughout.
+- A download that failed its checks was left in the caches folder until the next launch,
+  and an install cut short by a crash or a forced quit left a hidden
+  `.MouseNavigate-update-…` folder beside the app for good. Both are cleaned up now.
 
 ## [0.7.0] - 2026-10-11
 

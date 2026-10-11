@@ -161,3 +161,22 @@ public enum InstallLocationProblem: Equatable {
         return isWritable ? nil : .notWritable
     }
 }
+
+/// The hidden folder an update is copied into beside the app, so the swap itself is a
+/// rename on one volume. It is removed once the swap is done; one left behind by a crash
+/// or a forced quit is found by its name and removed at the next launch.
+public enum UpdateScratch {
+    public static let prefix = ".MouseNavigate-update-"
+    /// How old a leftover must be before it is taken away, so a launch can never remove
+    /// one that another account's copy is installing from at that moment.
+    public static let minimumAge: TimeInterval = 10 * 60
+
+    public static func name(for id: UUID) -> String {
+        prefix + id.uuidString
+    }
+
+    public static func isLeftover(name: String, age: TimeInterval) -> Bool {
+        guard name.hasPrefix(prefix), age >= minimumAge else { return false }
+        return UUID(uuidString: String(name.dropFirst(prefix.count))) != nil
+    }
+}

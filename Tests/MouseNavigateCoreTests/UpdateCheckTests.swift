@@ -134,3 +134,18 @@ final class InstallLocationTests: XCTestCase {
         )
     }
 }
+
+final class UpdateScratchTests: XCTestCase {
+    func testOnlyOldScratchFoldersAreLeftovers() {
+        let name = UpdateScratch.name(for: UUID())
+        XCTAssertTrue(UpdateScratch.isLeftover(name: name, age: 3_600))
+        XCTAssertFalse(UpdateScratch.isLeftover(name: name, age: 60), "may be an install under way")
+    }
+
+    func testOtherFoldersAreLeftAlone() {
+        XCTAssertFalse(UpdateScratch.isLeftover(name: "MouseNavigate.app", age: 3_600))
+        XCTAssertFalse(UpdateScratch.isLeftover(name: ".MouseNavigate-update-notauuid", age: 3_600))
+        XCTAssertFalse(UpdateScratch.isLeftover(name: ".MouseNavigate-update-", age: 3_600))
+        XCTAssertFalse(UpdateScratch.isLeftover(name: "x.MouseNavigate-update-\(UUID().uuidString)", age: 3_600))
+    }
+}

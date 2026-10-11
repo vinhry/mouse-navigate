@@ -76,6 +76,7 @@ final class Updater {
     func start() {
         work.async {
             try? FileManager.default.removeItem(at: Updater.stagingDirectory)
+            Updater.removeLeftoverScratch(beside: Bundle.main.bundleURL)
         }
 
         let timer = Timer(timeInterval: Updater.tickInterval, repeats: true) { [weak self] _ in
@@ -383,16 +384,22 @@ final class Updater {
         try? fileManager.removeItem(at: folder)
         try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
 
-        // ditto, not unzip: it keeps the code signature and the stapled ticket intact.
-        try run("/usr/bin/ditto", ["-x", "-k", archive.path, folder.path], timeout: dittoTimeout)
+        do {
+            // ditto, not unzip: it keeps the code signature and the stapled ticket intact.
+            try run("/usr/bin/ditto", ["-x", "-k", archive.path, folder.path], timeout: dittoTimeout)
 
-        let app = folder.appendingPathComponent("MouseNavigate.app", isDirectory: true)
-        guard fileManager.fileExists(atPath: app.path) else {
-            throw StageError("The download does not contain MouseNavigate.app.")
+            let app = folder.appendingPathComponent("MouseNavigate.app", isDirectory: true)
+            guard fileManager.fileExists(atPath: app.path) else {
+                throw StageError("The download does not contain MouseNavigate.app.")
+            }
+            try UpdateVerifier.verify(app: app, expectedVersion: candidate.version, requirement: requirement)
+
+            return StagedUpdate(version: candidate.version, app: app, releasePage: candidate.releasePage)
+        } catch {
+            // Nothing that failed its checks is left lying in the caches folder.
+            try? fileManager.removeItem(at: folder)
+            throw error
         }
-        try UpdateVerifier.verify(app: app, expectedVersion: candidate.version, requirement: requirement)
-
-        return StagedUpdate(version: candidate.version, app: app, releasePage: candidate.releasePage)
     }
 
     private func finishDownload(_ result: Result<StagedUpdate, Error>, userInitiated: Bool) {
@@ -487,7 +494,7 @@ final class Updater {
     private static func replace(_ target: URL, with staged: StagedUpdate, requirement: SecRequirement?) throws {
         let fileManager = FileManager.default
         let scratch = target.deletingLastPathComponent()
-            .appendingPathComponent(".MouseNavigate-update-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent(UpdateScratch.name(for: UUID()), isDirectory: true)
         try fileManager.createDirectory(at: scratch, withIntermediateDirectories: false)
         defer { try? fileManager.removeItem(at: scratch) }
 
@@ -550,6 +557,29 @@ final class Updater {
         }
         showAlert("Install MouseNavigate \(staged.version) by hand", reason)
         NSWorkspace.shared.activateFileViewerSelecting([staged.app])
+    }
+
+    /// Removes the scratch folders an install that never finished left beside the app.
+    /// Only where the app could have installed one itself. Runs on the work queue.
+    private static func removeLeftoverScratch(beside app: URL) {
+        let fileManager = FileManager.default
+        let folder = app.deletingLastPathComponent()
+        let writable = fileManager.isWritableFile(atPath: folder.path)
+        guard InstallLocationProblem.check(bundlePath: app.path, isWritable: writable) == nil,
+              let entries = try? fileManager.contentsOfDirectory(
+                at: folder,
+                includingPropertiesForKeys: [.contentModificationDateKey]
+              )
+        else {
+            return
+        }
+        for entry in entries {
+            let modified = (try? entry.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            let age = modified.map { -$0.timeIntervalSinceNow } ?? 0
+            guard UpdateScratch.isLeftover(name: entry.lastPathComponent, age: age) else { continue }
+            Log.update.notice("Removing \(entry.path, privacy: .public), left by an install that never finished.")
+            try? fileManager.removeItem(at: entry)
+        }
     }
 
     // MARK: - Helpers
