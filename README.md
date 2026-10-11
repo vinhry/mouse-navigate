@@ -518,6 +518,25 @@ account cannot change — it shows the verified new version in Finder to move by
 build signed ad hoc or with an Apple Development certificate, such as a local one, never
 updates itself, and is not asked about automatic updates. Nor is a copy run from source.
 
+## Uninstall
+
+1. In the menu bar menu, turn off **Launch at Login**, then choose **Quit**.
+2. Delete **MouseNavigate.app** from wherever you put it.
+3. Remove its settings and anything it downloaded:
+   ```bash
+   defaults delete com.vinhry.MouseNavigate
+   rm -rf ~/Library/Caches/com.vinhry.MouseNavigate
+   ```
+4. Take it off the permission lists, either in `System Settings` → `Privacy & Security` →
+   `Accessibility` and `Input Monitoring`, selecting it and clicking **–**, or with:
+   ```bash
+   tccutil reset Accessibility com.vinhry.MouseNavigate
+   tccutil reset ListenEvent com.vinhry.MouseNavigate
+   ```
+
+Nothing else is left behind: MouseNavigate installs no helpers, extensions or launch agents
+of its own.
+
 ## Build from Source
 
 1. Build app bundle:
