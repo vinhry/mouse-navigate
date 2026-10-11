@@ -57,6 +57,7 @@ final class MouseNavigator {
         )
     }
     private let wheel = WheelScroller()
+    private let pointer = PointerDeviceManager()
     private let updater = Updater()
     private lazy var welcome = WelcomeWindowController(updater: updater)
 
@@ -137,6 +138,7 @@ final class MouseNavigator {
     func prepareForTermination() {
         cursorEngine.forceExit()
         releaseHeldMouseInput()
+        pointer.restoreAll()
     }
 
     /// Everything that needs permission, hardware or a private framework. None of it is
@@ -159,6 +161,7 @@ final class MouseNavigator {
         let tapInstalled = installEventTap()
 
         detector.start()
+        pointer.start()
 
         // Before touch starts, so a Mac that launches us behind the lock screen never
         // listens to a finger until it is unlocked.

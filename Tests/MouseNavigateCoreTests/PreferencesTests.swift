@@ -450,8 +450,15 @@ final class PreferencesTests: XCTestCase {
         global.isSmooth = true
         preferences.scrollSettings = global
 
+        preferences.pointerSettings = PointerSettings(speed: 2)
+        preferences.setPointerOverride(PointerOverride(accelerationMode: .off), for: .mxMaster4)
+        preferences.setPointerOverride(PointerOverride(speed: 0.5), for: .mxMaster3)
+
         preferences.restoreMouseDefaults(profile: .mxMaster4)
 
+        XCTAssertEqual(preferences.pointerSettings, .standard)
+        XCTAssertTrue(preferences.pointerOverride(for: .mxMaster4).isEmpty)
+        XCTAssertFalse(preferences.pointerOverride(for: .mxMaster3).isEmpty)
         XCTAssertEqual(preferences.globalBinding(for: .button(3, .mxMaster4)), .builtin(.back))
         XCTAssertEqual(preferences.globalBinding(for: .button(3, .mxMaster4, .hold)), .disabled)
         XCTAssertEqual(preferences.globalBinding(for: .buttonDrag(3, .mxMaster4, .down, [.command])), .disabled)
@@ -485,5 +492,24 @@ final class PreferencesTests: XCTestCase {
     func testNotificationWithoutAreaMeansEverything() {
         let notification = Notification(name: Preferences.didChangeNotification)
         XCTAssertEqual(notification.settingsArea, .all)
+    }
+
+    func testPointerSettingsForAllMiceAndOneMouse() {
+        let preferences = makePreferences()
+        XCTAssertFalse(preferences.isAnyPointerSettingActive)
+
+        preferences.pointerSettings = PointerSettings(speed: 1.5)
+        preferences.setPointerOverride(PointerOverride(accelerationMode: .custom, acceleration: 2), for: .mxMaster4)
+
+        XCTAssertEqual(preferences.resolvedPointerSettings(profile: .generic), PointerSettings(speed: 1.5))
+        XCTAssertEqual(
+            preferences.resolvedPointerSettings(profile: .mxMaster4),
+            PointerSettings(speed: 1.5, accelerationMode: .custom, acceleration: 2)
+        )
+        XCTAssertTrue(preferences.isAnyPointerSettingActive)
+
+        preferences.pointerSettings = .standard
+        preferences.setPointerOverride(.none, for: .mxMaster4)
+        XCTAssertFalse(preferences.isAnyPointerSettingActive, "the cache follows the change")
     }
 }

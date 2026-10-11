@@ -62,6 +62,7 @@ enum DiagnosticsCollector {
         settings.scrollOptions = preferences.isAnyScrollSettingActive
         let wheel = preferences.scrollSettings
         settings.smoothing = wheel.isSmooth ? (wheel.hasMomentum ? .momentum : .smooth) : .off
+        settings.pointer = preferences.resolvedPointerSettings(profile: detector.activeProfile)
         settings.boundButtonCombinations = preferences
             .boundButtonCombinations(profile: detector.activeProfile, app: nil).count
         settings.appsWithOwnSettings = preferences.appOverrides.count

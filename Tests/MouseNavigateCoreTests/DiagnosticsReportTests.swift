@@ -22,6 +22,7 @@ final class DiagnosticsReportTests: XCTestCase {
         report.settings.keyboardCursor = true
         report.settings.boundButtonCombinations = 6
         report.settings.appsWithOwnSettings = 2
+        report.settings.pointer = PointerSettings(speed: 1.5, accelerationMode: .off)
         report.settings.automaticUpdates = true
         report.updates = "up to date"
         report.otherMouseSoftware = ["Logitech Options+"]
@@ -38,6 +39,7 @@ final class DiagnosticsReportTests: XCTestCase {
         XCTAssertTrue(text.contains("Touch: listening to Trackpad"))
         XCTAssertTrue(text.contains("  Holds, double-clicks, drags and modifier presses bound for this mouse: 6"))
         XCTAssertTrue(text.contains("Other mouse software running: Logitech Options+"))
+        XCTAssertTrue(text.contains("  Pointer: speed 1.50×, acceleration off"))
     }
 
     func testCarriesNothingPersonal() {

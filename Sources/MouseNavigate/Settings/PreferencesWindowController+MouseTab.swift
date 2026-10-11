@@ -92,12 +92,19 @@ extension PreferencesWindowController {
 
         let footer = makeRestoreDefaultsFooter(action: #selector(restoreMouseDefaultsTapped))
 
+        // The pointer's settings sit in the room beside the buttons, so the tab grows no
+        // taller for them.
+        let top = NSStackView(views: [grid, makePointerSection()])
+        top.orientation = .horizontal
+        top.alignment = .top
+        top.spacing = 36
+
         let scroll = makeScrollSection()
-        let stack = NSStackView(views: [label, makeScopeRow(), grid, tester, scroll, footer])
+        let stack = NSStackView(views: [label, makeScopeRow(), top, tester, scroll, footer])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
-        stack.setCustomSpacing(18, after: grid)
+        stack.setCustomSpacing(18, after: top)
         stack.setCustomSpacing(22, after: tester)
         stack.setCustomSpacing(16, after: scroll)
         footer.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
@@ -213,6 +220,8 @@ extension PreferencesWindowController {
     func refreshDeviceUI() {
         deviceLabel?.stringValue = detector.statusDescription
         refreshScrollUI()
+        // Both name the model in use in their mouse menus.
+        refreshPointerUI()
 
         if let override = Preferences.shared.deviceOverride,
            let index = DeviceProfile.allCases.firstIndex(of: override) {

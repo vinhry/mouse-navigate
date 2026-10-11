@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Pointer** on **Settings → Mouse**: **Speed** from 0.25× to 4×, and **Acceleration**
+  as in System Settings, **Off**, or a **Custom** curve, for all mice or one mouse model.
+  Trackpads are never changed, and quitting puts every mouse back as System Settings has
+  it. **Restore Defaults** on the Mouse tab now includes the pointer.
 - A **Welcome** window on first launch, in place of the Accessibility prompt and the
   update question that used to arrive one after the other with nothing to explain them.
   It says what Accessibility and Input Monitoring are for, shows whether each is allowed

@@ -204,6 +204,8 @@ public final class Preferences {
         notifyChange(.bindings)
         setScrollOverride(.none, for: profile)
         scrollSettings = .standard
+        setPointerOverride(.none, for: profile)
+        pointerSettings = .standard
     }
 
     // MARK: - Per-app bindings
@@ -336,6 +338,64 @@ public final class Preferences {
             || appOverrides.values.contains { !$0.scroll.isEmpty }
         cachedAnyScrollSettingActive = active
         return active
+    }
+
+    // MARK: - Pointer
+
+    /// The pointer for all mice.
+    public var pointerSettings: PointerSettings {
+        get { readPointerOverride(profile: nil).applied(to: .standard) }
+        set {
+            writePointerOverride(PointerOverride(settings: newValue), profile: nil)
+            notifyChange(.pointer)
+        }
+    }
+
+    /// What one mouse model changes about the pointer; `.none` when it follows all mice.
+    public func pointerOverride(for profile: DeviceProfile) -> PointerOverride {
+        readPointerOverride(profile: profile)
+    }
+
+    public func setPointerOverride(_ override: PointerOverride, for profile: DeviceProfile) {
+        writePointerOverride(override, profile: profile)
+        notifyChange(.pointer)
+    }
+
+    /// The pointer for a mouse of `profile`: its own settings, then the ones for all.
+    public func resolvedPointerSettings(profile: DeviceProfile) -> PointerSettings {
+        pointerOverride(for: profile).applied(to: pointerSettings)
+    }
+
+    private var cachedAnyPointerSettingActive: Bool?
+
+    /// Whether any mouse has its pointer changed, which is what decides whether the pointer
+    /// is looked after at all.
+    public var isAnyPointerSettingActive: Bool {
+        if let cachedAnyPointerSettingActive {
+            return cachedAnyPointerSettingActive
+        }
+        let active = DeviceProfile.allCases.contains { resolvedPointerSettings(profile: $0).isActive }
+        cachedAnyPointerSettingActive = active
+        return active
+    }
+
+    private func readPointerOverride(profile: DeviceProfile?) -> PointerOverride {
+        var override = PointerOverride()
+        for field in PointerField.allCases {
+            override.set(field, to: store.object(forKey: SettingsKey.pointer(field, profile: profile)))
+        }
+        return override
+    }
+
+    private func writePointerOverride(_ override: PointerOverride, profile: DeviceProfile?) {
+        for field in PointerField.allCases {
+            let key = SettingsKey.pointer(field, profile: profile)
+            if let value = override.value(of: field) {
+                store.set(value, forKey: key)
+            } else {
+                store.removeObject(forKey: key)
+            }
+        }
     }
 
     private func readScrollOverride(profile: DeviceProfile?) -> ScrollOverride {
@@ -541,6 +601,7 @@ public final class Preferences {
     private func notifyChange(_ area: SettingsArea) {
         cachedAppOverrides = nil
         cachedAnyScrollSettingActive = nil
+        cachedAnyPointerSettingActive = nil
         cachedHasAnyDragBinding = nil
         NotificationCenter.default.post(
             name: Preferences.didChangeNotification,
@@ -569,6 +630,7 @@ public enum SettingsArea: String, Sendable {
     case device
     case apps
     case scroll
+    case pointer
     case cursor
     case touch
     case updates

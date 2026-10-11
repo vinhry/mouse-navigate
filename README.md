@@ -218,6 +218,21 @@ With everything at its defaults in every scope, and touch gestures off, wheel ev
 pass through MouseNavigate. Logi Options+ smooth scrolling makes a Logitech wheel scroll
 continuously, like a trackpad, so turn that off to use these.
 
+## Pointer
+
+**Settings → Mouse → Pointer** changes how a mouse moves the pointer, for all mice or for
+one mouse model under **For:**. Trackpads and built-in devices are never changed.
+
+- **Speed** sets how far the pointer goes for the same movement, from 0.25× to 4×.
+  1× leaves the mouse as it comes; **Tracking speed** in System Settings still applies.
+- **Acceleration** is **As in System Settings**, **Off**, which moves the pointer in
+  proportion to the mouse however fast it goes, as games and drawing want, or **Custom**,
+  a curve of your own on System Settings' scale.
+
+macOS keeps these on the mouse itself, so MouseNavigate sets them again whenever the mouse
+connects or the Mac wakes, and puts back what System Settings says when a mouse returns to
+standard or MouseNavigate quits. **Restore Defaults** on the Mouse tab includes them.
+
 ## Per-App Bindings
 
 Buttons, gestures and drawn letters can be bound differently in one app. Choose

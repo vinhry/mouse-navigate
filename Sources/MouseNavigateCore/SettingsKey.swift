@@ -44,6 +44,14 @@ public enum SettingsKey {
         return "scroll.\(field.rawValue)"
     }
 
+    /// "pointer.<field>" for all mice, "pointer.<profile>.<field>" for one mouse model.
+    public static func pointer(_ field: PointerField, profile: DeviceProfile? = nil) -> String {
+        if let profile {
+            return "pointer.\(profile.rawValue).\(field.rawValue)"
+        }
+        return "pointer.\(field.rawValue)"
+    }
+
     public static let fixed: [String: ValueType] = {
         var keys: [String: ValueType] = [
             configVersion: .int,
@@ -62,6 +70,12 @@ public enum SettingsKey {
             keys[scroll(field)] = field.valueType
             for profile in DeviceProfile.allCases {
                 keys[scroll(field, profile: profile)] = field.valueType
+            }
+        }
+        for field in PointerField.allCases {
+            keys[pointer(field)] = field.valueType
+            for profile in DeviceProfile.allCases {
+                keys[pointer(field, profile: profile)] = field.valueType
             }
         }
         return keys

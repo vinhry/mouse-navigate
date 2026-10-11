@@ -71,6 +71,8 @@ public struct DiagnosticsReport: Equatable {
         public var drawingSources = 0
         public var scrollOptions = false
         public var smoothing = Smoothing.off
+        /// The pointer for the mouse in use.
+        public var pointer = PointerSettings.standard
         /// Presses other than a plain click, for any button, bound to something of their own.
         public var boundButtonCombinations = 0
         public var appsWithOwnSettings = 0
@@ -142,6 +144,7 @@ public struct DiagnosticsReport: Equatable {
             "  Touch gestures: \(onOff(s.touch)), left-handed \(onOff(s.leftHanded)), "
                 + "\(s.drawingSources) drawing source(s)",
             "  Scroll options: \(onOff(s.scrollOptions)), smoothing \(s.smoothing.rawValue)",
+            "  Pointer: " + describe(s.pointer),
             "  Holds, double-clicks, drags and modifier presses bound for this mouse: "
                 + "\(s.boundButtonCombinations)",
             "  Apps with their own settings: \(s.appsWithOwnSettings), turned off in: \(s.appsTurnedOff)",
@@ -151,6 +154,15 @@ public struct DiagnosticsReport: Equatable {
                 + (otherMouseSoftware.isEmpty ? "none seen" : otherMouseSoftware.joined(separator: ", ")),
         ]
         return lines.joined(separator: "\n")
+    }
+
+    private func describe(_ pointer: PointerSettings) -> String {
+        guard pointer.isActive else { return "as it comes" }
+        var acceleration = pointer.accelerationMode.displayName.lowercased()
+        if pointer.accelerationMode == .custom {
+            acceleration += String(format: " %.2f", pointer.acceleration)
+        }
+        return String(format: "speed %.2f×, acceleration ", pointer.speed) + acceleration
     }
 
     private func onOff(_ value: Bool) -> String {
