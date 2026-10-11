@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.6.1] - 2026-10-10
 
 ### Added
 - The Touch tab warns when macOS has a three-finger gesture on that takes one of the bound
