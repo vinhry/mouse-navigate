@@ -1,9 +1,15 @@
 import Foundation
 
-/// A drawn letter or straight-line direction that can be bound to an action.
+/// A drawn letter, straight-line direction or two-segment stroke that can be bound to an
+/// action.
 public enum CharacterGesture: String, CaseIterable {
     case a, b, c, d, e, f, g, h, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z
     case up, down, left, right, upLeft, upRight, downLeft, downRight
+    /// Two straight legs at a right angle. The other four corners are letters already:
+    /// down then right is L, right then down is T, left then down is F, down then left is J.
+    case leftThenUp, rightThenUp, upThenLeft, upThenRight
+    /// Out and straight back.
+    case leftThenRight, rightThenLeft, upThenDown, downThenUp
 
     public var displayName: String {
         switch self {
@@ -15,6 +21,14 @@ public enum CharacterGesture: String, CaseIterable {
         case .upRight: return "Up-Right ↗"
         case .downLeft: return "Down-Left ↙"
         case .downRight: return "Down-Right ↘"
+        case .leftThenUp: return "Left then Up ←↑"
+        case .rightThenUp: return "Right then Up →↑"
+        case .upThenLeft: return "Up then Left ↑←"
+        case .upThenRight: return "Up then Right ↑→"
+        case .leftThenRight: return "Left then Right ←→"
+        case .rightThenLeft: return "Right then Left →←"
+        case .upThenDown: return "Up then Down ↑↓"
+        case .downThenUp: return "Down then Up ↓↑"
         default: return rawValue.uppercased()
         }
     }
@@ -25,6 +39,12 @@ public enum CharacterGesture: String, CaseIterable {
 
     public static let directions: [CharacterGesture] = [
         .up, .down, .left, .right, .upLeft, .upRight, .downLeft, .downRight,
+    ]
+
+    /// The two-segment strokes, which have templates like the letters.
+    public static let strokes: [CharacterGesture] = [
+        .leftThenUp, .rightThenUp, .upThenLeft, .upThenRight,
+        .leftThenRight, .rightThenLeft, .upThenDown, .downThenUp,
     ]
 
     public var defaultAction: ButtonAction {

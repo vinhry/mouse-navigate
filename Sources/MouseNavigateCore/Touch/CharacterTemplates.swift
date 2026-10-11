@@ -11,11 +11,38 @@ public struct CharacterTemplate {
     }
 }
 
-/// Single-stroke letter shapes, loosely after Graffiti, drawn in a unit box with +y down.
-/// Each is traced in the direction people naturally write it, because the matcher is
-/// direction-sensitive. `I` has no template: it is a straight downward stroke.
+/// Single-stroke letter shapes, loosely after Graffiti, drawn in a unit box with +y down,
+/// then the corner and out-and-back strokes. Each is traced in the direction people
+/// naturally write it, because the matcher is direction-sensitive. `I` has no template: it
+/// is a straight downward stroke.
 public enum CharacterTemplates {
-    public static let all: [CharacterTemplate] = [
+    public static let all: [CharacterTemplate] = letters + strokes
+
+    /// Each comes in two: legs the same length, and a second leg half as long, since the
+    /// matcher keeps a stroke's proportions and a short second leg would otherwise sit far
+    /// from the template. An out-and-back stroke returns a little beside its outward leg,
+    /// so its preview reads as two lines rather than one drawn over itself.
+    static let strokes: [CharacterTemplate] = [
+        CharacterTemplate(.leftThenUp, [(1, 1), (0, 1), (0, 0)]),
+        CharacterTemplate(.leftThenUp, [(1, 0.5), (0, 0.5), (0, 0)]),
+        CharacterTemplate(.rightThenUp, [(0, 1), (1, 1), (1, 0)]),
+        CharacterTemplate(.rightThenUp, [(0, 0.5), (1, 0.5), (1, 0)]),
+        CharacterTemplate(.upThenLeft, [(1, 1), (1, 0), (0, 0)]),
+        CharacterTemplate(.upThenLeft, [(0.5, 1), (0.5, 0), (0, 0)]),
+        CharacterTemplate(.upThenRight, [(0, 1), (0, 0), (1, 0)]),
+        CharacterTemplate(.upThenRight, [(0.5, 1), (0.5, 0), (1, 0)]),
+
+        CharacterTemplate(.leftThenRight, [(1, 0.45), (0, 0.5), (1, 0.55)]),
+        CharacterTemplate(.leftThenRight, [(1, 0.45), (0, 0.5), (0.5, 0.55)]),
+        CharacterTemplate(.rightThenLeft, [(0, 0.45), (1, 0.5), (0, 0.55)]),
+        CharacterTemplate(.rightThenLeft, [(0, 0.45), (1, 0.5), (0.5, 0.55)]),
+        CharacterTemplate(.upThenDown, [(0.45, 1), (0.5, 0), (0.55, 1)]),
+        CharacterTemplate(.upThenDown, [(0.45, 1), (0.5, 0), (0.55, 0.5)]),
+        CharacterTemplate(.downThenUp, [(0.45, 0), (0.5, 1), (0.55, 0)]),
+        CharacterTemplate(.downThenUp, [(0.45, 0), (0.5, 1), (0.55, 0.5)]),
+    ]
+
+    static let letters: [CharacterTemplate] = [
         CharacterTemplate(.a, [(0, 1), (0.5, 0), (1, 1)]),
         CharacterTemplate(.a, [(0, 1), (0.5, 0), (1, 1), (0.75, 0.55), (0.25, 0.55)]),
 
@@ -83,6 +110,7 @@ public enum CharacterTemplates {
     /// The stroke to show someone who wants to know how a character is drawn: the shape the
     /// recogniser matches, in the order it expects. Directions have no template, since a
     /// straight stroke is recognised by being straight, so they are drawn across the box.
+    /// A corner or out-and-back stroke shows its first template, the one with equal legs.
     public static func preview(for gesture: CharacterGesture) -> [Vector2] {
         if let template = all.first(where: { $0.gesture == gesture }) {
             return template.points

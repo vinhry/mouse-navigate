@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Eight two-segment drawn strokes, each one straight leg then another, under
+  **Settings → Touch → Characters**: the corners **Left then Up**, **Right then Up**,
+  **Up then Left** and **Up then Right**, and the out-and-back strokes **Left then Right**,
+  **Right then Left**, **Up then Down** and **Down then Up**. The other four corners were
+  letters already (`L`, `T`, `F` and `J`) and stay so. All eight start out unbound.
+
 ## [0.6.1] - 2026-10-10
 
 ### Added

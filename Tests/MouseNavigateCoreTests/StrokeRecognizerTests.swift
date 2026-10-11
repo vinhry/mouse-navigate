@@ -153,3 +153,78 @@ struct SeededGenerator: RandomNumberGenerator {
         return state
     }
 }
+
+final class StrokeRecognizerCompoundStrokeTests: XCTestCase {
+    private let recognizer = StrokeRecognizer()
+
+    private func trace(_ points: [(Double, Double)]) -> [Vector2] {
+        StrokeRecognizer.resample(points.map { Vector2(x: $0.0, y: $0.1) }, count: 90)
+    }
+
+    func testCornerWithAShortSecondLegIsStillACorner() {
+        // A fifth of the first leg is a corner; a twelfth is a hand that wobbled at the end.
+        XCTAssertEqual(recognizer.recognize(trace([(1, 1), (0, 1), (0, 0.8)])), .leftThenUp)
+        XCTAssertEqual(recognizer.recognize(trace([(0, 1), (1, 1), (1, 0.8)])), .rightThenUp)
+        XCTAssertEqual(recognizer.recognize(trace([(1, 1), (1, 0), (0.8, 0)])), .upThenLeft)
+        XCTAssertEqual(recognizer.recognize(trace([(0, 1), (0, 0), (0.2, 0)])), .upThenRight)
+        XCTAssertEqual(recognizer.recognize(trace([(1, 1), (0, 1), (0, 0.92)])), .left)
+        XCTAssertEqual(recognizer.recognize(trace([(0, 1), (0, 0), (0.08, 0)])), .up)
+    }
+
+    func testBackAndForthWithAShortReturnIsStillTheStroke() {
+        // A return of two fifths, and one drawn straight back over the outward leg.
+        XCTAssertEqual(recognizer.recognize(trace([(1, 0.5), (0, 0.5), (0.4, 0.52)])), .leftThenRight)
+        XCTAssertEqual(recognizer.recognize(trace([(0, 0.5), (1, 0.5), (0.6, 0.52)])), .rightThenLeft)
+        XCTAssertEqual(recognizer.recognize(trace([(0.5, 1), (0.5, 0), (0.52, 0.4)])), .upThenDown)
+        XCTAssertEqual(recognizer.recognize(trace([(0.5, 0), (0.5, 1), (0.52, 0.6)])), .downThenUp)
+        XCTAssertEqual(recognizer.recognize(trace([(1, 0.5), (0, 0.5), (1, 0.5)])), .leftThenRight)
+        XCTAssertEqual(recognizer.recognize(trace([(0.5, 0), (0.5, 1), (0.5, 0)])), .downThenUp)
+        // A return of a twenty-fifth is the pen lifting, not a stroke back.
+        XCTAssertEqual(recognizer.recognize(trace([(1, 0.5), (0, 0.5), (0.04, 0.5)])), .left)
+        XCTAssertEqual(recognizer.recognize(trace([(0.5, 0), (0.5, 1), (0.5, 0.96)])), .down)
+    }
+
+    func testStrokesBeatTheNearestLetterByAMargin() {
+        // Every stroke must win clearly over the letters it most resembles, or a loose hand
+        // would flip between the two. Up then Right starts the way P, R, B and D do.
+        let letters = StrokeRecognizer(templates: CharacterTemplates.letters)
+        for gesture in CharacterGesture.strokes {
+            let drawn = StrokeRecognizer.resample(CharacterTemplates.preview(for: gesture), count: 90)
+            let best = recognizer.bestMatch(drawn)!
+            let nearestLetter = letters.bestMatch(drawn)!
+            XCTAssertEqual(best.gesture, gesture)
+            XCTAssertGreaterThanOrEqual(
+                best.score - nearestLetter.score, 0.1,
+                "\(gesture) scores \(best.score) against \(nearestLetter.gesture) at \(nearestLetter.score)"
+            )
+        }
+    }
+
+    func testLettersAreNotTakenByTheStrokes() {
+        // The letters whose shapes come closest to the strokes keep matching as themselves.
+        let strokesOnly = StrokeRecognizer(templates: CharacterTemplates.strokes)
+        for gesture in [CharacterGesture.p, .r, .b, .d, .l, .f, .t, .j, .n, .u, .v, .w] {
+            for template in CharacterTemplates.letters where template.gesture == gesture {
+                let drawn = StrokeRecognizer.resample(template.points, count: 90)
+                XCTAssertEqual(recognizer.recognize(drawn), gesture)
+                let asStroke = strokesOnly.bestMatch(drawn)!
+                let asLetter = recognizer.bestMatch(drawn)!
+                XCTAssertGreaterThanOrEqual(
+                    asLetter.score - asStroke.score, 0.1,
+                    "\(gesture) scores \(asLetter.score) against \(asStroke.gesture) at \(asStroke.score)"
+                )
+            }
+        }
+    }
+
+    func testStrokesDefaultToDisabledAndHaveTemplates() {
+        let covered = Set(CharacterTemplates.all.map(\.gesture))
+        for gesture in CharacterGesture.strokes {
+            XCTAssertEqual(gesture.defaultAction, .disabled)
+            XCTAssertFalse(gesture.isDirection)
+            XCTAssertTrue(covered.contains(gesture), "\(gesture) has no template")
+            XCTAssertTrue(gesture.displayName.contains("then"), gesture.displayName)
+        }
+        XCTAssertEqual(Set(CharacterGesture.allCases).count, CharacterGesture.allCases.count)
+    }
+}

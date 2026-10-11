@@ -427,7 +427,14 @@ the list, over and over, with a ring showing where to start.
 | Up / Down (`I`) | Copy / Paste |
 | Left / Right | Maximize Left / Right |
 
-Every other letter and the four diagonals start out unbound.
+Every other letter, the four diagonals and the two-segment strokes start out unbound.
+
+Besides the letters and the eight straight directions there are eight two-segment strokes,
+each one straight leg then another: the corners **Left then Up ←↑**, **Right then Up →↑**,
+**Up then Left ↑←** and **Up then Right ↑→**, and the out-and-back strokes **Left then
+Right ←→**, **Right then Left →←**, **Up then Down ↑↓** and **Down then Up ↓↑**. The other
+four corners are letters already: down then right is `L`, right then down is `T`, left then
+down is `F` and down then left is `J`.
 
 ### Not included
 
