@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Each release lists the SHA-256 of `MouseNavigate.zip` in its notes, so a download can be
+  checked, and carries `MouseNavigate-dSYM.zip`, the debug symbols that turn a crash
+  report from your Mac into something that can be read.
+
 ## [0.7.1] - 2026-10-11
 
 ### Added

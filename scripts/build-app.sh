@@ -85,6 +85,16 @@ iconutil -c icns "$ICONSET_DIR" -o "$ICNS_PATH"
 lipo -create "${ARCH_BINARIES[@]}" -output "$MACOS_DIR/$APP_NAME"
 chmod +x "$MACOS_DIR/$APP_NAME"
 
+# Debug symbols, so a crash report from someone else's Mac can be read. Made from the
+# merged binary, whose debug map still points at each architecture's object files, and
+# matched to it by UUID; signing later leaves the UUIDs alone.
+DSYM_PATH="$ROOT_DIR/dist/${APP_NAME}.dSYM"
+rm -rf "$DSYM_PATH"
+xcrun dsymutil "$MACOS_DIR/$APP_NAME" -o "$DSYM_PATH"
+if [[ "$(xcrun dwarfdump --uuid "$DSYM_PATH" | grep -c 'UUID:')" != 2 ]]; then
+  echo "Warning: the dSYM does not cover both architectures." >&2
+fi
+
 cat >"$CONTENTS_DIR/Info.plist" <<EOF_PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -154,3 +164,8 @@ ZIP_PATH="$ROOT_DIR/dist/${APP_NAME}.zip"
 rm -f "$ZIP_PATH"
 ditto -c -k --keepParent "$APP_DIR" "$ZIP_PATH"
 echo "Created archive: $ZIP_PATH"
+
+DSYM_ZIP_PATH="$ROOT_DIR/dist/${APP_NAME}-dSYM.zip"
+rm -f "$DSYM_ZIP_PATH"
+ditto -c -k --keepParent "$DSYM_PATH" "$DSYM_ZIP_PATH"
+echo "Created debug symbols: $DSYM_ZIP_PATH"

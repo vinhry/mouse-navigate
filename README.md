@@ -477,6 +477,7 @@ gesture and drawn letter with its match score.
 Requires macOS 13 Ventura or later, on Apple silicon or Intel.
 
 1. Download `MouseNavigate.zip` from the [latest release](https://github.com/vinhry/mouse-navigate/releases/latest) and unzip it.
+   The release notes give its SHA-256, which `shasum -a 256 MouseNavigate.zip` should match.
 2. Move **MouseNavigate.app** into your **Applications** folder. Run it from there rather
    than from Downloads: macOS launches apps left in Downloads from a temporary read-only
    location, which can break **Launch at Login**.

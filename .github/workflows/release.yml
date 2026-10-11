@@ -28,6 +28,11 @@ jobs:
             exit 1
           fi
 
+      # A tag can be pushed before the build workflow has finished with its commit, and the
+      # tests take a minute where notarization can take hours.
+      - name: Test
+        run: swift test
+
       # Import the Developer ID Application certificate into a short-lived keychain
       # so codesign can use it without touching the system keychain.
       - name: Import signing certificate
@@ -72,11 +77,25 @@ jobs:
           rm MouseNavigate.zip
           ditto -c -k --keepParent MouseNavigate.app MouseNavigate.zip
 
+      # The checksum is of the stapled zip that is published, so a download can be checked
+      # against it, and the Homebrew cask is pinned to it.
+      - name: Checksum
+        id: checksum
+        run: |
+          SHA="$(shasum -a 256 dist/MouseNavigate.zip | cut -d ' ' -f 1)"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "SHA-256 of MouseNavigate.zip: $SHA"
+
+      # The updater only ever takes the asset named MouseNavigate.zip, so the debug symbols
+      # can sit beside it.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.checksum.outputs.sha256 }}
         run: |
           gh release create "${{ github.ref_name }}" \
             dist/MouseNavigate.zip \
+            dist/MouseNavigate-dSYM.zip \
             --title "${{ github.ref_name }}" \
+            --notes "SHA-256 of MouseNavigate.zip: \`$SHA\`" \
             --generate-notes
