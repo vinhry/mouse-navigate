@@ -20,6 +20,10 @@ All notable changes to this project will be documented in this file.
   which read System Settings on every use. The launches happen once the press has been
   answered, and the shortcuts are read ahead of time. A button bound to an app that has
   since been deleted now does nothing rather than its usual click, and says so in the log.
+- Drawing a letter with the right or middle button redrew the ink and brought its window
+  forward for every movement the mouse reported, while the pointer waited, and recognised
+  the letter and ran its action before the release was answered. The ink is drawn at most
+  once a display frame, and the letter is read once the button is up.
 
 ## [0.7.0] - 2026-10-11
 

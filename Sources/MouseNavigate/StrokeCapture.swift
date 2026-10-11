@@ -32,6 +32,9 @@ final class StrokeCapture {
     private static let minimumLength = 40.0
     /// A ceiling on the points kept for one drag; beyond it the path is thinned.
     private static let maximumPoints = 600
+    /// The ink is redrawn at most this often, about once a display frame, however fast the
+    /// mouse reports.
+    private static let progressInterval = 0.008
 
     private struct Capture {
         let button: Button
@@ -41,6 +44,8 @@ final class StrokeCapture {
     }
 
     private var capture: Capture?
+    /// A redraw of the ink is already on its way.
+    private var isProgressPending = false
 
     var onStroke: (([Vector2]) -> Void)?
     /// The drag so far, for drawing it on screen.
@@ -68,8 +73,23 @@ final class StrokeCapture {
         }
         current.path.append(point)
         capture = current
-        onProgress?(current.path)
+        scheduleProgress()
         return true
+    }
+
+    /// Drags arrive from the event tap, where every click and keystroke waits, and a gaming
+    /// mouse sends a thousand of them a second. Drawing is left until the event has been
+    /// answered, and the drags that come in the meantime are drawn together.
+    private func scheduleProgress() {
+        guard !isProgressPending else { return }
+        isProgressPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + StrokeCapture.progressInterval) { [weak self] in
+            guard let self else { return }
+            self.isProgressPending = false
+            // Released or cancelled meanwhile: the result or the cancel has the ink now.
+            guard let current = self.capture else { return }
+            self.onProgress?(current.path)
+        }
     }
 
     func handleUp(_ button: Button, at location: CGPoint) -> Bool {
@@ -77,7 +97,14 @@ final class StrokeCapture {
         capture = nil
 
         if current.length >= StrokeCapture.minimumLength {
-            onStroke?(current.path + [vector(location)])
+            let path = current.path + [vector(location)]
+            // Recognised and acted on once the release has been answered. The ink is brought
+            // up to date first: a stroke quicker than one redraw has no window yet to show
+            // its result in.
+            DispatchQueue.main.async { [weak self] in
+                self?.onProgress?(path)
+                self?.onStroke?(path)
+            }
         } else {
             onCancelled?()
             replayClick(current.button, at: current.start)

@@ -61,8 +61,14 @@ final class DrawingOverlay {
         // screen-sized surface for a stroke the size of a postage stamp.
         let panel = panel(on: screen, frame: inkFrame(on: screen, for: space))
         canvas?.showPath(points.map { convert($0, in: space, screen: screen) })
-        panel.alphaValue = 1
-        panel.orderFrontRegardless()
+        // Called for every frame of a stroke; the window server only needs telling once.
+        if panel.alphaValue < 1 {
+            // Takes the ink back from a fade that was still under way.
+            panel.alphaValue = 1
+        }
+        if !panel.isVisible {
+            panel.orderFrontRegardless()
+        }
     }
 
     /// Replaces the ink with what the stroke was recognised as, then fades everything out.
