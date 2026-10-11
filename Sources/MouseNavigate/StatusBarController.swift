@@ -5,6 +5,7 @@ import IOKit.hidsystem
 import MouseNavigateCore
 import ServiceManagement
 
+@MainActor
 final class StatusBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var pauseMenuItem: NSMenuItem?

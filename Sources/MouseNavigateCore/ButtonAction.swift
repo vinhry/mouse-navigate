@@ -2,7 +2,7 @@ import Foundation
 
 /// Something the app can do in response to input. Shared by mouse buttons, touch gestures
 /// and drawn characters, despite the name, which is kept because raw values are persisted.
-public enum ButtonAction: String, CaseIterable {
+public enum ButtonAction: String, CaseIterable, Sendable {
     case back = "back"
     case forward = "forward"
     case nextTab = "nextTab"
@@ -49,7 +49,7 @@ public enum ButtonAction: String, CaseIterable {
     case showGrid = "showGrid"
     case disabled = "disabled"
 
-    public enum Category: CaseIterable {
+    public enum Category: CaseIterable, Sendable {
         case browsing, editing, window, system, media, launch, app, none
 
         /// The heading over the group in a picker; nil for the one that needs none.
@@ -167,8 +167,8 @@ public enum ButtonAction: String, CaseIterable {
 }
 
 /// A key plus modifiers, kept free of CoreGraphics so the core library stays testable.
-public struct Shortcut: Equatable {
-    public struct Modifiers: OptionSet, Hashable {
+public struct Shortcut: Equatable, Sendable {
+    public struct Modifiers: OptionSet, Hashable, Sendable {
         public let rawValue: Int
         public init(rawValue: Int) { self.rawValue = rawValue }
 

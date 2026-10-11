@@ -1,7 +1,7 @@
 import Foundation
 
 /// Where drawn characters can come from.
-public enum CharacterSource: String, CaseIterable {
+public enum CharacterSource: String, CaseIterable, Sendable {
     case trackpad
     case magicMouseRightDrag
     case middleButtonDrag

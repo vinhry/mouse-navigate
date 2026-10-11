@@ -10,7 +10,8 @@ import Foundation
 /// held for speed) or something to replay (a withheld letter).
 enum SyntheticEvents {
     static let tag: Int64 = 0x4D4E_4156 // "MNAV"
-    static let source = CGEventSource(stateID: .hidSystemState)
+    /// Made once and never changed; events are only ever created from it.
+    nonisolated(unsafe) static let source = CGEventSource(stateID: .hidSystemState)
 
     static func isSynthetic(_ event: CGEvent) -> Bool {
         event.getIntegerValueField(.eventSourceUserData) == tag

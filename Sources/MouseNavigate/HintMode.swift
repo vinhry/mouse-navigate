@@ -5,6 +5,7 @@ import MouseNavigateCore
 ///
 /// Shift on the last letter right-clicks instead, and Option only moves the pointer there.
 /// Delete takes back a letter and Escape closes the hints.
+@MainActor
 final class HintMode: CursorModal {
     enum Click {
         case left
@@ -69,10 +70,13 @@ final class HintMode: CursorModal {
         }
         scanningMessage = progress
         DispatchQueue.main.asyncAfter(deadline: .now() + HintMode.scanningMessageDelay, execute: progress)
-        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+        let deliver: @MainActor @Sendable ([AccessibilityScanner.Target]) -> Void = { [weak self] found in
+            self?.show(found)
+        }
+        DispatchQueue.global(qos: .userInteractive).async {
             let found = AccessibilityScanner.scan(pid: pid, displays: displays)
             DispatchQueue.main.async {
-                self?.show(found)
+                deliver(found)
             }
         }
     }

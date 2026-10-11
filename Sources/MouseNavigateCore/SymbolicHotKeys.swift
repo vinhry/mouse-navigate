@@ -2,7 +2,7 @@ import Foundation
 
 /// The shortcut macOS has for one of its own features, as set under System Settings →
 /// Keyboard → Keyboard Shortcuts.
-public struct SymbolicHotKey: Equatable {
+public struct SymbolicHotKey: Equatable, Sendable {
     public let keyCode: UInt16
     /// `CGEventFlags` raw value.
     public let flags: UInt64
@@ -74,7 +74,7 @@ public enum SymbolicHotKeys {
 /// The media keys on an Apple keyboard, which are not key codes but system-defined events:
 /// subtype 8, with the key in the top half of `data1` and its state beneath it. Values are
 /// `NX_KEYTYPE_*` from IOKit's `ev_keymap.h`.
-public enum MediaKey: Int32, CaseIterable {
+public enum MediaKey: Int32, CaseIterable, Sendable {
     case soundUp = 0
     case soundDown = 1
     case mute = 7

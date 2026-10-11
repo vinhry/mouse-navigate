@@ -9,6 +9,7 @@ import MouseNavigateCore
 /// each use, and the event tap only ever looks at the last answer.
 ///
 /// `hotKeys` and `reload()` are main thread only.
+@MainActor
 final class SymbolicHotKeyCache {
     private(set) var hotKeys: [Int: SymbolicHotKey] = [:]
     private let queue = DispatchQueue(label: "com.vinhry.MouseNavigate.symbolichotkeys", qos: .utility)
@@ -21,12 +22,15 @@ final class SymbolicHotKeyCache {
     func reload() {
         guard !isReloading else { return }
         isReloading = true
-        queue.async { [weak self] in
+        let deliver: @MainActor @Sendable ([Int: SymbolicHotKey]) -> Void = { [weak self] parsed in
+            self?.hotKeys = parsed
+            self?.isReloading = false
+        }
+        queue.async {
             let domain = UserDefaults.standard.persistentDomain(forName: "com.apple.symbolichotkeys") ?? [:]
             let parsed = SymbolicHotKeys.parse(domain)
             DispatchQueue.main.async {
-                self?.hotKeys = parsed
-                self?.isReloading = false
+                deliver(parsed)
             }
         }
     }

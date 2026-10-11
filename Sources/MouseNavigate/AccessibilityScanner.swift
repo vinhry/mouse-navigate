@@ -10,7 +10,7 @@ import ApplicationServices
 /// run off the main thread, given the display frames, which only the main thread may ask
 /// AppKit for.
 enum AccessibilityScanner {
-    struct Target {
+    struct Target: Sendable {
         /// The visible part, in CoreGraphics global points.
         var frame: CGRect
         var role: String
@@ -34,7 +34,8 @@ enum AccessibilityScanner {
     /// their buttons and fields are what gets clicked.
     private static let opaqueRoles = clickableRoles.subtracting([kAXRowRole])
 
-    private static let attributes = [
+    /// Never changed after it is made, so the scan threads can share it.
+    nonisolated(unsafe) private static let attributes = [
         kAXRoleAttribute, kAXPositionAttribute, kAXSizeAttribute,
         kAXVisibleChildrenAttribute, kAXChildrenAttribute,
     ] as CFArray

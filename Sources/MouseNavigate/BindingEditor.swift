@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 /// The sheets behind the pickers' "…" items: record a shortcut, choose an app, type a URL
 /// or name a Shortcuts shortcut. Each hands back nil when cancelled.
+@MainActor
 final class BindingEditor: NSObject, NSTextFieldDelegate, NSComboBoxDelegate {
     private let engine: KeyboardCursorEngine
 
@@ -117,7 +118,7 @@ final class BindingEditor: NSObject, NSTextFieldDelegate, NSComboBoxDelegate {
         alert.window.makeFirstResponder(combo)
     }
 
-    private static func shortcutNames() -> [String] {
+    private nonisolated static func shortcutNames() -> [String] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
         process.arguments = ["list"]

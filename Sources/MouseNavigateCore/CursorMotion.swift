@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Vector2 : Equatable {
+public struct Vector2: Equatable, Sendable {
     public var x: Double
     public var y: Double
 
@@ -23,7 +23,7 @@ public struct Vector2 : Equatable {
     }
 }
 
-public struct Rect: Equatable {
+public struct Rect: Equatable, Sendable {
     public var minX: Double
     public var minY: Double
     public var maxX: Double

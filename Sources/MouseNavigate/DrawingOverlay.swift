@@ -8,6 +8,7 @@ import QuartzCore
 /// There is no card or panel behind it. The ink is jitouch's: translucent dark red, thick,
 /// with round ends and nothing underneath it. The window never takes focus or clicks. Main
 /// thread only.
+@MainActor
 final class DrawingOverlay {
     /// Where a stroke's points live.
     enum Space: Equatable {
@@ -234,9 +235,12 @@ final class DrawingOverlay {
                 context.duration = DrawingOverlay.fadeDuration
                 panel.animator().alphaValue = 0
             }, completionHandler: { [weak self] in
-                // A new stroke may have started during the fade.
-                guard panel.alphaValue == 0 else { return }
-                self?.hide()
+                // Called on the main thread, where the animation was run.
+                MainActor.assumeIsolated {
+                    // A new stroke may have started during the fade.
+                    guard panel.alphaValue == 0 else { return }
+                    self?.hide()
+                }
             })
         }
         pendingFade = work

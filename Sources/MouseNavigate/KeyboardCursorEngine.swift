@@ -8,6 +8,7 @@ import MouseNavigateCore
 /// someone who is just typing. That is handled by hold-duration gating: the key is
 /// withheld briefly, and unless it is *still* down when the threshold expires, it is
 /// replayed as a normal keystroke.
+@MainActor
 final class KeyboardCursorEngine {
     /// What the event tap should do with the event that was just handled.
     enum Disposition {

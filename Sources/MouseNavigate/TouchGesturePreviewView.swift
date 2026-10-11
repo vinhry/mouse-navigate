@@ -387,6 +387,7 @@ final class TouchGesturePreviewView: NSView {
 
     /// Keyframes along one pass. Two values at one instant make a step; Core Animation
     /// wants its key times to climb, so the second is nudged along by a hair.
+    @MainActor
     private final class Timeline {
         static let duration = TouchGesturePreviewView.passDuration
         private var times: [Double] = []

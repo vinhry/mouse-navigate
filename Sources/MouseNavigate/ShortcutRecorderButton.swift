@@ -6,7 +6,8 @@ import MouseNavigateCore
 /// While armed it asks the caller to stand the keyboard cursor down, otherwise the global
 /// tap could withhold the very keystroke being recorded.
 final class ShortcutRecorderButton: NSButton {
-    private var monitor: Any?
+    /// Only used on the main thread, apart from being let go of in deinit.
+    nonisolated(unsafe) private var monitor: Any?
     private var isRecording = false
 
     private(set) var shortcut: Shortcut? {
@@ -35,7 +36,9 @@ final class ShortcutRecorderButton: NSButton {
     }
 
     deinit {
-        removeMonitor()
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+        }
     }
 
     /// Stops listening without changing anything, for when the dialog closes mid-recording.

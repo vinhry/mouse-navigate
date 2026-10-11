@@ -1,7 +1,7 @@
 import Foundation
 
 /// A reference drawing of one character.
-public struct CharacterTemplate {
+public struct CharacterTemplate: Sendable {
     public let gesture: CharacterGesture
     public let points: [Vector2]
 

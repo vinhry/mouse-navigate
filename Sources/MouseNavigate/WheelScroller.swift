@@ -4,6 +4,7 @@ import MouseNavigateCore
 
 /// Reverses, speeds up and smooths a mouse wheel. Only line-based wheel events come here;
 /// trackpads and the Magic Mouse scroll continuously and are left to macOS.
+@MainActor
 final class WheelScroller {
     private var smoother = ScrollSmoother()
     private var timer: MainTimer?

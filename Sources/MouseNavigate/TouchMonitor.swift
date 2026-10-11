@@ -7,16 +7,19 @@ import MouseNavigateCore
 ///
 /// Frames arrive on MultitouchSupport's own thread. Recognition happens there under a lock;
 /// actions are always carried out on the main thread.
+@MainActor
 final class TouchMonitor {
     static let didChangeNotification = Notification.Name("com.vinhry.MouseNavigate.touchDidChange")
 
-    private let bridge = MultitouchBridge()
+    /// Main thread only, apart from stopping the frames in deinit.
+    nonisolated(unsafe) private let bridge = MultitouchBridge()
     private let performer: ActionPerformer
     private let strokeRecognizer = StrokeRecognizer()
     private let overlay = DrawingOverlay()
 
     /// Prints surfaces, contacts and recognized gestures, for tuning. Set by `--touch-debug`.
-    var isDebugLogging = false
+    /// Set once at launch, before any frame arrives.
+    nonisolated(unsafe) var isDebugLogging = false
 
     var isPaused = false {
         didSet {
@@ -46,16 +49,17 @@ final class TouchMonitor {
         bridge.devices.first { $0.surface == .trackpad }?.widthMillimetres
     }
 
-    // State shared with the MultitouchSupport thread and the event tap.
+    // State shared with the MultitouchSupport thread and the event tap, only ever touched
+    // with `lock` held: hence nonisolated(unsafe), which the compiler takes on trust.
     private let lock = NSLock()
-    private var recognizers: [UnsafeMutableRawPointer: RecognizerState] = [:]
-    private var lastMagicMouseContacts: [TouchContact] = []
+    nonisolated(unsafe) private var recognizers: [UnsafeMutableRawPointer: RecognizerState] = [:]
+    nonisolated(unsafe) private var lastMagicMouseContacts: [TouchContact] = []
     /// Kept up to date as frames are processed, so the event tap can ask about every scroll
     /// event without walking the recognizers.
-    private var suppressScroll = false
-    private var isLeftHanded = false
+    nonisolated(unsafe) private var suppressScroll = false
+    nonisolated(unsafe) private var isLeftHanded = false
     /// The Magic Mouse recognizer's tuning, for the pose check the event tap makes.
-    private var magicMouseTuning = TouchTuning()
+    nonisolated(unsafe) private var magicMouseTuning = TouchTuning()
 
     private final class RecognizerState {
         var recognizer: TouchGestureRecognizer
@@ -77,7 +81,8 @@ final class TouchMonitor {
     }
 
     deinit {
-        stopDevices()
+        // Only the frames matter by now; MultitouchSupport's thread must stop calling in.
+        bridge.stopAll()
     }
 
     func start() {
@@ -247,7 +252,7 @@ final class TouchMonitor {
     // MARK: - Frames
 
     /// Called on MultitouchSupport's thread.
-    private func handleFrame(device: UnsafeMutableRawPointer, contacts reported: [TouchContact]) {
+    private nonisolated func handleFrame(device: UnsafeMutableRawPointer, contacts reported: [TouchContact]) {
         let isButtonDown = CGEventSource.buttonState(.hidSystemState, button: .left)
         let now = ProcessInfo.processInfo.systemUptime
         // Only fingers on the surface count; the rest are hovering or on their way out.
@@ -295,12 +300,12 @@ final class TouchMonitor {
     /// A `--touch-debug` line, printed for whoever runs the binary from a terminal and
     /// logged for a copy started with `open --args --touch-debug`, whose output goes
     /// nowhere: `log stream --level debug --predicate 'category == "touch"'` shows it.
-    private func debugLog(_ line: String) {
+    private nonisolated func debugLog(_ line: String) {
         print(line)
         Log.touch.debug("\(line, privacy: .public)")
     }
 
-    private func debugTime(_ uptime: TimeInterval) -> String {
+    private nonisolated func debugTime(_ uptime: TimeInterval) -> String {
         String(format: "%8.3f", uptime - debugStart)
     }
 

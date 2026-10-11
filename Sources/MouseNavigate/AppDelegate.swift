@@ -6,6 +6,7 @@ import AppKit
 /// double-click never starts anything: macOS activates this copy and asks here what to do.
 /// Showing preferences is the useful answer — someone clicking a menu bar app a second
 /// time is usually looking for its settings, or checking it is alive.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private weak var navigator: MouseNavigator?
 

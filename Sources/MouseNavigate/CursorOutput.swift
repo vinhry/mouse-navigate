@@ -3,6 +3,7 @@ import CoreGraphics
 import MouseNavigateCore
 
 /// Posts the synthetic pointer events that drive cursor mode.
+@MainActor
 final class CursorOutput {
     /// Stamped into `eventSourceUserData` on everything we post so the tap can tell our
     /// own events apart from real input and pass them straight through.

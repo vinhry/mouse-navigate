@@ -1,6 +1,7 @@
 import XCTest
 @testable import MouseNavigateCore
 
+@MainActor
 final class SettingsSnapshotTests: XCTestCase {
     private var suites: [String] = []
 

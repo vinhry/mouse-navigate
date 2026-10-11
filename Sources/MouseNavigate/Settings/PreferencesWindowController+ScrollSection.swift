@@ -3,6 +3,7 @@ import MouseNavigateCore
 
 /// The controls of the Scroll Wheel section, kept together so the section can be built
 /// and refreshed away from the rest of the window.
+@MainActor
 final class ScrollSectionControls {
     var forLabel: NSTextField!
     var profilePopup: NSPopUpButton!

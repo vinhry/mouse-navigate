@@ -22,6 +22,7 @@ enum AppInfo {
 
     static let build: String? = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
 
+    @MainActor
     static func icon() -> NSImage? {
         if let image = NSImage(named: "AppIcon") {
             return image

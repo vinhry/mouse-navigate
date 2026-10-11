@@ -1,7 +1,7 @@
 import Foundation
 
 /// A mouse model whose button layout gets its own saved mapping.
-public enum DeviceProfile: String, CaseIterable {
+public enum DeviceProfile: String, CaseIterable, Sendable {
     case mxMaster4 = "mxMaster4"
     case mxMaster3 = "mxMaster3"
     case generic = "generic"

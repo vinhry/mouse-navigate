@@ -7,6 +7,7 @@ import MouseNavigateCore
 /// one pick, 1–9 move the grid to that display, Return keeps the pointer where it is and
 /// Escape puts it back where it started. Any other cursor key ends the grid and does its
 /// usual job, so the click key clicks where the grid led.
+@MainActor
 final class GridMode: CursorModal {
     var onFinish: (() -> Void)?
 

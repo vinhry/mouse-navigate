@@ -2,7 +2,7 @@ import Foundation
 
 /// A multitouch gesture that can be bound to an action. Finger names assume the right hand;
 /// the left-handed preference mirrors them.
-public enum TouchGesture: String, CaseIterable {
+public enum TouchGesture: String, CaseIterable, Sendable {
     // Trackpad
     case trackpadOneFixLeftTap
     case trackpadOneFixRightTap

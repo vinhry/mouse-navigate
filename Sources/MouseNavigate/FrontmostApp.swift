@@ -5,6 +5,7 @@ import AppKit
 /// Cached from activation notifications rather than asked for on every event: the event tap
 /// runs for every click and keystroke, and has no business making a round trip for an
 /// answer that only changes when the user switches apps.
+@MainActor
 final class FrontmostApp {
     static let shared = FrontmostApp()
 

@@ -4,6 +4,7 @@ import MouseNavigateCore
 /// Runs the configurable mouse buttons through a `ButtonPressTracker`, supplying what it
 /// cannot have: the bindings, the actions, the timers and the replayed clicks. Main thread
 /// only, as the event tap is.
+@MainActor
 final class ButtonPressController {
     private let performer: ActionPerformer
     /// The binding for a press or drag with the given modifiers held, resolved for the

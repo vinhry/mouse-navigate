@@ -12,7 +12,8 @@ final class KeyRecorderButton: NSButton {
     private static weak var active: KeyRecorderButton?
 
     private let binding: CursorBinding
-    private var monitor: Any?
+    /// Only used on the main thread, apart from being let go of in deinit.
+    nonisolated(unsafe) private var monitor: Any?
     private var isRecording = false
 
     var onRecord: ((UInt16) -> Void)?
@@ -37,7 +38,9 @@ final class KeyRecorderButton: NSButton {
     }
 
     deinit {
-        removeMonitor()
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+        }
     }
 
     func update(keyCode: UInt16) {

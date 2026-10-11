@@ -4,6 +4,7 @@ import MouseNavigateCore
 /// Tabbed preferences: mouse button mapping per device profile, keyboard cursor bindings
 /// plus speed tuning, touch and drawn-character gestures, and an About page. Buttons and
 /// gestures can be bound for all apps or for one app at a time.
+@MainActor
 final class PreferencesWindowController: NSObject {
     /// Something a picker binds. Buttons are numbers alone: the profile they belong to is
     /// whichever one is active when the picker is read.

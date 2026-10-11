@@ -7,12 +7,14 @@ import IOKit
 /// permission. Changes come in bursts — a mouse brings several HID interfaces with it, and
 /// waking from sleep brings back every device at once — so they are gathered for a moment
 /// and reported once.
+@MainActor
 final class IOServiceWatcher {
     private let delay: TimeInterval
     private let onChange: () -> Void
-    private var port: IONotificationPortRef?
-    private var iterators: [io_iterator_t] = []
-    private var pending: DispatchWorkItem?
+    // Made on the main thread and only used there, apart from being let go of in deinit.
+    nonisolated(unsafe) private var port: IONotificationPortRef?
+    nonisolated(unsafe) private var iterators: [io_iterator_t] = []
+    nonisolated(unsafe) private var pending: DispatchWorkItem?
 
     init(serviceClass: String, delay: TimeInterval = 0.5, onChange: @escaping () -> Void) {
         self.delay = delay

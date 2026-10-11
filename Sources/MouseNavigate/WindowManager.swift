@@ -4,6 +4,7 @@ import MouseNavigateCore
 
 /// Moves, resizes, minimizes and tiles other apps' windows through the Accessibility API,
 /// which the app already holds permission for. Main thread only.
+@MainActor
 final class WindowManager {
     enum DragMode {
         case move

@@ -1,6 +1,7 @@
 import XCTest
 @testable import MouseNavigateCore
 
+@MainActor
 final class PreferencesTests: XCTestCase {
     private var suiteName = ""
     private var store: UserDefaults!

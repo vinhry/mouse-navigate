@@ -9,6 +9,7 @@ import MouseNavigateCore
 /// typed, so the letter is looked up on the current layout each time it is sent. Recorded
 /// shortcuts and the cursor keys stay positions, which is what was pressed; only their
 /// labels come from here, so they read as the keys they are.
+@MainActor
 final class KeyboardLayout {
     static let shared = KeyboardLayout()
 

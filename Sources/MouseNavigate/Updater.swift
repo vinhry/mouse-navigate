@@ -1,6 +1,6 @@
 import AppKit
 import MouseNavigateCore
-import Security
+@preconcurrency import Security
 
 /// Keeps the app current from GitHub Releases.
 ///
@@ -8,10 +8,11 @@ import Security
 /// and verified in the background, then offered in the menu as Install and Relaunch; it is
 /// never installed unasked, because relaunching drops cursor mode and anything held down
 /// in the middle of whatever the user is doing. Main thread only, except where noted.
+@MainActor
 final class Updater {
     static let didChangeNotification = Notification.Name("com.vinhry.MouseNavigate.updaterDidChange")
 
-    struct StagedUpdate {
+    struct StagedUpdate: Sendable {
         var version: SemanticVersion
         /// The verified app, unpacked in the caches folder.
         var app: URL
@@ -47,7 +48,7 @@ final class Updater {
         return URLSession(configuration: configuration)
     }()
     /// Long enough for `ditto` to unpack or copy the app on a slow disk.
-    private static let dittoTimeout: TimeInterval = 120
+    private nonisolated static let dittoTimeout: TimeInterval = 120
     private var timer: Timer?
     private var hasAskedThisLaunch = false
     /// A newer release than the one waiting to be installed is being looked for; see
@@ -59,7 +60,7 @@ final class Updater {
     private static let firstTick: TimeInterval = 20
     private static let tickInterval: TimeInterval = 60 * 60
 
-    static var stagingDirectory: URL {
+    nonisolated static var stagingDirectory: URL {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         return caches.appendingPathComponent("com.vinhry.MouseNavigate/Update", isDirectory: true)
@@ -80,7 +81,10 @@ final class Updater {
         }
 
         let timer = Timer(timeInterval: Updater.tickInterval, repeats: true) { [weak self] _ in
-            self?.tick()
+            // Added to the main run loop below, so it always fires there.
+            MainActor.assumeIsolated {
+                self?.tick()
+            }
         }
         timer.fireDate = Date(timeIntervalSinceNow: Updater.firstTick)
         RunLoop.main.add(timer, forMode: .common)
@@ -183,7 +187,7 @@ final class Updater {
     /// Calls back on the main thread.
     private func fetchLatest(
         newerThan version: SemanticVersion,
-        then finish: @escaping (Result<UpdateCandidate?, UpdateError>) -> Void
+        then finish: @escaping @MainActor @Sendable (Result<UpdateCandidate?, UpdateError>) -> Void
     ) {
         var request = URLRequest(url: AppInfo.latestReleaseURL, timeoutInterval: 30)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -215,7 +219,7 @@ final class Updater {
         }.resume()
     }
 
-    private enum UpdateError: Error {
+    private enum UpdateError: Error, Sendable {
         case network(String)
     }
 
@@ -270,7 +274,7 @@ final class Updater {
     private func fetchAndStage(
         _ candidate: UpdateCandidate,
         requirement: SecRequirement,
-        then finish: @escaping (Result<StagedUpdate, Error>) -> Void
+        then finish: @escaping @MainActor @Sendable (Result<StagedUpdate, Error>) -> Void
     ) {
         var request = URLRequest(url: candidate.download, timeoutInterval: 120)
         request.setValue("MouseNavigate/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
@@ -352,7 +356,7 @@ final class Updater {
     }
 
     /// Unpacks and verifies a downloaded release. Runs on URLSession's queue.
-    private static func stage(
+    private nonisolated static func stage(
         _ archive: URL,
         candidate: UpdateCandidate,
         requirement: SecRequirement
@@ -471,7 +475,7 @@ final class Updater {
     /// The new app is copied next to the old one first, so the swap itself is a rename on
     /// one volume: whatever happens, the folder holds one whole app or the other. Runs on
     /// the work queue.
-    private static func replace(_ target: URL, with staged: StagedUpdate, requirement: SecRequirement?) throws {
+    private nonisolated static func replace(_ target: URL, with staged: StagedUpdate, requirement: SecRequirement?) throws {
         let fileManager = FileManager.default
         let scratch = target.deletingLastPathComponent()
             .appendingPathComponent(UpdateScratch.name(for: UUID()), isDirectory: true)
@@ -540,7 +544,7 @@ final class Updater {
 
     /// Removes the scratch folders an install that never finished left beside the app.
     /// Only where the app could have installed one itself. Runs on the work queue.
-    private static func removeLeftoverScratch(beside app: URL) {
+    private nonisolated static func removeLeftoverScratch(beside app: URL) {
         let fileManager = FileManager.default
         let folder = app.deletingLastPathComponent()
         let writable = fileManager.isWritableFile(atPath: folder.path)
@@ -567,7 +571,7 @@ final class Updater {
         AlertPresenter.modal(title, message)
     }
 
-    private static func run(_ tool: String, _ arguments: [String], timeout: TimeInterval) throws {
+    private nonisolated static func run(_ tool: String, _ arguments: [String], timeout: TimeInterval) throws {
         let result = try ProcessRunner.run(tool, arguments, timeout: timeout)
         guard result.status == 0 else {
             throw StageError("\((tool as NSString).lastPathComponent) failed with status \(result.status).")

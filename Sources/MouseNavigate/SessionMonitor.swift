@@ -6,6 +6,7 @@ import MouseNavigateCore
 /// or starts being the one in front of someone. See `SessionAvailability` for why it matters.
 ///
 /// Main thread only.
+@MainActor
 final class SessionMonitor {
     private var state = SessionAvailability()
     /// Runs while the session is unavailable, asking the window server how things stand,

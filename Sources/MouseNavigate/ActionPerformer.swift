@@ -11,6 +11,7 @@ import notify
 /// on the Mac waits. Anything that can take its time, such as launching an app or asking
 /// another app to move its window, is decided here and done on the next turn of the run
 /// loop, once the event has been answered.
+@MainActor
 final class ActionPerformer {
     private static let hiServicesPath =
         "/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework/HIServices"
@@ -68,8 +69,10 @@ final class ActionPerformer {
     }
 
     /// Runs `work` once the event being handled has been answered.
-    private func later(_ work: @escaping () -> Void) {
-        DispatchQueue.main.async(execute: work)
+    private func later(_ work: @escaping @MainActor @Sendable () -> Void) {
+        DispatchQueue.main.async {
+            work()
+        }
     }
 
     private func perform(_ action: ButtonAction) -> Bool {

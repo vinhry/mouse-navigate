@@ -3,6 +3,7 @@ import MouseNavigateCore
 
 /// A mode inside cursor mode that takes the keyboard for a moment: the grid and the click
 /// hints. The engine hands it every key-down until it says it is done. Main thread only.
+@MainActor
 protocol CursorModal: AnyObject {
     /// Asks the engine to close the mode, for one that finishes on its own.
     var onFinish: (() -> Void)? { get set }
@@ -25,6 +26,7 @@ enum CursorModalResult {
 /// Borderless windows over every display that draw above everything and never take focus
 /// or clicks. Drawing happens in CoreGraphics global points, +y down, whichever display it
 /// lands on. Created when shown and released when hidden, so nothing lingers between uses.
+@MainActor
 final class ScreenOverlay {
     /// Called for each display with its frame in global points; the context is already
     /// translated so global points can be drawn as they are.

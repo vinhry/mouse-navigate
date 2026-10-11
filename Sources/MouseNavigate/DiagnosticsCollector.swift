@@ -5,6 +5,7 @@ import IOKit.hidsystem
 import MouseNavigateCore
 
 /// Fills in a `DiagnosticsReport` from the running app. Main thread only.
+@MainActor
 enum DiagnosticsCollector {
     /// What only the navigator knows.
     struct Context {

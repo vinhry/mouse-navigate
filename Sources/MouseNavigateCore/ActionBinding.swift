@@ -2,7 +2,7 @@ import Foundation
 
 /// What a button, gesture or drawn character is bound to: one of the built-in actions, or
 /// one the user configured with a value of its own.
-public enum ActionBinding: Equatable {
+public enum ActionBinding: Equatable, Sendable {
     case builtin(ButtonAction)
     case shortcut(Shortcut)
     /// `name` is only a label, kept so the binding reads well without looking the app up.
@@ -145,7 +145,7 @@ public enum ActionBinding: Equatable {
 }
 
 /// The ways one mouse button can be pressed, each with a binding of its own.
-public enum ButtonPress: String, CaseIterable {
+public enum ButtonPress: String, CaseIterable, Sendable {
     case click
     case hold
     case doubleClick

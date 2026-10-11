@@ -7,6 +7,7 @@ import MouseNavigateCore
 /// The button press is held back until release. A drag long enough to be a drawing is
 /// recognized and never reaches the app; anything shorter is replayed as the ordinary click
 /// it was, at the spot it began.
+@MainActor
 final class StrokeCapture {
     enum Button {
         case right

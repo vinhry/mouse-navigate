@@ -1,6 +1,6 @@
 import Foundation
 
-public enum TouchSurface: String, CaseIterable {
+public enum TouchSurface: String, CaseIterable, Sendable {
     case trackpad
     case magicMouse
 
@@ -146,7 +146,7 @@ public struct TouchTuning: Equatable {
 }
 
 /// What a recognizer reports back.
-public enum TouchEvent: Equatable {
+public enum TouchEvent: Equatable, Sendable {
     case gesture(TouchGesture)
     /// Switch a running move/resize between moving and resizing.
     case dragToggleMode

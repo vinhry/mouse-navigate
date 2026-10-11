@@ -2,7 +2,7 @@ import Foundation
 
 /// A drawn letter, straight-line direction or two-segment stroke that can be bound to an
 /// action.
-public enum CharacterGesture: String, CaseIterable {
+public enum CharacterGesture: String, CaseIterable, Sendable {
     case a, b, c, d, e, f, g, h, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z
     case up, down, left, right, upLeft, upRight, downLeft, downRight
     /// Two straight legs at a right angle. The other four corners are letters already:

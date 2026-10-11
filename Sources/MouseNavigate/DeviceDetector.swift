@@ -9,6 +9,7 @@ import MouseNavigateCore
 /// Devices are only enumerated, never opened: reading vendor/product properties needs
 /// no Input Monitoring grant, whereas `IOHIDManagerOpen` would. They are enumerated again
 /// whenever IOKit says a HID device came or went, which needs no grant either.
+@MainActor
 final class DeviceDetector {
     static let didChangeNotification = Notification.Name("com.vinhry.MouseNavigate.deviceDidChange")
 

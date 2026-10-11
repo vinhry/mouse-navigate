@@ -30,6 +30,12 @@ jobs:
       - name: Build (release)
         run: swift build -c release
 
+      # The pure logic is checked for concurrency safety and kept free of warnings; the app
+      # target is left to warn, since an SDK deprecation would otherwise fail every build
+      # the day a new Xcode lands.
+      - name: Core has no warnings
+        run: swift build --target MouseNavigateCore -Xswiftc -warnings-as-errors
+
       - name: Test
         run: swift test
 

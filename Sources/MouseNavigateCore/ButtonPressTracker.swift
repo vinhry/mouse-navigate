@@ -11,7 +11,7 @@ public struct ButtonPressTracker {
     public typealias Capabilities = ButtonPressGate.Capabilities
 
     /// Clicks to send on the button's behalf, because no binding handled its press.
-    public struct Replay: Equatable {
+    public struct Replay: Equatable, Sendable {
         public var clicks: Int
         /// Where the press began, which is where the app would have received it.
         public var location: Vector2
@@ -22,7 +22,7 @@ public struct ButtonPressTracker {
         }
     }
 
-    public struct Decision: Equatable {
+    public struct Decision: Equatable, Sendable {
         /// Swallow the event rather than deliver it.
         public var consume: Bool
         /// Arm the button's timer for this long, replacing any running one.

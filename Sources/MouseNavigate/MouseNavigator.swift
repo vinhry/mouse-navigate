@@ -3,7 +3,9 @@ import ApplicationServices
 import Darwin
 import Foundation
 import MouseNavigateCore
+import os
 
+@MainActor
 final class MouseNavigator {
     /// In the per-user temporary directory rather than /tmp: anyone with an account on the
     /// machine can create and hold a path in /tmp, and doing so would keep the daemon from
@@ -281,13 +283,13 @@ final class MouseNavigator {
         let bundle = Bundle.main.bundleURL
         if bundle.pathExtension == "app" {
             let opened = DispatchSemaphore(value: 0)
-            var succeeded = false
+            let succeeded = OSAllocatedUnfairLock(initialState: false)
             NSWorkspace.shared.openApplication(at: bundle, configuration: NSWorkspace.OpenConfiguration()) { app, _ in
-                succeeded = app != nil
+                succeeded.withLock { $0 = app != nil }
                 opened.signal()
             }
             // The process is about to exit; give Launch Services a moment to deliver.
-            if opened.wait(timeout: .now() + 3) == .success, succeeded {
+            if opened.wait(timeout: .now() + 3) == .success, succeeded.withLock({ $0 }) {
                 return
             }
         }
@@ -307,12 +309,9 @@ final class MouseNavigator {
     }
 
     private func requestAccessibilityPermission() {
-        // takeUnretainedValue() is correct here: kAXTrustedCheckOptionPrompt is a
-        // global constant. takeRetainedValue() would decrement its retain count on
-        // each call, eventually leading to a dangling reference.
-        let options: NSDictionary = [
-            kAXTrustedCheckOptionPrompt.takeUnretainedValue() as NSString: true
-        ]
+        // The value of kAXTrustedCheckOptionPrompt, which Swift imports as a mutable
+        // global that strict concurrency checking will not let be read.
+        let options: NSDictionary = ["AXTrustedCheckOptionPrompt": true]
         if AXIsProcessTrustedWithOptions(options) {
             Log.permissions.info("Accessibility already granted.")
         } else {

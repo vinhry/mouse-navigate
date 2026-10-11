@@ -24,7 +24,8 @@ final class MultitouchBridge {
     /// The families jitouch and the other MultitouchSupport readers know to be Magic Mice.
     private static let magicMouseFamilies: ClosedRange<Int> = 112...113
 
-    typealias FrameHandler = (_ device: UnsafeMutableRawPointer, _ contacts: [TouchContact], _ timestamp: Double) -> Void
+    /// Called on MultitouchSupport's own thread.
+    typealias FrameHandler = @Sendable (_ device: UnsafeMutableRawPointer, _ contacts: [TouchContact], _ timestamp: Double) -> Void
 
     private static let frameworkPath =
         "/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport"
@@ -69,7 +70,7 @@ final class MultitouchBridge {
     /// C callbacks carry no context pointer, so frames reach the instance through here.
     /// Written on the main thread, read on MultitouchSupport's, hence the lock.
     private static let handlerLock = NSLock()
-    private static var frameHandler: FrameHandler?
+    nonisolated(unsafe) private static var frameHandler: FrameHandler?
 
     private static func currentHandler() -> FrameHandler? {
         handlerLock.lock()

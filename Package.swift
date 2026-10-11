@@ -11,10 +11,14 @@ let package = Package(
     ],
     targets: [
         // Pure logic with no AppKit/CoreGraphics dependency, so it can be unit tested.
-        .target(name: "MouseNavigateCore"),
+        .target(
+            name: "MouseNavigateCore",
+            swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
+        ),
         .executableTarget(
             name: "MouseNavigate",
             dependencies: ["MouseNavigateCore"],
+            swiftSettings: [.enableUpcomingFeature("StrictConcurrency")],
             linkerSettings: [
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("AppKit"),

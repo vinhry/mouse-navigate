@@ -2,7 +2,7 @@ import Foundation
 
 /// Every rebindable key in cursor mode. The raw value doubles as the UserDefaults
 /// suffix and as a stable identifier for the preferences UI.
-public enum CursorBinding: String, CaseIterable {
+public enum CursorBinding: String, CaseIterable, Sendable {
     case activate
     case moveUp
     case moveDown
@@ -55,7 +55,7 @@ public enum CursorBinding: String, CaseIterable {
 }
 
 /// Numeric tunables, each with the range the preferences sliders expose.
-public enum CursorSetting: String, CaseIterable {
+public enum CursorSetting: String, CaseIterable, Sendable {
     case holdThreshold
     case retypeWindow
     case baseSpeed
@@ -153,7 +153,7 @@ public struct CursorSpeedProfile {
 }
 
 /// Speed tier selected by the modifiers held during cursor mode.
-public struct SpeedTier: OptionSet {
+public struct SpeedTier: OptionSet, Sendable {
     public let rawValue: Int
     public init(rawValue: Int) { self.rawValue = rawValue }
 

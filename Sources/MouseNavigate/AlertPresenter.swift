@@ -1,6 +1,7 @@
 import AppKit
 
 /// Every alert the app puts up, built one way and shown from the right context.
+@MainActor
 enum AlertPresenter {
     static func make(
         _ title: String,
@@ -46,9 +47,11 @@ enum AlertPresenter {
         then handle: @escaping (NSApplication.ModalResponse) -> Void = { _ in }
     ) {
         let alert = make(title, message, style: style, buttons: buttons)
-        RunLoop.main.perform(inModes: [.common]) {
+        let main = CFRunLoopGetMain()
+        CFRunLoopPerformBlock(main, CFRunLoopMode.commonModes.rawValue) {
             NSApp.activate(ignoringOtherApps: true)
             handle(alert.runModal())
         }
+        CFRunLoopWakeUp(main)
     }
 }

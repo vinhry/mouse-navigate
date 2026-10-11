@@ -1,7 +1,7 @@
 import Foundation
 
 /// The way the mouse was moved while a side button was held.
-public enum DragDirection: String, CaseIterable {
+public enum DragDirection: String, CaseIterable, Sendable {
     case up
     case down
     case left
@@ -19,7 +19,7 @@ public enum DragDirection: String, CaseIterable {
 
 /// Everything one mouse button can be asked to do: pressed one of the ways, or held and
 /// moved one of the directions.
-public enum ButtonInput: Hashable {
+public enum ButtonInput: Hashable, Sendable {
     case press(ButtonPress)
     case drag(DragDirection)
 

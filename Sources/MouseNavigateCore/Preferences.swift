@@ -4,19 +4,20 @@ import Foundation
 ///
 /// Main thread only: the event tap, the preferences window and the touch monitor's
 /// gesture handling all run there, and the cache below is not locked.
+@MainActor
 public final class Preferences {
     public static let shared = Preferences(store: .standard)
 
-    public static let didChangeNotification = Notification.Name("com.vinhry.MouseNavigate.preferencesDidChange")
+    public nonisolated static let didChangeNotification = Notification.Name("com.vinhry.MouseNavigate.preferencesDidChange")
     /// `userInfo` key carrying the `SettingsArea` that changed.
-    public static let areaUserInfoKey = "area"
+    public nonisolated static let areaUserInfoKey = "area"
 
     /// Buttons the preferences window offers. CGEvent numbers 0-2 are the primary,
     /// secondary and middle buttons, which are left alone.
-    public static let configurableButtons = Array(3...9)
+    public nonisolated static let configurableButtons = Array(3...9)
 
     private let store: UserDefaults
-    let currentConfigVersion = 3
+    nonisolated let currentConfigVersion = 3
 
     /// The app uses `.standard`, not a suite: its own bundle identifier is not a valid
     /// suite name, so `UserDefaults(suiteName:)` returned nil and logged "does not make
@@ -557,7 +558,7 @@ public struct ButtonCombination: Hashable {
 /// Which part of the settings a change touched, so an observer can tell a change it has
 /// to act on from one it can ignore. Cursor mode, for one, stands down when its own keys
 /// change and keeps going when a scroll slider moves.
-public enum SettingsArea: String {
+public enum SettingsArea: String, Sendable {
     case bindings
     case device
     case apps

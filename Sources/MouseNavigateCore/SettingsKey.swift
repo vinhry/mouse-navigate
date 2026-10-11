@@ -9,7 +9,7 @@ public enum SettingsKey {
     /// The property-list type a key holds. Numbers are told apart by the registry, not
     /// by the value: a `1` in a file means a bool for a bool key and a double for a
     /// double key.
-    public enum ValueType: Equatable {
+    public enum ValueType: Equatable, Sendable {
         case bool, int, double, string, dictionary, date
     }
 
@@ -63,7 +63,7 @@ public enum SettingsKey {
     // MARK: - Families
 
     /// A set of keys that share a prefix and a type.
-    public struct Family: Equatable {
+    public struct Family: Equatable, Sendable {
         public let prefix: String
         public let type: ValueType
 

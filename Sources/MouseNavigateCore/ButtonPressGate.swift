@@ -39,7 +39,7 @@ public struct ButtonPressGate {
     }
 
     /// What the caller does with the event, and what it runs.
-    public struct Response: Equatable {
+    public struct Response: Equatable, Sendable {
         /// Swallow the event rather than deliver it.
         public var consume: Bool
         /// The press or drag that has now been decided, to be run.

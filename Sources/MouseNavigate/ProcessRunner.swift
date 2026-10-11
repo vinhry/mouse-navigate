@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Runs a command-line tool to the end, or until it has had long enough.
 ///
@@ -39,7 +40,7 @@ enum ProcessRunner {
 
         // Read as it arrives, on another thread: a tool that fills the pipe's buffer would
         // otherwise wait for a reader that is waiting for it to exit.
-        var output = Data()
+        let output = OSAllocatedUnfairLock(initialState: Data())
         let drained = DispatchSemaphore(value: 0)
         if capturingOutput {
             let pipe = Pipe()
@@ -47,7 +48,8 @@ enum ProcessRunner {
             process.standardError = pipe
             let reader = pipe.fileHandleForReading
             DispatchQueue.global(qos: .utility).async {
-                output = reader.readDataToEndOfFile()
+                let data = reader.readDataToEndOfFile()
+                output.withLock { $0 = data }
                 drained.signal()
             }
         } else {
@@ -76,7 +78,7 @@ enum ProcessRunner {
         let isDrained = drained.wait(timeout: .now() + terminationGrace) == .success
         return Result(
             status: process.terminationStatus,
-            output: isDrained ? String(decoding: output, as: UTF8.self) : ""
+            output: isDrained ? String(decoding: output.withLock { $0 }, as: UTF8.self) : ""
         )
     }
 }

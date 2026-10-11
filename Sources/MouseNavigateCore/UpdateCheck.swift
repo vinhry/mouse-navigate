@@ -2,7 +2,7 @@ import Foundation
 
 /// A version such as 0.4.0 or v1.2.0-beta.1, compared the way semantic versioning does:
 /// numbers first, and a pre-release before the release it leads up to.
-public struct SemanticVersion: Comparable, CustomStringConvertible {
+public struct SemanticVersion: Comparable, CustomStringConvertible, Sendable {
     public var numbers: [Int]
     public var preRelease: String?
 
@@ -58,8 +58,8 @@ public struct SemanticVersion: Comparable, CustomStringConvertible {
 }
 
 /// The parts of GitHub's "latest release" answer the updater needs.
-public struct GitHubRelease: Decodable, Equatable {
-    public struct Asset: Decodable, Equatable {
+public struct GitHubRelease: Decodable, Equatable, Sendable {
+    public struct Asset: Decodable, Equatable, Sendable {
         public var name: String
         public var size: Int
         public var browserDownloadURL: URL
@@ -100,7 +100,7 @@ public struct GitHubRelease: Decodable, Equatable {
 }
 
 /// A release worth downloading.
-public struct UpdateCandidate: Equatable {
+public struct UpdateCandidate: Equatable, Sendable {
     public var version: SemanticVersion
     public var download: URL
     public var size: Int

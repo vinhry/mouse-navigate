@@ -2,7 +2,7 @@ import Foundation
 
 /// Which axes a wheel scrolls the other way. Not `none`: that reads as `Optional.none`
 /// wherever an optional reverse is expected, and silently means "unset".
-public enum ScrollReverse: String, CaseIterable {
+public enum ScrollReverse: String, CaseIterable, Sendable {
     case off
     case vertical
     case horizontal
@@ -43,7 +43,7 @@ public enum ScrollField: String, CaseIterable {
 
 /// How a mouse wheel's scrolling is reshaped. Trackpads and the Magic Mouse scroll
 /// continuously and are never touched.
-public struct ScrollSettings: Equatable {
+public struct ScrollSettings: Equatable, Sendable {
     public var reverse: ScrollReverse
     public var verticalSpeed: Double
     public var horizontalSpeed: Double
@@ -90,7 +90,7 @@ public struct ScrollSettings: Equatable {
 
 /// What one scope, a mouse model or an app, sets for the wheel. A field left nil follows
 /// the scope beneath, so a hand-edited settings file can change one thing for one app.
-public struct ScrollOverride: Equatable {
+public struct ScrollOverride: Equatable, Sendable {
     public var reverse: ScrollReverse?
     public var verticalSpeed: Double?
     public var horizontalSpeed: Double?
