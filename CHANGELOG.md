@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Logitech Buttons** on **Settings → Mouse**: the MX Master's **Gesture button**, **Mode
+  shift button** and, on an MX Master 4, **Haptic panel** can be bound like the side
+  buttons, with holds, double-clicks, modifier keys and per-app settings. A button is taken
+  from the mouse over Bluetooth only while it has a binding, given back while paused and on
+  quit, and never changed on the mouse for good.
 - **Pointer** on **Settings → Mouse**: **Speed** from 0.25× to 4×, and **Acceleration**
   as in System Settings, **Off**, or a **Custom** curve, for all mice or one mouse model.
   Trackpads are never changed, and quitting puts every mouse back as System Settings has

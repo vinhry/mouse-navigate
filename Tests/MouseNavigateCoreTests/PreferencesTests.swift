@@ -512,4 +512,22 @@ final class PreferencesTests: XCTestCase {
         preferences.setPointerOverride(.none, for: .mxMaster4)
         XCTAssertFalse(preferences.isAnyPointerSettingActive, "the cache follows the change")
     }
+
+    func testOnlyBoundLogitechControlsAreTaken() {
+        let preferences = makePreferences()
+        XCTAssertEqual(preferences.boundLogitechControls(profile: .mxMaster4), [], "nothing until bound")
+
+        preferences.setGlobalBinding(.builtin(.missionControl), for: .button(LogitechControl.gestureButton.button, .mxMaster4))
+        preferences.addApp(bundleID: "com.example.app", name: "Example")
+        preferences.setAppBinding(
+            .builtin(.copy),
+            for: .button(LogitechControl.hapticPanel.button, .mxMaster4, .hold, [.command]),
+            app: "com.example.app"
+        )
+        XCTAssertEqual(preferences.boundLogitechControls(profile: .mxMaster4), [.gestureButton, .hapticPanel])
+        XCTAssertEqual(preferences.boundLogitechControls(profile: .mxMaster3), [], "another model's own")
+        XCTAssertTrue(Preferences.bindableButtons(for: .mxMaster4).contains(32))
+        XCTAssertEqual(Preferences.bindableButtons(for: .generic), Preferences.configurableButtons)
+    }
 }
+

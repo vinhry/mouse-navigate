@@ -16,6 +16,37 @@ public final class Preferences {
     /// secondary and middle buttons, which are left alone.
     public nonisolated static let configurableButtons = Array(3...9)
 
+    /// Every button of `profile` that can be bound: the side buttons, then the Logitech
+    /// controls the model has.
+    public nonisolated static func bindableButtons(for profile: DeviceProfile) -> [Int] {
+        configurableButtons + LogitechControl.controls(for: profile).map(\.button)
+    }
+
+    /// The Logitech controls of `profile` with a binding anywhere: for all apps or one, for
+    /// any press, drag or modifier keys. Only those are taken from the mouse; the rest go
+    /// on doing what the mouse does with them.
+    public func boundLogitechControls(profile: DeviceProfile) -> Set<LogitechControl> {
+        let inputs: [ButtonInput] = ButtonPress.allCases.map { .press($0) } + DragDirection.allCases.map { .drag($0) }
+        let apps = Array(appOverrides.keys)
+        var bound: Set<LogitechControl> = []
+        for control in LogitechControl.controls(for: profile) {
+            search: for input in inputs {
+                for raw in 0..<(1 << 4) {
+                    let trigger = BindingTrigger.button(
+                        control.button, profile, input: input, modifiers: Shortcut.Modifiers(rawValue: raw)
+                    )
+                    let anywhere = globalBinding(for: trigger) != .disabled
+                        || apps.contains { (appBinding(for: trigger, app: $0) ?? .disabled) != .disabled }
+                    if anywhere {
+                        bound.insert(control)
+                        break search
+                    }
+                }
+            }
+        }
+        return bound
+    }
+
     private let store: UserDefaults
     nonisolated let currentConfigVersion = 3
 
@@ -172,7 +203,7 @@ public final class Preferences {
                 let modifiers = Shortcut.Modifiers(rawValue: raw)
                 if input == .press(.click), modifiers.isEmpty { continue }
                 let combination = ButtonCombination(input: input, modifiers: modifiers)
-                for number in Preferences.configurableButtons {
+                for number in Preferences.bindableButtons(for: profile) {
                     let trigger = BindingTrigger.button(number, profile, input: input, modifiers: modifiers)
                     let bound: Bool
                     if let bundleID {

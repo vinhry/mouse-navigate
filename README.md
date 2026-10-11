@@ -130,6 +130,22 @@ The custom actions each take a value of their own:
 Maximize Left / Right on a window that already fills that half carries it on to the next
 display. Window actions use the Accessibility permission the app already has.
 
+### Logitech buttons
+
+An MX Master 3 or 4 has buttons that send macOS nothing by themselves, which MouseNavigate
+can take over: the **Gesture button** under the thumb, the **Mode shift button** behind the
+wheel, and on an MX Master 4 the **Haptic panel** above the thumb. They are under
+**Logitech Buttons** on the Mouse tab, beside the side buttons, and take every press,
+modifier combination and app setting the side buttons do, apart from drags.
+
+A button is only taken from the mouse, over Bluetooth with Logitech's HID++ protocol, while
+it has a binding; with **Disabled** it does what the mouse does with it, so the mode shift
+button only stops switching the wheel between ratchet and free spin once it is bound. It is
+given back while MouseNavigate is paused, standing down or quit, and is never changed on the
+mouse for good: a mouse that reconnects, or outlives a crash, comes back as it was. A mouse
+on a Logi Bolt or Unifying receiver is not reached yet, and Logi Options+, if it runs, wants
+the same buttons.
+
 ### Hold, double-click and drag
 
 Each button can also do something else when held, double-clicked, or held while the mouse

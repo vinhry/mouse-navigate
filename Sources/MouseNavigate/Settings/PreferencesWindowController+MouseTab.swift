@@ -94,7 +94,11 @@ extension PreferencesWindowController {
 
         // The pointer's settings sit in the room beside the buttons, so the tab grows no
         // taller for them.
-        let top = NSStackView(views: [grid, makePointerSection()])
+        let side = NSStackView(views: [makePointerSection(), makeLogitechSection()])
+        side.orientation = .vertical
+        side.alignment = .leading
+        side.spacing = 22
+        let top = NSStackView(views: [grid, side])
         top.orientation = .horizontal
         top.alignment = .top
         top.spacing = 36
@@ -205,9 +209,9 @@ extension PreferencesWindowController {
     func reportButtonPress(_ button: Int) {
         guard isVisible else { return }
 
+        let name = LogitechControl(button: button)?.displayName ?? "\(button)"
         DispatchQueue.main.async { [weak self] in
-            self?.testerLabel?.stringValue =
-                "Last button pressed: \(button)"
+            self?.testerLabel?.stringValue = "Last button pressed: \(name)"
         }
     }
 
@@ -222,6 +226,7 @@ extension PreferencesWindowController {
         refreshScrollUI()
         // Both name the model in use in their mouse menus.
         refreshPointerUI()
+        refreshLogitechRows()
 
         if let override = Preferences.shared.deviceOverride,
            let index = DeviceProfile.allCases.firstIndex(of: override) {

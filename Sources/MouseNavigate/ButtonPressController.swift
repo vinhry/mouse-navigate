@@ -79,7 +79,8 @@ final class ButtonPressController {
             timers[button] = timer
             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: timer)
         }
-        if let replay = decision.replay {
+        // A Logitech control taken over HID++ has no click of its own to hand back.
+        if let replay = decision.replay, !LogitechControl.isVirtual(button: button) {
             replayClicks(replay.clicks, of: button, at: replay.location)
         }
         return decision.consume

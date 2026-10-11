@@ -58,6 +58,7 @@ final class MouseNavigator {
     }
     private let wheel = WheelScroller()
     private let pointer = PointerDeviceManager()
+    private let logitech = LogitechControlMonitor()
     private let updater = Updater()
     private lazy var welcome = WelcomeWindowController(updater: updater)
 
@@ -139,6 +140,7 @@ final class MouseNavigator {
         cursorEngine.forceExit()
         releaseHeldMouseInput()
         pointer.restoreAll()
+        logitech.stop()
     }
 
     /// Everything that needs permission, hardware or a private framework. None of it is
@@ -162,6 +164,12 @@ final class MouseNavigator {
 
         detector.start()
         pointer.start()
+        logitech.onPress = { [weak self] button in
+            self?.logitechButton(button, isDown: true)
+        }
+        logitech.onRelease = { [weak self] button in
+            self?.logitechButton(button, isDown: false)
+        }
 
         // Before touch starts, so a Mac that launches us behind the lock screen never
         // listens to a finger until it is unlocked.
@@ -173,6 +181,7 @@ final class MouseNavigator {
             self?.releaseHeldMouseInput()
         }
         session.start()
+        logitech.start()
 
         strokeCapture.onStroke = { [weak self] points in
             self?.touchMonitor.handleStroke(points, in: .screen)
@@ -480,6 +489,7 @@ final class MouseNavigator {
     private func applyPauseState() {
         cursorEngine.isSuspended = isPaused
         touchMonitor.isPaused = isPaused
+        logitech.isPaused = isPaused
         releaseHeldMouseInput()
     }
 
@@ -708,6 +718,20 @@ final class MouseNavigator {
     private func shouldSuppressContinuousScroll(_ event: CGEvent) -> Bool {
         let phase = ScrollPhase(rawValue: Int(event.getIntegerValueField(.scrollWheelEventScrollPhase)))
         return scrollSession.shouldSuppress(phase: phase, gestureClaims: touchMonitor.shouldSuppressScroll)
+    }
+
+    /// A Logitech control taken over HID++ goes through the same presses, holds and
+    /// double-clicks as a side button, with the modifier keys held and the pointer where
+    /// it is now; there is no event of the system's to swallow or let through.
+    private func logitechButton(_ button: Int, isDown: Bool) {
+        if isDown {
+            preferencesController?.reportButtonPress(button)
+            let location = CGEvent(source: nil)?.location ?? .zero
+            let modifiers = Shortcut.Modifiers(CGEventSource.flagsState(.combinedSessionState))
+            _ = buttons.buttonDown(button, modifiers: modifiers, at: location)
+        } else {
+            _ = buttons.buttonUp(button)
+        }
     }
 
     /// A trackpad tap has just become a gesture; see `TapClickSuppressor` for why the

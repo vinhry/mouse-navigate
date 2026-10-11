@@ -101,6 +101,8 @@ final class PreferencesWindowController: NSObject {
     /// The Scroll Wheel section's controls, built and refreshed in their own file.
     var scrollSection: ScrollSectionControls?
     var pointerSection: PointerSectionControls?
+    var logitechGrid: NSGridView?
+    var logitechSection: NSView?
 
     var recorders: [CursorBinding: KeyRecorderButton] = [:]
     var sliders: [CursorSetting: NSSlider] = [:]
