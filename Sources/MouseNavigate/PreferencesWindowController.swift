@@ -63,6 +63,8 @@ final class PreferencesWindowController: NSObject {
     private let engine: KeyboardCursorEngine
     private let touchMonitor: TouchMonitor
     private let updater: Updater
+    /// What Copy Diagnostics copies, from the navigator, which knows the tap and pause state.
+    var diagnosticsProvider: (() -> DiagnosticsReport)?
 
     private var automaticUpdatesCheckbox: NSButton?
     private var updateStatusLabel: NSTextField?

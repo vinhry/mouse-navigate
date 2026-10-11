@@ -103,24 +103,35 @@ final class DeviceDetector {
         return profile
     }
 
-    /// One line per attached pointing device, for the --list-devices diagnostic.
-    func deviceSummaries() -> [String] {
+    /// Every attached pointing device and what it resolves to, for diagnostics.
+    func describedDevices() -> [DiagnosticsReport.Device] {
         enumerateDevices().map { device in
-            let name = device.productName ?? "(unnamed)"
-            let resolved: String
+            let resolution: String
             if !DeviceMatcher.isMouseCandidate(device) {
-                resolved = "ignored (built-in / trackpad / keyboard)"
+                resolution = "ignored (built-in / trackpad / keyboard)"
             } else {
                 let profile = DeviceMatcher.match(
                     vendorID: device.vendorID,
                     productID: device.productID,
                     productName: device.productName
                 )
-                resolved = profile.map { $0.displayName } ?? "unrecognised"
+                resolution = profile.map { $0.displayName } ?? "unrecognised"
             }
-            return String(
+            return DiagnosticsReport.Device(
+                model: device.productName,
+                vendorID: device.vendorID,
+                productID: device.productID,
+                resolution: resolution
+            )
+        }
+    }
+
+    /// One line per attached pointing device, for the --list-devices diagnostic.
+    func deviceSummaries() -> [String] {
+        describedDevices().map { device in
+            String(
                 format: "%@ [vendor 0x%04X, product 0x%04X] -> %@",
-                name, device.vendorID, device.productID, resolved
+                device.model ?? "(unnamed)", device.vendorID, device.productID, device.resolution
             )
         }
     }

@@ -585,6 +585,11 @@ dist/MouseNavigate.app
 **Settings → About** shows the version, links to this repository and the issue tracker,
 and the license. MouseNavigate is developed by Vinhry and released under the MIT License.
 
+**Copy Diagnostics** there copies a summary to paste into a bug report: version, macOS,
+permissions, whether MouseNavigate is listening, the mice and touch surfaces it sees, which
+features are on and any other mouse software running. It names no apps, shortcuts, web
+addresses or files.
+
 **Export Settings…** there writes every setting to a JSON file you can read, edit and keep;
 **Import Settings…** replaces them all with a file's, after checking it. Bindings appear in
 the file exactly as they are stored, a built-in action by name, so a file is easy to edit

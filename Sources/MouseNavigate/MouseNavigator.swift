@@ -196,6 +196,9 @@ final class MouseNavigator {
             touchMonitor: touchMonitor,
             updater: updater
         )
+        preferences.diagnosticsProvider = { [unowned self] in
+            self.collectDiagnostics()
+        }
         preferencesController = preferences
         statusBarController?.preferencesController = preferences
         statusBarController?.updater = updater
@@ -224,6 +227,20 @@ final class MouseNavigator {
             return
         }
         preferencesController.showOrFocus()
+    }
+
+    private func collectDiagnostics() -> DiagnosticsReport {
+        var standingDown: [DiagnosticsReport.StandDown] = []
+        if isUserPaused { standingDown.append(.paused) }
+        if isFrontmostDisabled { standingDown.append(.offInFrontApp) }
+        if !session.isAvailable { standingDown.append(.sessionAway) }
+        return DiagnosticsCollector.collect(.init(
+            detector: detector,
+            touchMonitor: touchMonitor,
+            updater: updater,
+            isEventTapLive: eventTap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false,
+            standingDown: standingDown
+        ))
     }
 
     /// Only a lock another process is holding means "already running".

@@ -13,10 +13,34 @@ extension PreferencesWindowController {
         importButton.bezelStyle = .rounded
         importButton.toolTip = "Replaces every setting with the ones in a file, after checking it."
 
-        let row = NSStackView(views: [export, importButton])
+        let diagnostics = NSButton(title: "Copy Diagnostics", target: self, action: #selector(copyDiagnosticsTapped(_:)))
+        diagnostics.bezelStyle = .rounded
+        diagnostics.toolTip = "Copies what MouseNavigate can see and which permissions it has, to paste into a "
+            + "bug report. Nothing about your apps, shortcuts or files is included."
+
+        let row = NSStackView(views: [export, importButton, diagnostics])
         row.orientation = .horizontal
         row.spacing = 12
         return row
+    }
+
+    @objc func copyDiagnosticsTapped(_ sender: NSButton) {
+        guard let report = diagnosticsProvider?() else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(report.text, forType: .string)
+
+        // Nothing else on screen changes, so say it worked, in words and to VoiceOver.
+        let title = "Copy Diagnostics"
+        sender.title = "Copied"
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [.announcement: "Diagnostics copied", .priority: NSAccessibilityPriorityLevel.high.rawValue]
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak sender] in
+            sender?.title = title
+        }
     }
 
     @objc func exportSettingsTapped() {

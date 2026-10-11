@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Copy Diagnostics** on **Settings → About** copies what MouseNavigate can see to paste
+  into a bug report: its version and where it runs from, macOS, the permissions it has,
+  whether it is listening or standing down and why, the mice and touch surfaces attached
+  and the profile in use, which features are on, the update status, and any other mouse
+  software running alongside it. Nothing about your apps, shortcuts, web addresses or
+  files is included.
+
 ### Changed
 - The system log says more of what MouseNavigate is doing, for working out why something
   does not: which mouse is in use and the profile it gets, which touch surfaces are being
