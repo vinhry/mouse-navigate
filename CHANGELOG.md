@@ -35,6 +35,10 @@ All notable changes to this project will be documented in this file.
   keystroke on the Mac waited. It now does that in the background, and **Settings →
   About** says it is installing. An update that macOS had cleared out of the caches folder
   while it waited could never be installed; it is downloaded again instead.
+- Once a new version was waiting to be installed, MouseNavigate stopped checking, so a
+  release published after it was never noticed while the app ran. The daily check carries
+  on, and a newer release takes the waiting one's place once it has been downloaded and
+  checked; **Install and Relaunch** stays in the menu throughout.
 
 ## [0.7.0] - 2026-10-11
 

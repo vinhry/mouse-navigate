@@ -50,6 +50,9 @@ final class Updater {
     private static let dittoTimeout: TimeInterval = 120
     private var timer: Timer?
     private var hasAskedThisLaunch = false
+    /// A newer release than the one waiting to be installed is being looked for; see
+    /// `lookBeyond(_:)`.
+    private var isLookingBeyondReady = false
     /// nil when this copy cannot check an update's signature, and so never installs one.
     private let requirement = UpdateVerifier.ownRequirement()
 
@@ -151,6 +154,19 @@ final class Updater {
 
     /// A check the user asked for reports every outcome; a scheduled one stays quiet.
     func check(userInitiated: Bool) {
+        if case .ready(let staged) = state {
+            if !FileManager.default.fileExists(atPath: staged.app.path) {
+                // macOS clears caches when the disk runs low.
+                Log.update.notice("The verified update is gone from the caches folder; checking again.")
+                state = .idle
+            } else if userInitiated {
+                offerInstall(staged)
+                return
+            } else {
+                lookBeyond(staged)
+                return
+            }
+        }
         guard !isBusy else {
             // Asked for by hand while one is under way: say so rather than do nothing.
             if userInitiated {
@@ -164,10 +180,6 @@ final class Updater {
             }
             return
         }
-        if case .ready(let staged) = state {
-            if userInitiated { offerInstall(staged) }
-            return
-        }
         // A development build, run unbundled, has no release to be updated to.
         guard let current = SemanticVersion(AppInfo.version), current.preRelease == nil else {
             if userInitiated {
@@ -177,6 +189,17 @@ final class Updater {
         }
 
         state = .checking
+        fetchLatest(newerThan: current) { [weak self] result in
+            self?.finishCheck(result, userInitiated: userInitiated)
+        }
+    }
+
+    /// Asks GitHub for the latest release, and picks it if it is newer than `version`.
+    /// Calls back on the main thread.
+    private func fetchLatest(
+        newerThan version: SemanticVersion,
+        then finish: @escaping (Result<UpdateCandidate?, UpdateError>) -> Void
+    ) {
         var request = URLRequest(url: AppInfo.latestReleaseURL, timeoutInterval: 30)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
@@ -196,13 +219,13 @@ final class Updater {
             } else if status != 200 {
                 result = .failure(.network("GitHub answered with status \(status)."))
             } else if let data, let release = try? JSONDecoder().decode(GitHubRelease.self, from: data) {
-                result = .success(UpdateCandidate.select(from: release, current: current))
+                result = .success(UpdateCandidate.select(from: release, current: version))
             } else {
                 result = .failure(.network("GitHub's answer could not be read."))
             }
 
             DispatchQueue.main.async {
-                self.finishCheck(result, userInitiated: userInitiated)
+                finish(result)
             }
         }.resume()
     }
@@ -254,7 +277,17 @@ final class Updater {
 
         Log.update.info("Downloading \(candidate.version.description, privacy: .public).")
         state = .downloading(candidate.version)
+        fetchAndStage(candidate, requirement: requirement) { [weak self] result in
+            self?.finishDownload(result, userInitiated: userInitiated)
+        }
+    }
 
+    /// Downloads, unpacks and verifies a release. Calls back on the main thread.
+    private func fetchAndStage(
+        _ candidate: UpdateCandidate,
+        requirement: SecRequirement,
+        then finish: @escaping (Result<StagedUpdate, Error>) -> Void
+    ) {
         var request = URLRequest(url: candidate.download, timeoutInterval: 120)
         request.setValue("MouseNavigate/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
 
@@ -272,9 +305,61 @@ final class Updater {
             }
 
             DispatchQueue.main.async {
-                self.finishDownload(result, userInitiated: userInitiated)
+                finish(result)
             }
         }.resume()
+    }
+
+    /// Looks for a release newer than the one waiting to be installed, which would
+    /// otherwise be offered for as long as the app runs. The waiting one stays in the
+    /// menu all along, and is only replaced once a newer one has been downloaded and
+    /// verified; anything that goes wrong leaves it as it was.
+    private func lookBeyond(_ staged: StagedUpdate) {
+        guard !isLookingBeyondReady, let requirement else { return }
+        isLookingBeyondReady = true
+
+        fetchLatest(newerThan: staged.version) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .failure(.network(let message)):
+                Log.update.notice("Looking past \(staged.version.description, privacy: .public) failed: \(message, privacy: .public)")
+                self.isLookingBeyondReady = false
+            case .success(nil):
+                Preferences.shared.lastUpdateCheck = Date()
+                self.isLookingBeyondReady = false
+            case .success(let candidate?):
+                Preferences.shared.lastUpdateCheck = Date()
+                Log.update.info("Downloading \(candidate.version.description, privacy: .public) to replace \(staged.version.description, privacy: .public).")
+                self.fetchAndStage(candidate, requirement: requirement) { [weak self] result in
+                    self?.replaceReady(staged, with: result)
+                }
+            }
+        }
+    }
+
+    private func replaceReady(_ staged: StagedUpdate, with result: Result<StagedUpdate, Error>) {
+        isLookingBeyondReady = false
+        switch result {
+        case .failure(let error):
+            Log.update.error("Newer update rejected: \(error.localizedDescription, privacy: .public)")
+        case .success(let newer):
+            // Installed or gone meanwhile: the newer one has nothing to replace.
+            guard case .ready(let current) = state, current.app == staged.app else {
+                discardStaged(newer)
+                return
+            }
+            Log.update.info("Version \(newer.version.description, privacy: .public) is verified and replaces \(staged.version.description, privacy: .public).")
+            state = .ready(newer)
+            discardStaged(staged)
+        }
+    }
+
+    /// Each version is unpacked into a folder of its own in the staging directory.
+    private func discardStaged(_ staged: StagedUpdate) {
+        let folder = staged.app.deletingLastPathComponent()
+        work.async {
+            try? FileManager.default.removeItem(at: folder)
+        }
     }
 
     private struct StageError: LocalizedError {
