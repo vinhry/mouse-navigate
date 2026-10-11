@@ -68,15 +68,15 @@ final class DeviceDetector {
     /// Human-readable summary for the preferences window.
     var statusDescription: String {
         if let override = Preferences.shared.deviceOverride {
-            return "\(override.displayName) — set manually"
+            return "\(override.displayName) – set manually"
         }
         guard let detectedProfile else {
-            return "No mouse detected — using \(DeviceProfile.generic.displayName)"
+            return "No mouse detected – using \(DeviceProfile.generic.displayName)"
         }
         if let detectedName, !detectedName.isEmpty {
-            return "\(detectedName) — detected"
+            return "\(detectedName) – detected"
         }
-        return "\(detectedProfile.displayName) — detected"
+        return "\(detectedProfile.displayName) – detected"
     }
 
     @discardableResult

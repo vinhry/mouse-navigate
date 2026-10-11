@@ -23,11 +23,57 @@ All notable changes to this project will be documented in this file.
   the Mouse tab, **Drag ↑ ↓ ← →**, which fire once the pointer has moved about 30 points
   with the button held. A drag counts only before a hold has fired.
 
+- **Restore Defaults** on the Mouse tab, for the mouse in use: every button binding, for
+  every press and modifier combination, and the scroll settings for all mice and that
+  mouse. In an app's scope it hands the app's buttons and wheel back to the ones for all apps.
+- The Mouse tab's **Press** and **With** pickers mark, with a dot, the presses and modifier
+  keys that have bindings, and a line under them says which bindings the pickers are
+  showing, so a binding under Hold, a drag or ⌘ is no longer invisible until clicked through.
+- Action menus are grouped under headings, with **Disabled** at the top where it can be
+  found, and a custom binding too long for its menu shows in full on hover.
+- The Trackpad and Magic Mouse panes show how the gesture under the pointer is done, the way
+  the Characters pane shows a stroke: a picture of the surface beside the list, with the
+  fingers that rest on it in grey and the ones that tap, click or slide in red, over and
+  over, and the how-to in words under it. The picture is mirrored for **Left-handed** and
+  holds still with Reduce Motion. The rows' tooltips are gone, since they only covered the
+  how-to now shown in the open.
+- A menu bar glyph, tooltip and menu line for **Off in &lt;app&gt;**, while the app in front has
+  MouseNavigate turned off; before, the icon said Running while nothing worked.
+- VoiceOver reads the menu bar icon's state.
+- With Reduce Motion on, the stroke preview on the Touch tab holds still and the drawn-letter
+  result goes away without a fade.
+- Click hints say **Finding targets…** when the Accessibility scan takes longer than a
+  moment, as it does in Electron apps, instead of looking like a key that did nothing.
+- The drawn-letter result sits on a plate that follows the system appearance, so it can be
+  read over dark content.
+- **Version X is available**, on a copy that cannot install an update itself, offers to open
+  the release page instead of ending there.
+- **Check for Updates…** while a check or download is already under way says so.
+- **Launch at Login** says why when it cannot be turned on, instead of quietly staying off.
+- A clean import of settings is confirmed; before, only one with leftovers was.
+
 ### Changed
+- **Preferences** is **Settings**, as macOS has called it since Ventura: the menu item, with
+  `⌘,`, and the window title. Nothing about where settings are kept changes.
+- The Settings window has a main menu behind it, so `⌘C`, `⌘V` and `⌘A` work in its text
+  fields, `⌘W` closes it and `⌘Q` quits.
+- The Scroll Wheel section's checkbox names the app or mouse it gives settings to.
+- The Launch App and Add App panels each say what the app is for.
+- The menu bar header reads **MouseNavigate 0.5.0**, the permission items carry a warning
+  symbol rather than a text one, and the two labels that wrote ⌘⇧ now write ⇧⌘ like the rest.
+- When a copy cannot update itself, the About tab says so under the greyed-out box rather
+  than only in its tooltip.
+- **Remove App** says that the app's scroll settings and turned-off state go too.
 - **Reverse scrolling direction** became **Reverse: Both**, and the one **Speed** became
   a vertical and a horizontal speed. Existing settings carry over.
 
 ### Fixed
+- Recording a keyboard shortcut for a button or gesture while MouseNavigate was paused
+  resumed the keyboard cursor when the sheet closed.
+- With an app chosen under **Applies to**, the Scroll Wheel section showed a stray **For:**
+  label with nothing after it.
+- Importing settings asked whether to replace everything before the file had been checked,
+  so a file that was not a settings file was still asked about.
 - When the helper that reopens MouseNavigate after an update could not start, the
   explanation was never shown: the app quit before the alert reached the screen.
 - A drawn stroke is matched against the letter templates once rather than twice.

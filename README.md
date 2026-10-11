@@ -29,7 +29,7 @@ Detection reads the HID product string first and falls back to a product-ID tabl
 same mouse is recognised over Bluetooth, a Bolt receiver or a Unifying receiver. A MacBook's
 built-in keyboard and trackpad report themselves as a pointing device too, so built-in
 devices, trackpads and keyboards are skipped; with no mouse attached the Mouse tab says
-**No mouse detected**. Override the profile manually in **Preferences → Mouse** if you prefer.
+**No mouse detected**. Override the profile manually in **Settings → Mouse** if you prefer.
 
 To see what MouseNavigate detects:
 
@@ -39,7 +39,7 @@ To see what MouseNavigate detects:
 
 ## Behavior
 
-- Buttons `3`–`9` are individually configurable via **Preferences** (see [Button Mapping](#button-mapping) below).
+- Buttons `3`–`9` are individually configurable via **Settings** (see [Button Mapping](#button-mapping) below).
 - Hold a side button and move the mouse up, down, left or right to run something else
   (see [Hold, double-click and drag](#hold-double-click-and-drag) below).
 - Hold `A` to drive the pointer from the keyboard (see [Keyboard Cursor](#keyboard-cursor) below).
@@ -54,7 +54,7 @@ To see what MouseNavigate detects:
   - App Exposé, Mission Control and Show Desktop ask the Dock directly, the way the
     trackpad gestures do. Where that is not possible they send the shortcut you have set
     for them in System Settings → Keyboard, if it is enabled.
-- Single-instance: one process, registered with macOS. Launching it again opens Preferences
+- Single-instance: one process, registered with macOS. Launching it again opens Settings
   rather than starting a second copy.
 - Built-in shortcuts such as Close Tab (`⌘W`) and Quit (`⌘Q`) mean the letter, not the key
   position, so they do the right thing on AZERTY, QWERTZ and every other layout.
@@ -68,22 +68,29 @@ To see what MouseNavigate detects:
 - When **Paused**, the icon switches to an outline mouse to indicate navigation is suspended.
 - While keyboard cursor mode is engaged, the icon switches to a motion cursor so it is obvious that keys are being captured.
 - Until Accessibility permission is granted, the icon shows a warning triangle. MouseNavigate keeps running and starts working as soon as the permission is turned on — no relaunch needed.
+- While the app in front has MouseNavigate turned off, the icon is the outline mouse too, and its tooltip and the menu name the app.
 - Hover the icon to see a tooltip confirming the running or paused state.
 - Right-click (or click) the icon for the context menu:
-  - **MouseNavigate - vX.Y.Z** — app name and version header (non-interactive)
-  - The detected mouse and the profile in use (non-interactive)
+  - **MouseNavigate X.Y.Z** — app name and version header (non-interactive)
+  - The detected mouse and the profile in use, and **Off in &lt;app&gt;** while the app in front has MouseNavigate turned off (non-interactive)
   - **Install MouseNavigate X.Y.Z and Relaunch** — shown only once an update has been downloaded and verified
-  - **⚠ Grant Accessibility Permission…** — shown only while the permission is missing; clicking opens System Settings → Accessibility directly
-  - **⚠ Grant Input Monitoring…** — shown only when keyboard events are blocked
+  - **Grant Accessibility Permission…**, with a warning sign — shown only while the permission is missing; clicking opens System Settings → Accessibility directly
+  - **Grant Input Monitoring…**, with a warning sign — shown only when keyboard events are blocked
   - **Pause** / **Resume** — temporarily suspends all button handling without quitting
   - **Launch at Login** ✓ — toggle to start MouseNavigate automatically at login. When macOS is still waiting for you to allow it, the item says so and opens System Settings → Login Items instead.
   - **Check for Updates…** — ask GitHub for a newer release now
-  - **Preferences…** — open the Preferences window
-  - **Quit MouseNavigate** — quits the app
+  - **Settings…** (`⌘,`) — open the Settings window
+  - **Quit MouseNavigate** (`⌘Q`) — quits the app
+
+The shortcuts work while the Settings window is in front, as do `⌘C`, `⌘V` and `⌘A` in its
+text fields and `⌘W` to close it. VoiceOver reads the icon's state: running, paused, cursor
+mode, off in an app or waiting for permission.
 
 ## Button Mapping
 
-Open **Preferences…** from the status bar menu to configure each button.
+Open **Settings…** from the status bar menu to configure each button. The action menus are
+grouped under headings, with **Disabled** at the top; a custom binding too long for its
+menu shows in full on hover.
 
 Mappings are saved **per device profile**, so the MX Master 4 and MX Master 3 each keep
 their own layout.
@@ -103,7 +110,7 @@ Available actions, shared by mouse buttons, touch gestures and drawn letters:
 | Browsing | Back, Forward, Next Tab (`⌃⇥`), Previous Tab (`⌃⇧⇥`), New Tab, Close Tab / Window, Reopen Closed Tab, Refresh, Open Link in New Tab (middle click) |
 | Editing | Copy, Paste, New, Open, Save, Quit App |
 | Windows | Minimize, Maximize (again to restore), Maximize Left, Maximize Right, Move / Resize (gestures only) |
-| System | App Exposé, Mission Control, Show Desktop, Move Left / Right a Space, Lock Screen (`⌃⌘Q`), Screenshot Selection (`⌘⇧4`, or your own shortcut for it) |
+| System | App Exposé, Mission Control, Show Desktop, Move Left / Right a Space, Lock Screen (`⌃⌘Q`), Screenshot Selection (`⇧⌘4`, or your own shortcut for it) |
 | Media | Play / Pause, Next / Previous Track, Volume Up / Down, Mute |
 | Launch | Finder, Default Browser |
 | App | Toggle Keyboard Cursor, Click Hints, Grid Jump, Disabled |
@@ -159,7 +166,7 @@ keys that were held when the button went down.
 
 In the settings file, a combination's key carries the modifiers: `button.mxMaster4.3+shift+cmd`.
 
-Not sure which physical button is which? Open **Preferences → Mouse** and press a button —
+Not sure which physical button is which? Open **Settings → Mouse** and press a button —
 the panel reports the number it reported, so you can map it directly.
 
 Changes apply immediately and persist across restarts, in the app's own `UserDefaults`
@@ -170,7 +177,7 @@ Safari, Finder, Chrome, Chrome Canary, Firefox, Firefox Developer Edition, Arc, 
 
 ## Scroll Wheel
 
-**Preferences → Mouse → Scroll Wheel** reshapes a mouse wheel and nothing else: trackpads
+**Settings → Mouse → Scroll Wheel** reshapes a mouse wheel and nothing else: trackpads
 and the Magic Mouse scroll continuously and are never touched, so a trackpad can keep
 natural scrolling while the wheel goes the other way.
 
@@ -207,7 +214,7 @@ continuously, like a trackpad, so turn that off to use these.
 ## Per-App Bindings
 
 Buttons, gestures and drawn letters can be bound differently in one app. Choose
-**Applies to → Add App…** at the top of **Preferences → Mouse** or **Touch**, pick the app,
+**Applies to → Add App…** at the top of **Settings → Mouse** or **Touch**, pick the app,
 and the pickers switch to that app's bindings. Each starts as **Same as All Apps**, showing
 what that is; change only the ones you want different. **Applies to → All Apps** goes back.
 
@@ -221,8 +228,9 @@ buttons, gestures and the keyboard cursor, so `A` types with no hold delay. That
 games, virtual machines and remote desktops, which want every key and button as it is.
 Switching to such an app mid-hold lets go of anything held, as **Pause** does.
 
-**Remove App** deletes that app's bindings. In an app's scope, **Restore Defaults** on the
-Touch tab hands its gestures back to the ones for all apps.
+**Remove App** deletes that app's bindings, scroll settings and turned-off state. In an app's
+scope, **Restore Defaults** on the Mouse tab hands its buttons and wheel back to the ones
+for all apps, and on the Touch tab its gestures.
 
 ## Keyboard Cursor
 
@@ -251,7 +259,7 @@ Speed tiers, held alongside `A`:
 | `Option` | Precision (×0.25) |
 
 Movement eases in rather than starting at full speed, and diagonals travel at the same
-rate as the axes. Every key and every speed is rebindable in **Preferences → Keyboard
+rate as the axes. Every key and every speed is rebindable in **Settings → Keyboard
 Cursor**, along with the hold delay.
 
 ### Grid jump
@@ -323,15 +331,17 @@ Holding a key down is how every other letter repeats, and on `A` that is spoken 
 way back in is to **tap `A`, then press it again straight away and keep it down**: the
 second press is handed over untouched, so `aaaa…` comes out exactly as it would from any
 other key and cursor mode stays out of it. How soon that second press has to land is
-**Double-tap to repeat** in **Preferences → Keyboard Cursor** — 0.4 s by default, and
+**Double-tap to repeat** in **Settings → Keyboard Cursor** — 0.4 s by default, and
 `Off` at zero.
 
 ## Touch Gestures
 
 jitouch-style multitouch gestures for the trackpad and Magic Mouse, plus drawn letters.
-They are **off by default**: turn them on in **Preferences → Touch**, where every gesture
-can be bound to any action. Hover over a gesture's name there to see how to do it. Finger
-names assume the right hand; tick **Left-handed** to mirror them.
+They are **off by default**: turn them on in **Settings → Touch**, where every gesture
+can be bound to any action. Hover over a gesture there and a picture of it plays beside the
+list — resting fingers in grey, the ones that tap or slide in red — with the how-to in words
+under it. Finger names assume the right hand; tick **Left-handed** to mirror them, picture
+included.
 
 Gestures run alongside the ones built into macOS rather than replacing them, so turn off
 any that overlap in `System Settings` → `Trackpad` (for example **Look up & data detectors**
@@ -377,7 +387,7 @@ gesture, MouseNavigate holds the click back.
 ### Drawn letters
 
 Draw a letter or a straight line and it runs the bound action. Sources, each toggled in
-**Preferences → Touch → Characters**:
+**Settings → Touch → Characters**:
 
 - **Trackpad** (on): move two widely spread fingers, such as index and ring, together.
   **Finger spacing** sets how far apart they must be, from 12% to 60% of the trackpad's
@@ -400,7 +410,7 @@ ran — "T" over "New Tab (⌘T)" — in the middle of the screen, or a "no matc
 fit. Untick **Show the drawing on screen** in the Characters section to work without it.
 
 Letters are single strokes, loosely after Graffiti. `I` is a straight line down. To see how
-one goes, hover it in **Preferences → Touch → Characters**: the stroke traces itself beside
+one goes, hover it in **Settings → Touch → Characters**: the stroke traces itself beside
 the list, over and over, with a ring showing where to start.
 
 | Drawn | Default |
@@ -438,10 +448,10 @@ gesture and drawn letter with its match score.
 
 - Designed for idle background use, at around `0%` CPU most of the time.
 - Memory, measured as the footprint Activity Monitor reports:
-  - About `12 MB` sitting in the menu bar, before Preferences has ever been opened. The
+  - About `12 MB` sitting in the menu bar, before Settings has ever been opened. The
     app runs `NSApplication` with a status bar item, which loads AppKit — the baseline
     cost. `ServiceManagement` (Launch at Login) adds a little on top.
-  - About `30 MB` once Preferences has been opened. The window and its four pages are kept
+  - About `30 MB` once Settings has been opened. The window and its four pages are kept
     rather than rebuilt: reopening is then instant and costs nothing, where building a fresh
     one each time would add roughly `10 MB` of AppKit caches that are never given back.
   - Touch gestures add the drawing overlay: a small window for trackpad strokes, and a
@@ -474,7 +484,7 @@ Permissions survive updates, whether MouseNavigate installs them itself (see
 
 MouseNavigate can keep itself up to date from this repository's GitHub Releases. The first
 time it runs with Accessibility granted, it asks whether to check automatically; change
-that later in **Preferences → About**, where **Check Now** also lives, as does **Check for
+that later in **Settings → About**, where **Check Now** also lives, as does **Check for
 Updates…** in the menu bar menu.
 
 - **Checking** asks GitHub for the latest release once a day. Drafts and pre-releases are
@@ -560,7 +570,7 @@ dist/MouseNavigate.app
 
 ## About
 
-**Preferences → About** shows the version, links to this repository and the issue tracker,
+**Settings → About** shows the version, links to this repository and the issue tracker,
 and the license. MouseNavigate is developed by Vinhry and released under the MIT License.
 
 **Export Settings…** there writes every setting to a JSON file you can read, edit and keep;

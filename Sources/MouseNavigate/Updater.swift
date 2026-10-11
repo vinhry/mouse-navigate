@@ -105,7 +105,7 @@ final class Updater {
         alert.informativeText = "MouseNavigate can check GitHub once a day for a new version and download it "
             + "in the background. Nothing is installed until you choose Install and Relaunch from the menu, "
             + "and only a version signed and notarized for MouseNavigate is ever installed.\n\n"
-            + "You can change this in Preferences → About."
+            + "You can change this in Settings → About."
         alert.addButton(withTitle: "Check Automatically")
         alert.addButton(withTitle: "Don't Check")
 
@@ -143,7 +143,19 @@ final class Updater {
 
     /// A check the user asked for reports every outcome; a scheduled one stays quiet.
     func check(userInitiated: Bool) {
-        guard !isBusy else { return }
+        guard !isBusy else {
+            // Asked for by hand while one is under way: say so rather than do nothing.
+            if userInitiated {
+                let doing: String
+                if case .downloading(let version) = state {
+                    doing = "Version \(version) is being downloaded."
+                } else {
+                    doing = "A check is already under way."
+                }
+                showAlert("Already checking for updates", doing + " The result is shown when it arrives.")
+            }
+            return
+        }
         if case .ready(let staged) = state {
             if userInitiated { offerInstall(staged) }
             return
@@ -216,7 +228,19 @@ final class Updater {
         guard let requirement else {
             let message = UpdateVerifier.Failure.unsignedSelf.localizedDescription
             state = .failed(message)
-            if userInitiated { showAlert("Version \(candidate.version) is available", message) }
+            if userInitiated {
+                // This copy cannot install it, so the way forward is the release page.
+                let alert = NSAlert()
+                alert.messageText = "Version \(candidate.version) is available"
+                alert.informativeText = message + " Download it from the release page instead."
+                alert.addButton(withTitle: "Open Release Page")
+                alert.addButton(withTitle: "Not Now")
+                present(alert) { response in
+                    if response == .alertFirstButtonReturn {
+                        NSWorkspace.shared.open(candidate.releasePage)
+                    }
+                }
+            }
             return
         }
 

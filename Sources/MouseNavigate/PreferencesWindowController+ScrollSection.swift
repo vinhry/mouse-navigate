@@ -4,6 +4,7 @@ import MouseNavigateCore
 /// The controls of the Scroll Wheel section, kept together so the section can be built
 /// and refreshed away from the rest of the window.
 final class ScrollSectionControls {
+    var forLabel: NSTextField!
     var profilePopup: NSPopUpButton!
     var ownSettings: NSButton!
     var reversePopup: NSPopUpButton!
@@ -70,6 +71,7 @@ extension PreferencesWindowController {
         let controls = ScrollSectionControls()
 
         let forLabel = NSTextField(labelWithString: "For:")
+        controls.forLabel = forLabel
         let profilePopup = NSPopUpButton(frame: .zero, pullsDown: false)
         profilePopup.target = self
         profilePopup.action = #selector(scrollProfileChanged(_:))
@@ -194,26 +196,38 @@ extension PreferencesWindowController {
         let shown: ScrollSettings
         let hasOwn: Bool
         var enabled = true
+        // The checkbox names the scope it gives settings to, since nothing else in the
+        // section says whether an app or a mouse is being edited.
+        var ownTitle = "Use its own scroll settings"
         switch scrollScope {
         case .all:
             shown = preferences.scrollSettings
             hasOwn = true
+            controls.forLabel.isHidden = false
             popup.isHidden = false
             controls.ownSettings.isHidden = true
         case .profile(let profile):
             let override = preferences.scrollOverride(for: profile)
             hasOwn = !override.isEmpty
             shown = ScrollResolver.resolve(global: preferences.scrollSettings, profile: override, app: nil)
+            controls.forLabel.isHidden = false
             popup.isHidden = false
             controls.ownSettings.isHidden = false
+            ownTitle += " for \(profile.displayName)"
         case .app(let bundleID):
             let override = preferences.appScrollOverride(bundleID)
             hasOwn = !override.isEmpty
             shown = preferences.resolvedScrollSettings(profile: detector.activeProfile, app: bundleID)
+            // The mouse picker has no say in an app's settings, so the label goes with it.
+            controls.forLabel.isHidden = true
             popup.isHidden = true
             controls.ownSettings.isHidden = false
             enabled = !preferences.isAppDisabled(bundleID)
+            if let app = preferences.appOverrides[bundleID] {
+                ownTitle += " for \(app.name)"
+            }
         }
+        controls.ownSettings.title = ownTitle
 
         controls.show(shown)
         controls.ownSettings.state = hasOwn ? .on : .off

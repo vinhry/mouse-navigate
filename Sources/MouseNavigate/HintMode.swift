@@ -29,6 +29,10 @@ final class HintMode: CursorModal {
     private var scannedPID: pid_t?
 
     private static let emptyMessageDuration: TimeInterval = 0.9
+    /// How long a scan may take before the screen says one is under way. Most finish well
+    /// inside it; Electron apps building their tree do not.
+    private static let scanningMessageDelay: TimeInterval = 0.15
+    private var scanningMessage: DispatchWorkItem?
 
     init(
         excluding excluded: Set<UInt16>,
@@ -57,6 +61,14 @@ final class HintMode: CursorModal {
         scannedPID = pid
         // AppKit's screen list is the main thread's to read.
         let displays = ScreenOverlay.displayFrames()
+        // A slow scan would otherwise look like a key that did nothing.
+        let progress = DispatchWorkItem { [weak self] in
+            guard let self, !self.isClosed, self.filter == nil else { return }
+            self.message = "Finding targets…"
+            self.overlay.show()
+        }
+        scanningMessage = progress
+        DispatchQueue.main.asyncAfter(deadline: .now() + HintMode.scanningMessageDelay, execute: progress)
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             let found = AccessibilityScanner.scan(pid: pid, displays: displays)
             DispatchQueue.main.async {
@@ -66,6 +78,9 @@ final class HintMode: CursorModal {
     }
 
     private func show(_ found: [AccessibilityScanner.Target]) {
+        scanningMessage?.cancel()
+        scanningMessage = nil
+        message = nil
         guard !isClosed else { return }
         guard !found.isEmpty else {
             showMessage("Nothing to click here")

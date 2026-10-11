@@ -159,6 +159,52 @@ public final class Preferences {
         notifyChange(.bindings)
     }
 
+    /// Every press, drag and modifier combination of the profile's buttons that has a
+    /// binding other than its default: the bindings for all apps, or an app's own. Plain
+    /// clicks are left out, since every one of them has a binding. For the settings window
+    /// to mark the pickers behind which bindings are hiding.
+    public func boundButtonCombinations(profile: DeviceProfile, app bundleID: String?) -> Set<ButtonCombination> {
+        let inputs: [ButtonInput] = ButtonPress.allCases.map { .press($0) } + DragDirection.allCases.map { .drag($0) }
+        var combinations: Set<ButtonCombination> = []
+        for input in inputs {
+            for raw in 0..<(1 << 4) {
+                let modifiers = Shortcut.Modifiers(rawValue: raw)
+                if input == .press(.click), modifiers.isEmpty { continue }
+                let combination = ButtonCombination(input: input, modifiers: modifiers)
+                for number in Preferences.configurableButtons {
+                    let trigger = BindingTrigger.button(number, profile, input: input, modifiers: modifiers)
+                    let bound: Bool
+                    if let bundleID {
+                        bound = appBinding(for: trigger, app: bundleID) != nil
+                    } else {
+                        bound = globalBinding(for: trigger) != trigger.defaultBinding
+                    }
+                    if bound {
+                        combinations.insert(combination)
+                        break
+                    }
+                }
+            }
+        }
+        return combinations
+    }
+
+    /// Every button binding of the profile, for every press and modifier combination, and
+    /// the scroll settings for all mice and for the profile, back to their defaults. Other
+    /// profiles, apps' own settings, gestures and cursor keys are untouched.
+    public func restoreMouseDefaults(profile: DeviceProfile) {
+        let prefixes = [
+            SettingsKey.buttonPrefix, SettingsKey.buttonHoldPrefix,
+            SettingsKey.buttonDoublePrefix, SettingsKey.buttonDragPrefix,
+        ].map { $0 + profile.rawValue + "." }
+        for key in SettingsKey.userSettingKeys(in: store) where prefixes.contains(where: key.hasPrefix) {
+            store.removeObject(forKey: key)
+        }
+        notifyChange(.bindings)
+        setScrollOverride(.none, for: profile)
+        scrollSettings = .standard
+    }
+
     // MARK: - Per-app bindings
 
     /// Decoded once per change rather than on every press: a single button press asks
@@ -467,11 +513,22 @@ public final class Preferences {
     /// written if any of it is refused.
     @discardableResult
     public func importSettings(_ data: Data) throws -> SettingsSnapshot.ReadResult {
-        let result = try SettingsSnapshot.read(data, currentConfigVersion: currentConfigVersion)
+        let result = try readSettings(data)
+        applySettings(result)
+        return result
+    }
+
+    /// Checks a file without writing anything, so a user can be asked to replace their
+    /// settings only once the file is known to be good.
+    public func readSettings(_ data: Data) throws -> SettingsSnapshot.ReadResult {
+        try SettingsSnapshot.read(data, currentConfigVersion: currentConfigVersion)
+    }
+
+    /// Writes what `readSettings` read.
+    public func applySettings(_ result: SettingsSnapshot.ReadResult) {
         result.snapshot.apply(to: store)
         migrateIfNeeded()
         notifyChange(.all)
-        return result
     }
 
     private func notifyChange(_ area: SettingsArea) {
@@ -483,6 +540,17 @@ public final class Preferences {
             object: nil,
             userInfo: [Preferences.areaUserInfoKey: area]
         )
+    }
+}
+
+/// One way of pressing a button together with the modifier keys held for it.
+public struct ButtonCombination: Hashable {
+    public var input: ButtonInput
+    public var modifiers: Shortcut.Modifiers
+
+    public init(input: ButtonInput, modifiers: Shortcut.Modifiers) {
+        self.input = input
+        self.modifiers = modifiers
     }
 }
 

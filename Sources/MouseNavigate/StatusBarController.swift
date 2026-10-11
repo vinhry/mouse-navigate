@@ -13,6 +13,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private var permissionSeparator: NSMenuItem?
     private var inputMonitoringMenuItem: NSMenuItem?
     private var deviceMenuItem: NSMenuItem?
+    private var offInAppMenuItem: NSMenuItem?
     private var installUpdateMenuItem: NSMenuItem?
     private var installUpdateSeparator: NSMenuItem?
 
@@ -44,6 +45,17 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         didSet { updateIcon() }
     }
 
+    /// The name of the app in front when MouseNavigate is turned off in it, or nil. Shown
+    /// like a pause, because to the user that is what it is.
+    var disabledInApp: String? {
+        didSet {
+            guard disabledInApp != oldValue else { return }
+            updateIcon()
+            offInAppMenuItem?.isHidden = disabledInApp == nil
+            offInAppMenuItem?.title = disabledInApp.map { "Off in \($0)" } ?? ""
+        }
+    }
+
     init(detector: DeviceDetector) {
         self.detector = detector
         super.init()
@@ -56,12 +68,18 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
 
-        addDisabledItem("MouseNavigate - v\(AppInfo.version)", to: menu)
+        addDisabledItem("MouseNavigate \(AppInfo.version)", to: menu)
 
         let device = NSMenuItem(title: "Detecting device…", action: nil, keyEquivalent: "")
         device.isEnabled = false
         menu.addItem(device)
         deviceMenuItem = device
+
+        let offInApp = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        offInApp.isEnabled = false
+        offInApp.isHidden = true
+        menu.addItem(offInApp)
+        offInAppMenuItem = offInApp
 
         menu.addItem(.separator())
 
@@ -79,22 +97,24 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         // Accessibility permission warning — shown only when not trusted
         let permItem = NSMenuItem(
-            title: "⚠ Grant Accessibility Permission…",
+            title: "Grant Accessibility Permission…",
             action: #selector(openAccessibilitySettings),
             keyEquivalent: ""
         )
         permItem.target = self
+        permItem.image = Self.warningImage
         permItem.isHidden = true
         menu.addItem(permItem)
         permissionMenuItem = permItem
 
         // Keyboard taps also need Input Monitoring on some configurations.
         let inputItem = NSMenuItem(
-            title: "⚠ Grant Input Monitoring…",
+            title: "Grant Input Monitoring…",
             action: #selector(openInputMonitoringSettings),
             keyEquivalent: ""
         )
         inputItem.target = self
+        inputItem.image = Self.warningImage
         inputItem.isHidden = true
         menu.addItem(inputItem)
         inputMonitoringMenuItem = inputItem
@@ -124,15 +144,16 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         updatesItem.target = self
         menu.addItem(updatesItem)
 
-        // Preferences
-        let prefsItem = NSMenuItem(title: "Preferences\u{2026}", action: #selector(preferencesTapped), keyEquivalent: "")
+        // Settings. The shortcuts match the main menu, which is what makes them work while
+        // the Settings window is in front.
+        let prefsItem = NSMenuItem(title: "Settings\u{2026}", action: #selector(preferencesTapped), keyEquivalent: ",")
         prefsItem.target = self
         menu.addItem(prefsItem)
 
         menu.addItem(.separator())
 
         // Quit
-        let quitItem = NSMenuItem(title: "Quit MouseNavigate", action: #selector(quitTapped), keyEquivalent: "")
+        let quitItem = NSMenuItem(title: "Quit MouseNavigate", action: #selector(quitTapped), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -157,36 +178,45 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     // MARK: - Icon
 
+    private static let warningImage: NSImage? = {
+        let image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: "Warning")
+        image?.isTemplate = true
+        return image
+    }()
+
     private func updateIcon() {
         let name: String
+        let state: String
         if isAwaitingPermission {
             name = "exclamationmark.triangle"
+            state = "Needs Accessibility permission"
         } else if isCursorModeActive {
             name = "cursorarrow.motionlines"
+            state = "Cursor mode"
         } else if isPaused {
             name = "computermouse"
+            state = "Paused"
+        } else if let disabledInApp {
+            name = "computermouse"
+            state = "Off in \(disabledInApp)"
         } else {
             name = "computermouse.fill"
+            state = "Running"
         }
 
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
-            ?? NSImage(systemSymbolName: "computermouse.fill", accessibilityDescription: nil)
+        // The description is what VoiceOver reads for the item, so it carries the state the
+        // glyph only hints at.
+        let description = "MouseNavigate, \(state.lowercased())"
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: description)
+            ?? NSImage(systemSymbolName: "computermouse.fill", accessibilityDescription: description)
         image?.isTemplate = true
         statusItem?.button?.image = image
         // A nil image leaves an invisible but clickable square, which reads to anyone
         // looking at their menu bar as "the app did not start". Say something instead.
         statusItem?.button?.title = image == nil ? "MN" : ""
+        statusItem?.button?.setAccessibilityLabel(description)
+        statusItem?.button?.toolTip = "MouseNavigate – \(state)"
         statusItem?.isVisible = true
-
-        if isAwaitingPermission {
-            statusItem?.button?.toolTip = "MouseNavigate – Needs Accessibility permission"
-        } else if isCursorModeActive {
-            statusItem?.button?.toolTip = "MouseNavigate – Cursor mode"
-        } else {
-            statusItem?.button?.toolTip = isPaused
-                ? "MouseNavigate – Paused"
-                : "MouseNavigate – Running"
-        }
     }
 
     // MARK: - Pause
@@ -222,6 +252,15 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         } catch {
             // Typically an unsigned or unbundled build, which macOS will not start at login.
             Log.launch.error("Launch at Login could not be changed: \(error.localizedDescription, privacy: .public)")
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Launch at Login couldn't be changed"
+            alert.informativeText = error.localizedDescription
+                + "\n\nmacOS starts only a signed copy that runs from an app bundle at login, "
+                + "so a build run from source or from the Terminal cannot be registered."
+            alert.addButton(withTitle: "OK")
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
         }
         updateLaunchAtLoginState()
     }
@@ -262,9 +301,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         updater?.check(userInitiated: true)
     }
 
-    // MARK: - Preferences
+    // MARK: - Settings
 
-    @objc private func preferencesTapped() {
+    @objc func preferencesTapped() {
         preferencesController?.showOrFocus()
     }
 

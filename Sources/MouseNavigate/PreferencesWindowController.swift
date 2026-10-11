@@ -78,6 +78,12 @@ final class PreferencesWindowController: NSObject {
     private static let buttonInputs: [ButtonInput] =
         ButtonPress.allCases.map { .press($0) } + DragDirection.allCases.map { .drag($0) }
     private var buttonModifiers: Shortcut.Modifiers = []
+    private var pressPicker: NSSegmentedControl?
+    private var modifierPicker: NSSegmentedControl?
+    /// Names the press and modifiers whose bindings the button pickers are showing.
+    private var slotCaption: NSTextField?
+    /// Appended to a Press or With segment that has bindings behind it.
+    private static let boundMarker = " •"
 
     /// The Scroll Wheel section's controls, built and refreshed in their own file.
     var scrollSection: ScrollSectionControls?
@@ -100,6 +106,14 @@ final class PreferencesWindowController: NSObject {
     private var strokePreviewHint: NSTextField?
     /// Each character row's picker, for working out which one the pointer is over.
     private var characterRows: [(gesture: CharacterGesture, row: NSView)] = []
+    /// The same for each gesture list, and the label under it that says how the hovered
+    /// gesture is done.
+    private var gestureRows: [TouchSurface: [(gesture: TouchGesture, row: NSView)]] = [:]
+    private var gestureHintLabels: [TouchSurface: NSTextField] = [:]
+    /// The picture of the hovered gesture beside each list, and the labels around it.
+    private var gesturePreviews: [TouchSurface: TouchGesturePreviewView] = [:]
+    private var gesturePreviewNames: [TouchSurface: NSTextField] = [:]
+    private var gesturePreviewHints: [TouchSurface: NSTextField] = [:]
 
     init(detector: DeviceDetector, engine: KeyboardCursorEngine, touchMonitor: TouchMonitor, updater: Updater) {
         self.detector = detector
@@ -151,7 +165,7 @@ final class PreferencesWindowController: NSObject {
             backing: .buffered,
             defer: false
         )
-        w.title = "MouseNavigate Preferences"
+        w.title = "MouseNavigate Settings"
         // Kept and reused rather than rebuilt: measuring showed a fresh window costs about
         // 10 MB that AppKit's own caches never give back, while reopening this one is free.
         w.isReleasedWhenClosed = false
@@ -253,9 +267,11 @@ final class PreferencesWindowController: NSObject {
             action: #selector(buttonPressChanged(_:))
         )
         pressPicker.selectedSegment = 0
-        pressPicker.toolTip = "A button with a hold, double-click or drag binding waits to see which "
+        pressPicker.toolTip = "Which press of each button the pickers below show. A dot marks one with "
+            + "bindings. A button with a hold, double-click or drag binding waits to see which "
             + "it was before acting, so bind those only where you want them. A drag is the "
             + "button held while the mouse moves that way."
+        self.pressPicker = pressPicker
 
         let withLabel = NSTextField(labelWithString: "With:")
         withLabel.alignment = .right
@@ -265,10 +281,25 @@ final class PreferencesWindowController: NSObject {
             target: self,
             action: #selector(buttonModifiersChanged(_:))
         )
-        modifierPicker.toolTip = "Bind a button pressed with these keys held. Until a combination has "
-            + "a binding of its own, holding the keys does what the button does on its own."
+        modifierPicker.toolTip = "Bind a button pressed with these keys held. A dot marks a key with "
+            + "bindings for this press. Until a combination has a binding of its own, holding "
+            + "the keys does what the button does on its own."
+        self.modifierPicker = modifierPicker
+        for picker in [pressPicker, modifierPicker] {
+            PreferencesWindowController.reserveMarkerRoom(in: picker)
+        }
 
-        var rows: [[NSView]] = [[overrideLabel, popup], [pressLabel, pressPicker], [withLabel, modifierPicker]]
+        // Says what the pickers below are for, so they read as the bindings of one press
+        // rather than as settings of their own.
+        let caption = NSTextField(labelWithString: "")
+        caption.font = .systemFont(ofSize: 11)
+        caption.textColor = .secondaryLabelColor
+        slotCaption = caption
+
+        var rows: [[NSView]] = [
+            [overrideLabel, popup], [pressLabel, pressPicker], [withLabel, modifierPicker],
+            [NSTextField(labelWithString: ""), caption],
+        ]
 
         for button in Preferences.configurableButtons {
             let buttonLabel = NSTextField(labelWithString: "Button \(button):")
@@ -283,7 +314,8 @@ final class PreferencesWindowController: NSObject {
         // Every picker takes the width of the widest, so the column reads as one edge.
         grid.column(at: 1).xPlacement = .fill
         // Keep the profile, press and modifier pickers visually apart from the per-button rows.
-        grid.row(at: 2).bottomPadding = 8
+        grid.row(at: 2).bottomPadding = 10
+        grid.row(at: 3).bottomPadding = 2
         grid.cell(for: pressPicker)?.xPlacement = .leading
         grid.cell(for: modifierPicker)?.xPlacement = .leading
 
@@ -292,14 +324,101 @@ final class PreferencesWindowController: NSObject {
         tester.textColor = .secondaryLabelColor
         testerLabel = tester
 
-        let stack = NSStackView(views: [label, makeScopeRow(), grid, tester, makeScrollSection()])
+        let restore = NSButton(
+            title: "Restore Defaults",
+            target: self,
+            action: #selector(restoreMouseDefaultsTapped)
+        )
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let footer = NSStackView(views: [spacer, restore])
+        footer.orientation = .horizontal
+
+        let scroll = makeScrollSection()
+        let stack = NSStackView(views: [label, makeScopeRow(), grid, tester, scroll, footer])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
         stack.setCustomSpacing(18, after: grid)
         stack.setCustomSpacing(22, after: tester)
+        stack.setCustomSpacing(16, after: scroll)
+        footer.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         return makePage(stack)
+    }
+
+    /// Fixes each segment at the width its label needs with the marker on, so marking one
+    /// later never moves the others.
+    private static func reserveMarkerRoom(in picker: NSSegmentedControl) {
+        let font = picker.font ?? .systemFont(ofSize: NSFont.systemFontSize)
+        for segment in 0..<picker.segmentCount {
+            let label = (picker.label(forSegment: segment) ?? "") + boundMarker
+            let width = (label as NSString).size(withAttributes: [.font: font]).width
+            picker.setWidth(ceil(width) + 14, forSegment: segment)
+        }
+    }
+
+    /// Marks the presses and modifier keys that have bindings for the profile in the
+    /// current scope, and names the ones on show.
+    private func updateBindingMarkers() {
+        guard let pressPicker, let modifierPicker else { return }
+        let bound = Preferences.shared.boundButtonCombinations(profile: detector.activeProfile, app: selectedApp)
+
+        func name(of input: ButtonInput) -> String {
+            switch input {
+            case .press(let press): return press.displayName
+            case .drag(let direction): return direction.displayName
+            }
+        }
+        for (index, input) in PreferencesWindowController.buttonInputs.enumerated() {
+            let marked = bound.contains(ButtonCombination(input: input, modifiers: buttonModifiers))
+            pressPicker.setLabel(name(of: input) + (marked ? Self.boundMarker : ""), forSegment: index)
+        }
+        for (index, segment) in PreferencesWindowController.modifierSegments.enumerated() {
+            let marked = bound.contains { $0.input == buttonInput && $0.modifiers.contains(segment.modifier) }
+            modifierPicker.setLabel(segment.label + (marked ? Self.boundMarker : ""), forSegment: index)
+        }
+
+        let shown = name(of: buttonInput)
+        slotCaption?.stringValue = buttonModifiers.isEmpty
+            ? "Showing the \(shown) bindings"
+            : "Showing the \(shown) bindings with \(buttonModifiers.symbols) held"
+    }
+
+    /// In one app's scope this hands its buttons and wheel back to the settings for all
+    /// apps; otherwise it resets the mouse in use.
+    @objc private func restoreMouseDefaultsTapped() {
+        guard let window else { return }
+        let profile = detector.activeProfile
+        let alert = NSAlert()
+        if let selectedApp, let app = Preferences.shared.appOverrides[selectedApp] {
+            alert.messageText = "Restore the mouse defaults for \(app.name)?"
+            alert.informativeText = "\(app.name) gives up its own button bindings and scroll settings and "
+                + "goes back to the ones for all apps. Its gestures are kept."
+        } else {
+            alert.messageText = "Restore the mouse defaults for the \(profile.displayName)?"
+            alert.informativeText = "Every button binding of the \(profile.displayName), for every press "
+                + "and modifier combination, goes back to its default, and so do the scroll settings "
+                + "for all mice and for this mouse. Other mice, apps' own settings, gestures and the "
+                + "keyboard cursor are kept."
+        }
+        alert.addButton(withTitle: "Restore")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .alertFirstButtonReturn else { return }
+            if let selectedApp = self.selectedApp {
+                Preferences.shared.clearAppBindings(app: selectedApp) { key in
+                    [
+                        SettingsKey.buttonPrefix, SettingsKey.buttonHoldPrefix,
+                        SettingsKey.buttonDoublePrefix, SettingsKey.buttonDragPrefix,
+                    ].contains(where: key.hasPrefix)
+                }
+                Preferences.shared.setAppScrollOverride(.none, app: selectedApp)
+            } else {
+                Preferences.shared.restoreMouseDefaults(profile: profile)
+            }
+            self.refreshDeviceUI()
+        }
     }
 
     /// ⌃⌥⇧⌘ in menu order, one segment each.
@@ -379,24 +498,36 @@ final class PreferencesWindowController: NSObject {
         // A long custom binding is cut short rather than widening the window.
         popup.cell?.lineBreakMode = .byTruncatingTail
 
+        // Headings and the unavailable item stay disabled only if the popup does not
+        // enable everything itself.
+        popup.autoenablesItems = false
+
         // Shown only while one app's bindings are being edited.
         popup.addItem(withTitle: "Same as All Apps")
         popup.lastItem?.representedObject = PickerCommand.inherit
         popup.menu?.addItem(.separator())
 
+        // Off first, where it can be found, then every action under its group's heading.
+        popup.addItem(withTitle: ButtonAction.disabled.displayName)
+        popup.lastItem?.representedObject = ButtonAction.disabled.rawValue
+
         let trigger = self.trigger(for: slot)
         var previousCategory: ButtonAction.Category?
-        for action in ButtonAction.allCases where trigger.allows(.builtin(action)) {
-            if let previousCategory, previousCategory != action.category {
+        for action in ButtonAction.allCases where action != .disabled && trigger.allows(.builtin(action)) {
+            if previousCategory != action.category {
                 popup.menu?.addItem(.separator())
+                if let heading = action.category.displayName {
+                    popup.menu?.addItem(PreferencesWindowController.makeHeading(heading))
+                }
+                previousCategory = action.category
             }
-            previousCategory = action.category
 
             popup.addItem(withTitle: action.displayName)
             popup.lastItem?.representedObject = action.rawValue
         }
 
         popup.menu?.addItem(.separator())
+        popup.menu?.addItem(PreferencesWindowController.makeHeading("Custom"))
         for (title, command) in [
             ("Keyboard Shortcut…", PickerCommand.shortcut),
             ("Launch App…", PickerCommand.launchApp),
@@ -416,6 +547,23 @@ final class PreferencesWindowController: NSObject {
 
         bindingPopups[slot] = popup
         return popup
+    }
+
+    /// A group's title in a picker: a section header where macOS draws one, a greyed item
+    /// before that.
+    private static func makeHeading(_ title: String) -> NSMenuItem {
+        if #available(macOS 14, *) {
+            return NSMenuItem.sectionHeader(title: title)
+        }
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
+    }
+
+    /// A custom binding in full, where the picker may have cut it short.
+    private static func fullDescription(of binding: ActionBinding) -> String {
+        if case .openURL(let url) = binding { return "Open \(url.absoluteString)" }
+        return binding.displayName
     }
 
     private func trigger(for slot: BindingSlot) -> BindingTrigger {
@@ -442,6 +590,9 @@ final class PreferencesWindowController: NSObject {
         inherit?.isHidden = selectedApp == nil
         inheritSeparator?.isHidden = selectedApp == nil
         popup.isEnabled = !preferences.isAppDisabled(selectedApp)
+        // Only a custom binding gets a tooltip, with its full description; a gesture's how-to
+        // is shown in the open and would only be covered by one.
+        popup.toolTip = nil
 
         let binding: ActionBinding
         if let selectedApp {
@@ -463,6 +614,7 @@ final class PreferencesWindowController: NSObject {
             item.tag = Self.customItemTag
             menu.insertItem(item, at: max(index, 0))
             popup.select(item)
+            popup.toolTip = Self.fullDescription(of: binding)
             return
         }
 
@@ -487,6 +639,7 @@ final class PreferencesWindowController: NSObject {
         for slot in bindingPopups.keys where include(slot) {
             refreshBinding(slot)
         }
+        updateBindingMarkers()
     }
 
     @objc private func bindingChanged(_ sender: NSPopUpButton) {
@@ -511,7 +664,7 @@ final class PreferencesWindowController: NSObject {
             }
         case PickerCommand.launchApp:
             guard let window else { return }
-            editor.chooseApp(in: window) { [weak self] app in
+            editor.chooseApp(message: "Choose the app to open", in: window) { [weak self] app in
                 self?.store(app.map { .launchApp(bundleID: $0.bundleID, name: $0.name) }, for: slot, cancelled: app == nil)
             }
         case PickerCommand.openURL:
@@ -544,7 +697,10 @@ final class PreferencesWindowController: NSObject {
     /// nil in an app's scope hands the slot back to the binding for all apps. A cancelled
     /// editor stores nothing and puts the picker back as it was.
     private func store(_ binding: ActionBinding?, for slot: BindingSlot, cancelled: Bool = false) {
-        defer { refreshBinding(slot) }
+        defer {
+            refreshBinding(slot)
+            if case .button = slot { updateBindingMarkers() }
+        }
         guard !cancelled else { return }
 
         let trigger = self.trigger(for: slot)
@@ -638,7 +794,7 @@ final class PreferencesWindowController: NSObject {
         }
 
         guard let window else { return }
-        editor.chooseApp(in: window) { [weak self] app in
+        editor.chooseApp(message: "Choose an app to give settings of its own", in: window) { [weak self] app in
             guard let self else { return }
             if let app {
                 Preferences.shared.addApp(bundleID: app.bundleID, name: app.name)
@@ -657,7 +813,8 @@ final class PreferencesWindowController: NSObject {
 
         let alert = NSAlert()
         alert.messageText = "Remove \(app.name)?"
-        alert.informativeText = "Its own bindings are deleted, and it goes back to the ones for all apps."
+        alert.informativeText = "Its own bindings and scroll settings are deleted, MouseNavigate is "
+            + "turned back on in it, and it goes back to the settings for all apps."
         alert.addButton(withTitle: "Remove")
         alert.addButton(withTitle: "Cancel")
         alert.beginSheetModal(for: window) { [weak self] response in
@@ -850,6 +1007,9 @@ final class PreferencesWindowController: NSObject {
             makeCharacterPane(),
         ]
         touchPanes = panes
+        // Only the pane on show animates, and only the first is on show to begin with.
+        gesturePreviews[.magicMouse]?.isAnimating = false
+        strokePreview?.isAnimating = false
 
         // Panes overlap in one container that is as large as the largest, so switching
         // never resizes the window.
@@ -886,26 +1046,144 @@ final class PreferencesWindowController: NSObject {
         stack.setCustomSpacing(14, after: scopeRow)
         stack.setCustomSpacing(12, after: panePicker)
         stack.setCustomSpacing(12, after: paneContainer)
-        footer.widthAnchor.constraint(equalTo: hint.widthAnchor).isActive = true
-        paneContainer.widthAnchor.constraint(equalTo: hint.widthAnchor).isActive = true
+        // The container is at least as wide as the text, and as wide as the widest pane if
+        // that is wider; the footer follows it.
+        paneContainer.widthAnchor.constraint(greaterThanOrEqualTo: hint.widthAnchor).isActive = true
+        footer.widthAnchor.constraint(equalTo: paneContainer.widthAnchor).isActive = true
 
         return makePage(stack)
     }
 
     private func makeGesturePane(for surface: TouchSurface) -> NSView {
+        var tracked: [(gesture: TouchGesture, row: NSView)] = []
         let rows: [[NSView]] = TouchGesture.gestures(for: surface).map { gesture in
             let label = NSTextField(labelWithString: "\(gesture.displayName):")
             label.alignment = .right
-            label.toolTip = gesture.hint
 
             let popup = makeBindingPopup(for: .touch(gesture))
-            popup.toolTip = gesture.hint
+            tracked.append((gesture, popup))
             return [label, popup]
         }
+        gestureRows[surface] = tracked
 
         let grid = makeFormGrid(rows, rowSpacing: 6)
         grid.column(at: 1).xPlacement = .fill
-        return makeScrollingPane(grid, height: 322)
+
+        let hoverView = HoverTrackingView()
+        hoverView.onHover = { [weak self] point, view in
+            self?.hoveredGesture(at: point, in: view, on: surface)
+        }
+        let list = makeScrollingPane(grid, height: 286, document: hoverView)
+
+        let listAndPreview = NSStackView(views: [list, makeGesturePreviewColumn(for: surface)])
+        listAndPreview.orientation = .horizontal
+        listAndPreview.alignment = .top
+        listAndPreview.spacing = 16
+        // Both views in it have fixed widths; nothing below may stretch it past them. A
+        // stack hugs its views at a priority of its own, 250 unless raised, which a label
+        // asking for its text in one line would beat.
+        listAndPreview.setHuggingPriority(.required, for: .horizontal)
+
+        // The how-to in words, under the picture of it. Fixed height, so the window keeps
+        // its size whatever the hint's length, and no resistance to wrapping: a wrapping
+        // label asks for the width of its whole text in one line, and would be given it.
+        let hint = NSTextField(wrappingLabelWithString: "Hover over a gesture to see how it is done.")
+        hint.font = .systemFont(ofSize: 11)
+        hint.textColor = .secondaryLabelColor
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        hint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        hint.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        gestureHintLabels[surface] = hint
+
+        let pane = NSStackView(views: [listAndPreview, hint])
+        pane.orientation = .vertical
+        pane.alignment = .leading
+        pane.spacing = 8
+        // Only once both are in the pane: a constraint between views with no common
+        // ancestor throws, which would abandon the whole window half-built.
+        hint.widthAnchor.constraint(equalTo: listAndPreview.widthAnchor).isActive = true
+        return pane
+    }
+
+    /// Shows the gesture the pointer is over: the surface from above, resting fingers in
+    /// grey and the ones that act in red.
+    private func makeGesturePreviewColumn(for surface: TouchSurface) -> NSView {
+        let preview = TouchGesturePreviewView()
+        preview.isMirrored = Preferences.shared.isLeftHanded
+        gesturePreviews[surface] = preview
+
+        let column = makePreviewColumn(
+            placeholder: "Hover a gesture",
+            legend: "Grey rests, red moves",
+            preview: preview,
+            names: TouchGesture.gestures(for: surface).map(\.displayName)
+        )
+        gesturePreviewNames[surface] = column.name
+        gesturePreviewHints[surface] = column.legend
+        return column.view
+    }
+
+    /// A name over a preview over a legend. The column is as wide as the longest name it
+    /// may show, so it never moves as the pointer goes from a short name to a long one,
+    /// and nothing beside it is stretched by one.
+    private func makePreviewColumn(
+        placeholder: String,
+        legend: String,
+        preview: NSView,
+        names: [String]
+    ) -> (view: NSView, name: NSTextField, legend: NSTextField) {
+        let font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        let name = NSTextField(labelWithString: placeholder)
+        name.font = font
+        name.alignment = .center
+        name.lineBreakMode = .byTruncatingTail
+        name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            preview.widthAnchor.constraint(equalToConstant: 150),
+            preview.heightAnchor.constraint(equalToConstant: 130),
+        ])
+
+        let legendLabel = NSTextField(labelWithString: legend)
+        legendLabel.font = .systemFont(ofSize: 11)
+        legendLabel.textColor = .secondaryLabelColor
+        legendLabel.alignment = .center
+        legendLabel.isHidden = true
+
+        let column = NSStackView(views: [name, preview, legendLabel])
+        column.orientation = .vertical
+        column.alignment = .centerX
+        column.spacing = 6
+
+        // Measured as a label, since a label draws its text with a little room either side
+        // that its intrinsic size leaves out; a column that is too narrow truncates it.
+        let widest = (names + [placeholder, legend])
+            .map { text -> CGFloat in
+                let sample = NSTextField(labelWithString: text)
+                sample.font = font
+                return sample.fittingSize.width
+            }
+            .max() ?? 0
+        column.translatesAutoresizingMaskIntoConstraints = false
+        column.widthAnchor.constraint(equalToConstant: max(150, ceil(widest))).isActive = true
+        return (column, name, legendLabel)
+    }
+
+    /// Shows how the gesture under the pointer is done. The last one stays on show when the
+    /// pointer leaves, so it can be read at leisure.
+    private func hoveredGesture(at point: NSPoint?, in view: NSView, on surface: TouchSurface) {
+        guard let point, let rows = gestureRows[surface] else { return }
+
+        let hit = rows.first { _, row in
+            let frame = view.convert(row.bounds, from: row).insetBy(dx: 0, dy: -3)
+            return point.y >= frame.minY && point.y <= frame.maxY
+        }
+        guard let hit else { return }
+        gesturePreviews[surface]?.gesture = hit.gesture
+        gesturePreviewNames[surface]?.stringValue = hit.gesture.displayName
+        gesturePreviewHints[surface]?.isHidden = false
+        gestureHintLabels[surface]?.stringValue = hit.gesture.hint
     }
 
     private func makeCharacterPane() -> NSView {
@@ -956,6 +1234,7 @@ final class PreferencesWindowController: NSObject {
         listAndPreview.orientation = .horizontal
         listAndPreview.alignment = .top
         listAndPreview.spacing = 16
+        listAndPreview.setHuggingPriority(.required, for: .horizontal)
 
         let stack = NSStackView(views: [showDrawing] + sources + [listAndPreview])
         stack.orientation = .vertical
@@ -1012,31 +1291,18 @@ final class PreferencesWindowController: NSObject {
 
     /// Shows the stroke for whichever character the pointer is over.
     private func makeStrokePreviewColumn() -> NSView {
-        let name = NSTextField(labelWithString: "Hover a character")
-        name.font = .systemFont(ofSize: 13, weight: .semibold)
-        name.alignment = .center
-        strokePreviewName = name
-
         let preview = StrokePreviewView()
-        preview.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            preview.widthAnchor.constraint(equalToConstant: 150),
-            preview.heightAnchor.constraint(equalToConstant: 130),
-        ])
         strokePreview = preview
 
-        let hint = NSTextField(labelWithString: "Start at the dot")
-        hint.font = .systemFont(ofSize: 11)
-        hint.textColor = .secondaryLabelColor
-        hint.alignment = .center
-        hint.isHidden = true
-        strokePreviewHint = hint
-
-        let column = NSStackView(views: [name, preview, hint])
-        column.orientation = .vertical
-        column.alignment = .centerX
-        column.spacing = 6
-        return column
+        let column = makePreviewColumn(
+            placeholder: "Hover a character",
+            legend: "Start at the dot",
+            preview: preview,
+            names: CharacterGesture.allCases.map(\.displayName)
+        )
+        strokePreviewName = column.name
+        strokePreviewHint = column.legend
+        return column.view
     }
 
     /// `point` is in `view`, or nil when the pointer has left the list. The last character
@@ -1093,6 +1359,9 @@ final class PreferencesWindowController: NSObject {
         let preferences = Preferences.shared
         touchEnableCheckbox?.state = preferences.isTouchEnabled ? .on : .off
         leftHandedCheckbox?.state = preferences.isLeftHanded ? .on : .off
+        for preview in gesturePreviews.values {
+            preview.isMirrored = preferences.isLeftHanded
+        }
 
         refreshBindings { slot in
             if case .button = slot { return false }
@@ -1142,6 +1411,9 @@ final class PreferencesWindowController: NSObject {
 
     @objc private func leftHandedChanged(_ sender: NSButton) {
         Preferences.shared.isLeftHanded = sender.state == .on
+        for preview in gesturePreviews.values {
+            preview.isMirrored = sender.state == .on
+        }
     }
 
     @objc private func touchPaneChanged(_ sender: NSSegmentedControl) {
@@ -1149,7 +1421,9 @@ final class PreferencesWindowController: NSObject {
             pane.isHidden = index != sender.selectedSegment
         }
         // Nothing should animate on a pane nobody is looking at.
-        strokePreview?.isAnimating = touchPanes.last?.isHidden == false
+        gesturePreviews[.trackpad]?.isAnimating = sender.selectedSegment == 0
+        gesturePreviews[.magicMouse]?.isAnimating = sender.selectedSegment == 1
+        strokePreview?.isAnimating = sender.selectedSegment == 2
     }
 
     @objc private func showDrawingChanged(_ sender: NSButton) {
@@ -1288,7 +1562,10 @@ final class PreferencesWindowController: NSObject {
         case .failed(let message):
             text = message
         case .upToDate, .idle:
-            if let last = Preferences.shared.lastUpdateCheck {
+            if !updater.canSelfUpdate {
+                // The checkbox above is greyed out; say why where it can be read.
+                text = "Only a release signed with a Developer ID, installed from GitHub, updates itself."
+            } else if let last = Preferences.shared.lastUpdateCheck {
                 let formatter = RelativeDateTimeFormatter()
                 text = "Up to date. Last checked \(formatter.localizedString(for: last, relativeTo: Date()))."
             } else {

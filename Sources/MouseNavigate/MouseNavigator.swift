@@ -107,6 +107,7 @@ final class MouseNavigator {
         }
         controller.setup()
         statusBarController = controller
+        installMainMenu()
 
         cursorEngine.onModeChange = { [weak controller] active in
             controller?.isCursorModeActive = active
@@ -384,10 +385,61 @@ final class MouseNavigator {
     }
 
     private func updateFrontmostDisabled() {
-        let disabled = Preferences.shared.isAppDisabled(FrontmostApp.shared.bundleID)
+        let bundleID = FrontmostApp.shared.bundleID
+        let disabled = Preferences.shared.isAppDisabled(bundleID)
+        // The menu bar says which app it is standing aside for, so a Mac where nothing
+        // works never looks like a Mac where MouseNavigate has stopped.
+        statusBarController?.disabledInApp = disabled
+            ? bundleID.flatMap { Preferences.shared.appOverrides[$0]?.name } ?? bundleID
+            : nil
         guard disabled != isFrontmostDisabled else { return }
         isFrontmostDisabled = disabled
         applyPauseState()
+    }
+
+    /// An accessory app shows no menu bar, but the key equivalents of its main menu still
+    /// work while one of its windows is in front. Without one, ⌘C, ⌘V and ⌘A do nothing in
+    /// the Settings window's text fields and ⌘W does not close it.
+    private func installMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Settings…", action: #selector(showSettingsFromMenu), keyEquivalent: ",").target = self
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit MouseNavigate", action: #selector(quitFromMenu), keyEquivalent: "q").target = self
+        let appItem = NSMenuItem()
+        appItem.submenu = appMenu
+        mainMenu.addItem(appItem)
+
+        // First responder actions: whichever text field has focus handles them.
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let editItem = NSMenuItem()
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
+
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        let windowItem = NSMenuItem()
+        windowItem.submenu = windowMenu
+        mainMenu.addItem(windowItem)
+
+        NSApp.mainMenu = mainMenu
+    }
+
+    @objc private func showSettingsFromMenu() {
+        showPreferences()
+    }
+
+    @objc private func quitFromMenu() {
+        statusBarController?.onQuit?()
     }
 
     @objc private func handleWillSleep() {

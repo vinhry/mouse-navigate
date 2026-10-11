@@ -51,6 +51,20 @@ public enum ButtonAction: String, CaseIterable {
 
     public enum Category: CaseIterable {
         case browsing, editing, window, system, media, launch, app, none
+
+        /// The heading over the group in a picker; nil for the one that needs none.
+        public var displayName: String? {
+            switch self {
+            case .browsing: return "Browsing"
+            case .editing: return "Editing"
+            case .window: return "Windows"
+            case .system: return "System"
+            case .media: return "Media"
+            case .launch: return "Launch"
+            case .app: return "MouseNavigate"
+            case .none: return nil
+            }
+        }
     }
 
     public var category: Category {
@@ -84,7 +98,7 @@ public enum ButtonAction: String, CaseIterable {
         case .previousTab: return "Previous Tab (⌃⇧⇥)"
         case .newTab: return "New Tab (⌘T)"
         case .closeTab: return "Close Tab / Window (⌘W)"
-        case .reopenClosedTab: return "Reopen Closed Tab (⌘⇧T)"
+        case .reopenClosedTab: return "Reopen Closed Tab (⇧⌘T)"
         case .refresh: return "Refresh (⌘R)"
         case .openLinkInNewTab: return "Open Link in New Tab (Middle Click)"
         case .copy: return "Copy (⌘C)"
@@ -104,7 +118,7 @@ public enum ButtonAction: String, CaseIterable {
         case .spaceLeft: return "Move Left a Space"
         case .spaceRight: return "Move Right a Space"
         case .lockScreen: return "Lock Screen (⌃⌘Q)"
-        case .screenshot: return "Screenshot Selection (⌘⇧4)"
+        case .screenshot: return "Screenshot Selection (⇧⌘4)"
         case .playPause: return "Play / Pause"
         case .nextTrack: return "Next Track"
         case .previousTrack: return "Previous Track"

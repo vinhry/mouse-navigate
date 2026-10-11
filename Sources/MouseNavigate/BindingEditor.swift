@@ -26,8 +26,9 @@ final class BindingEditor: NSObject, NSTextFieldDelegate, NSComboBoxDelegate {
         let recorder = ShortcutRecorderButton(shortcut: current)
         recorder.frame = NSRect(x: 0, y: 0, width: 220, height: 28)
         recorder.onRecordingChange = { [weak self] recording in
-            // Stop the tap from eating the keystroke being recorded.
-            self?.engine.isSuspended = recording
+            // Stop the tap from eating the keystroke being recorded. The recording flag,
+            // not the pause flag: finishing here must not resume a paused app.
+            self?.engine.isRecordingSuspended = recording
         }
         alert.accessoryView = recorder
 
@@ -39,7 +40,7 @@ final class BindingEditor: NSObject, NSTextFieldDelegate, NSComboBoxDelegate {
 
         alert.beginSheetModal(for: window) { [weak self] response in
             recorder.cancel()
-            self?.engine.isSuspended = false
+            self?.engine.isRecordingSuspended = false
             completion(response == .alertFirstButtonReturn ? recorder.shortcut : nil)
         }
         // Straight into recording: that is the only thing this sheet is for.
@@ -48,9 +49,11 @@ final class BindingEditor: NSObject, NSTextFieldDelegate, NSComboBoxDelegate {
 
     // MARK: - App
 
-    func chooseApp(in window: NSWindow, completion: @escaping ((bundleID: String, name: String)?) -> Void) {
+    /// `message` says what the app is for: the same panel picks an app to launch and an app
+    /// to give its own bindings.
+    func chooseApp(message: String, in window: NSWindow, completion: @escaping ((bundleID: String, name: String)?) -> Void) {
         let panel = NSOpenPanel()
-        panel.message = "Choose an app"
+        panel.message = message
         panel.prompt = "Choose"
         panel.allowedContentTypes = [.application]
         panel.allowsMultipleSelection = false

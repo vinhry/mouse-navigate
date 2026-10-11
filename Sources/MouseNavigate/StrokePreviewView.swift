@@ -148,7 +148,11 @@ final class StrokePreviewView: NSView {
 
     private func updateAnimation() {
         stroke.removeAnimation(forKey: StrokePreviewView.animationKey)
-        guard isAnimating, window != nil, stroke.path != nil else {
+        // With Reduce Motion on, the finished stroke and its start ring say the same thing
+        // without a loop that never stops.
+        guard isAnimating, window != nil, stroke.path != nil,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        else {
             stroke.strokeEnd = 1
             return
         }

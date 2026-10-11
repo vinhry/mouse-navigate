@@ -399,6 +399,68 @@ final class PreferencesTests: XCTestCase {
 
     // MARK: - Notifications
 
+    // MARK: - Mouse tab helpers
+
+    func testBoundButtonCombinationsLeaveOutPlainClicksAndDefaults() {
+        let preferences = makePreferences()
+        XCTAssertTrue(preferences.boundButtonCombinations(profile: .mxMaster4, app: nil).isEmpty)
+
+        // A plain click, changed or not, never counts: every button has one.
+        preferences.setGlobalBinding(.builtin(.copy), for: .button(3, .mxMaster4))
+        // A hold left at its default of Disabled does not count either.
+        preferences.setGlobalBinding(.disabled, for: .button(4, .mxMaster4, .hold))
+        XCTAssertTrue(preferences.boundButtonCombinations(profile: .mxMaster4, app: nil).isEmpty)
+
+        preferences.setGlobalBinding(.builtin(.missionControl), for: .button(5, .mxMaster4, .hold))
+        preferences.setGlobalBinding(.builtin(.back), for: .button(3, .mxMaster4, .click, [.command, .shift]))
+        preferences.setGlobalBinding(.builtin(.paste), for: .buttonDrag(6, .mxMaster4, .up))
+        XCTAssertEqual(preferences.boundButtonCombinations(profile: .mxMaster4, app: nil), [
+            ButtonCombination(input: .press(.hold), modifiers: []),
+            ButtonCombination(input: .press(.click), modifiers: [.command, .shift]),
+            ButtonCombination(input: .drag(.up), modifiers: []),
+        ])
+        // Another profile's bindings are its own.
+        XCTAssertTrue(preferences.boundButtonCombinations(profile: .mxMaster3, app: nil).isEmpty)
+    }
+
+    func testBoundButtonCombinationsInAnAppCountItsOwnBindingsOnly() {
+        let preferences = makePreferences()
+        preferences.addApp(bundleID: "com.apple.Safari", name: "Safari")
+        preferences.setGlobalBinding(.builtin(.missionControl), for: .button(5, .mxMaster4, .hold))
+        XCTAssertTrue(preferences.boundButtonCombinations(profile: .mxMaster4, app: "com.apple.Safari").isEmpty)
+
+        // An app's binding counts even when it is Disabled: that is a choice of its own.
+        preferences.setAppBinding(.disabled, for: .button(5, .mxMaster4, .doubleClick), app: "com.apple.Safari")
+        XCTAssertEqual(preferences.boundButtonCombinations(profile: .mxMaster4, app: "com.apple.Safari"), [
+            ButtonCombination(input: .press(.doubleClick), modifiers: []),
+        ])
+    }
+
+    func testRestoreMouseDefaultsClearsOneProfileAndItsScroll() {
+        let preferences = makePreferences()
+        preferences.setGlobalBinding(.builtin(.copy), for: .button(3, .mxMaster4))
+        preferences.setGlobalBinding(.builtin(.paste), for: .button(3, .mxMaster4, .hold))
+        preferences.setGlobalBinding(.builtin(.paste), for: .buttonDrag(3, .mxMaster4, .down, [.command]))
+        preferences.setGlobalBinding(.builtin(.copy), for: .button(3, .mxMaster3))
+        preferences.setGlobalBinding(.builtin(.copy), for: .touch(.trackpadThreeFingerTap))
+        preferences.setScrollOverride(ScrollOverride(settings: ScrollSettings(verticalSpeed: 2)), for: .mxMaster4)
+        preferences.setScrollOverride(ScrollOverride(settings: ScrollSettings(verticalSpeed: 3)), for: .mxMaster3)
+        var global = ScrollSettings.standard
+        global.isSmooth = true
+        preferences.scrollSettings = global
+
+        preferences.restoreMouseDefaults(profile: .mxMaster4)
+
+        XCTAssertEqual(preferences.globalBinding(for: .button(3, .mxMaster4)), .builtin(.back))
+        XCTAssertEqual(preferences.globalBinding(for: .button(3, .mxMaster4, .hold)), .disabled)
+        XCTAssertEqual(preferences.globalBinding(for: .buttonDrag(3, .mxMaster4, .down, [.command])), .disabled)
+        XCTAssertEqual(preferences.globalBinding(for: .button(3, .mxMaster3)), .builtin(.copy))
+        XCTAssertEqual(preferences.globalBinding(for: .touch(.trackpadThreeFingerTap)), .builtin(.copy))
+        XCTAssertTrue(preferences.scrollOverride(for: .mxMaster4).isEmpty)
+        XCTAssertFalse(preferences.scrollOverride(for: .mxMaster3).isEmpty)
+        XCTAssertEqual(preferences.scrollSettings, .standard)
+    }
+
     func testChangeNotificationNamesItsArea() {
         let preferences = makePreferences()
         var areas: [SettingsArea] = []

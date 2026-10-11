@@ -48,8 +48,21 @@ extension PreferencesWindowController {
         }
     }
 
+    /// The file is read and checked before the question is asked, so a file that cannot be
+    /// imported is refused without a replace being agreed to first.
     private func confirmImport(from url: URL) {
         guard let window else { return }
+        let result: SettingsSnapshot.ReadResult
+        do {
+            result = try Preferences.shared.readSettings(try Data(contentsOf: url))
+        } catch let error as SettingsSnapshot.ReadError {
+            showTransferError("Couldn't import settings", PreferencesWindowController.describe(error))
+            return
+        } catch {
+            showTransferError("Couldn't import settings", error.localizedDescription)
+            return
+        }
+
         let alert = NSAlert()
         alert.messageText = "Replace your settings with the ones in “\(url.lastPathComponent)”?"
         alert.informativeText = "Every button, gesture, keyboard cursor and scroll setting on this Mac "
@@ -60,29 +73,24 @@ extension PreferencesWindowController {
             guard response == .alertFirstButtonReturn else { return }
             // The sheet has to be gone before another can be shown.
             DispatchQueue.main.async {
-                self?.importSettings(from: url)
+                self?.importSettings(result)
             }
         }
     }
 
-    private func importSettings(from url: URL) {
-        let result: SettingsSnapshot.ReadResult
-        do {
-            result = try Preferences.shared.importSettings(try Data(contentsOf: url))
-        } catch let error as SettingsSnapshot.ReadError {
-            showTransferError("Couldn't import settings", PreferencesWindowController.describe(error))
-            return
-        } catch {
-            showTransferError("Couldn't import settings", error.localizedDescription)
-            return
-        }
+    private func importSettings(_ result: SettingsSnapshot.ReadResult) {
+        Preferences.shared.applySettings(result)
         refreshAllUI()
 
-        guard !result.ignoredKeys.isEmpty, let window else { return }
+        guard let window else { return }
         let alert = NSAlert()
         alert.messageText = "Settings imported"
-        alert.informativeText = "Settings this version of MouseNavigate does not know were left out: "
-            + result.ignoredKeys.joined(separator: ", ") + "."
+        if result.ignoredKeys.isEmpty {
+            alert.informativeText = "Every setting now comes from the file."
+        } else {
+            alert.informativeText = "Settings this version of MouseNavigate does not know were left out:\n"
+                + result.ignoredKeys.joined(separator: "\n")
+        }
         alert.beginSheetModal(for: window)
     }
 

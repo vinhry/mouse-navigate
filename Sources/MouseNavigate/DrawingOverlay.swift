@@ -220,6 +220,10 @@ final class DrawingOverlay {
 
         let work = DispatchWorkItem { [weak self] in
             guard let panel = self?.panel else { return }
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                self?.hide()
+                return
+            }
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = DrawingOverlay.fadeDuration
                 panel.animator().alphaValue = 0
@@ -240,8 +244,11 @@ private final class OverlayCanvas: NSView {
     private static let inkWidth: CGFloat = 14
 
     private let ink = CAShapeLayer()
+    /// Behind the result: red letters alone vanish over dark or red content.
+    private let plate = CALayer()
     private let title = CATextLayer()
     private let subtitle = CATextLayer()
+    private static let platePadding = CGSize(width: 28, height: 14)
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -253,6 +260,10 @@ private final class OverlayCanvas: NSView {
         ink.lineJoin = .round
         ink.strokeColor = DrawingOverlay.inkColor.cgColor
         layer?.addSublayer(ink)
+
+        plate.cornerRadius = 22
+        plate.isHidden = true
+        layer?.addSublayer(plate)
 
         for label in [title, subtitle] {
             label.alignmentMode = .center
@@ -285,6 +296,7 @@ private final class OverlayCanvas: NSView {
         withoutAnimation {
             ink.path = path
             ink.isHidden = false
+            plate.isHidden = true
             title.isHidden = true
             subtitle.isHidden = true
         }
@@ -307,11 +319,13 @@ private final class OverlayCanvas: NSView {
             let x = min(max(centre.x - width / 2, 0), max(bounds.width - width, 0))
             let titleY = min(max(top - titleHeight, subtitleHeight), bounds.height - titleHeight)
 
-            title.string = attributed(text, size: titleSize, weight: .bold, alpha: 1)
+            let titleText = attributed(text, size: titleSize, weight: .bold, alpha: 1)
+            title.string = titleText
             title.frame = CGRect(x: x, y: titleY, width: width, height: titleHeight)
             title.isHidden = false
 
-            subtitle.string = detail.map { attributed($0, size: 20, weight: .bold, alpha: 1) }
+            let subtitleText = detail.map { attributed($0, size: 20, weight: .bold, alpha: 1) }
+            subtitle.string = subtitleText
             subtitle.frame = CGRect(
                 x: x,
                 y: titleY - subtitleHeight,
@@ -319,12 +333,29 @@ private final class OverlayCanvas: NSView {
                 height: subtitleHeight
             )
             subtitle.isHidden = detail == nil
+
+            // As wide as the longer line, so a lone letter gets a small plate and a long
+            // action name a wide one. Its colour follows the system appearance, so it is
+            // light over a light desktop and dark over a dark one.
+            let textWidth = max(titleText.size().width, subtitleText?.size().width ?? 0)
+            let plateWidth = min(textWidth, width) + OverlayCanvas.platePadding.width * 2
+            plate.frame = CGRect(
+                x: centre.x - plateWidth / 2,
+                y: titleY - subtitleHeight - OverlayCanvas.platePadding.height,
+                width: plateWidth,
+                height: titleHeight + subtitleHeight + OverlayCanvas.platePadding.height * 2
+            )
+            NSApp.effectiveAppearance.performAsCurrentDrawingAppearance {
+                plate.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.85).cgColor
+            }
+            plate.isHidden = false
         }
     }
 
     func clear() {
         withoutAnimation {
             ink.path = nil
+            plate.isHidden = true
             title.isHidden = true
             subtitle.isHidden = true
         }
