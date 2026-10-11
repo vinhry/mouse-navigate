@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.7.0] - 2026-10-11
 
 ### Added
 - Eight two-segment drawn strokes, each one straight leg then another, under
