@@ -13,6 +13,13 @@ All notable changes to this project will be documented in this file.
 - Taking Accessibility away from MouseNavigate while it ran left the menu bar saying
   Running while nothing worked. It now notices within seconds, shows the permission
   warning, and starts again by itself once access is granted.
+- **Launch Finder**, **Launch Default Browser** and **Launch App** looked the app up while
+  every click and keystroke on the Mac waited, and so did the actions that send a macOS
+  shortcut (**Move Left / Right a Space**, **Screenshot Selection**, and **Mission
+  Control**, **App Exposé** and **Show Desktop** when the Dock cannot be asked directly),
+  which read System Settings on every use. The launches happen once the press has been
+  answered, and the shortcuts are read ahead of time. A button bound to an app that has
+  since been deleted now does nothing rather than its usual click, and says so in the log.
 
 ## [0.7.0] - 2026-10-11
 

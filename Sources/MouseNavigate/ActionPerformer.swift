@@ -15,30 +15,10 @@ final class ActionPerformer {
     private static let hiServicesPath =
         "/System/Library/Frameworks/ApplicationServices.framework/Frameworks/HIServices.framework/HIServices"
 
-    /// Symbolic hot key IDs from `com.apple.symbolichotkeys`.
-    private enum SymbolicHotKey {
-        static let missionControl = 32
-        static let appExpose = 33
-        static let showDesktop = 36
-        static let spaceLeft = 79
-        static let spaceRight = 81
-        static let screenshotSelection = 30
-    }
-
-    /// `NX_KEYTYPE_*` from IOKit's `ev_keymap.h`: what the media keys on an Apple keyboard
-    /// send, so they reach whichever player macOS routes those keys to.
-    private enum MediaKey {
-        static let soundUp: Int32 = 0
-        static let soundDown: Int32 = 1
-        static let mute: Int32 = 7
-        static let play: Int32 = 16
-        static let fast: Int32 = 19
-        static let rewind: Int32 = 20
-    }
-
     private let cursorEngine: KeyboardCursorEngine
     let windowManager: WindowManager
     private let pointer = CursorOutput()
+    private let systemShortcuts = SymbolicHotKeyCache()
 
     // The handle is never closed: HIServices stays mapped for the life of the process,
     // which costs nothing and cannot pull the code out from under a call in flight.
@@ -70,11 +50,9 @@ final class ActionPerformer {
             send(shortcut)
             return true
         case .launchApp(let bundleID, _):
-            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-                Log.actions.notice("No app found for \(bundleID, privacy: .public); nothing launched.")
-                return false
-            }
-            later { self.launchApplication(at: url) }
+            // Finding the app asks Launch Services, which can take its time, so a missing
+            // app is only found out about later; the press is spoken for either way.
+            later { self.launchApplication(bundleID: bundleID) }
             return true
         case .openURL(let url):
             later {
@@ -129,44 +107,50 @@ final class ActionPerformer {
             triggerShowDesktop()
             return true
         case .spaceLeft:
-            if !sendConfiguredSymbolicHotKey(id: SymbolicHotKey.spaceLeft) {
+            if !sendConfiguredSymbolicHotKey(id: SymbolicHotKeys.spaceLeft) {
                 sendShortcut(keyCode: CGKeyCode(KeyCode.leftArrow), flags: [.maskControl, .maskSecondaryFn])
             }
             return true
         case .spaceRight:
-            if !sendConfiguredSymbolicHotKey(id: SymbolicHotKey.spaceRight) {
+            if !sendConfiguredSymbolicHotKey(id: SymbolicHotKeys.spaceRight) {
                 sendShortcut(keyCode: CGKeyCode(KeyCode.rightArrow), flags: [.maskControl, .maskSecondaryFn])
             }
             return true
         case .screenshot:
-            if !sendConfiguredSymbolicHotKey(id: SymbolicHotKey.screenshotSelection) {
+            if !sendConfiguredSymbolicHotKey(id: SymbolicHotKeys.screenshotSelection) {
                 sendShortcut(keyCode: CGKeyCode(KeyCode.four), flags: [.maskCommand, .maskShift])
             }
             return true
         case .playPause:
-            sendMediaKey(MediaKey.play)
+            sendMediaKey(.play)
             return true
         case .nextTrack:
-            sendMediaKey(MediaKey.fast)
+            sendMediaKey(.fast)
             return true
         case .previousTrack:
-            sendMediaKey(MediaKey.rewind)
+            sendMediaKey(.rewind)
             return true
         case .volumeUp:
-            sendMediaKey(MediaKey.soundUp)
+            sendMediaKey(.soundUp)
             return true
         case .volumeDown:
-            sendMediaKey(MediaKey.soundDown)
+            sendMediaKey(.soundDown)
             return true
         case .mute:
-            sendMediaKey(MediaKey.mute)
+            sendMediaKey(.mute)
             return true
         case .launchFinder:
-            launchApplication(at: NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder"))
+            later { self.launchApplication(bundleID: "com.apple.finder") }
             return true
         case .launchBrowser:
-            let probe = URL(string: "https://example.com")!
-            launchApplication(at: NSWorkspace.shared.urlForApplication(toOpen: probe))
+            later {
+                let probe = URL(string: "https://example.com")!
+                guard let browser = NSWorkspace.shared.urlForApplication(toOpen: probe) else {
+                    Log.actions.notice("No default web browser found; nothing launched.")
+                    return
+                }
+                self.launchApplication(at: browser)
+            }
             return true
         case .toggleCursorMode:
             cursorEngine.toggleFromMouseButton()
@@ -193,8 +177,15 @@ final class ActionPerformer {
         SupportedApps.isSupported(bundleID: FrontmostApp.shared.bundleID)
     }
 
-    private func launchApplication(at url: URL?) {
-        guard let url else { return }
+    private func launchApplication(bundleID: String) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            Log.actions.notice("No app found for \(bundleID, privacy: .public); nothing launched.")
+            return
+        }
+        launchApplication(at: url)
+    }
+
+    private func launchApplication(at url: URL) {
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
@@ -238,20 +229,19 @@ final class ActionPerformer {
         SyntheticEvents.post(keyUp)
     }
 
-    /// Media keys are not key codes but system-defined events: subtype 8, with the key in
-    /// the top half of `data1` and the down (0xA) or up (0xB) state beneath it.
-    private func sendMediaKey(_ key: Int32) {
+    /// Sent as the keyboard's own media keys are, so they reach whichever player macOS
+    /// routes those keys to.
+    private func sendMediaKey(_ key: MediaKey) {
         for isDown in [true, false] {
-            let state: Int32 = isDown ? 0xA : 0xB
             guard let event = NSEvent.otherEvent(
                 with: .systemDefined,
                 location: .zero,
-                modifierFlags: NSEvent.ModifierFlags(rawValue: UInt(state) << 8),
+                modifierFlags: NSEvent.ModifierFlags(rawValue: MediaKey.modifierFlags(isDown: isDown)),
                 timestamp: 0,
                 windowNumber: 0,
                 context: nil,
-                subtype: 8,
-                data1: Int((key << 16) | (state << 8)),
+                subtype: MediaKey.eventSubtype,
+                data1: key.data1(isDown: isDown),
                 data2: -1
             ), let cgEvent = event.cgEvent else {
                 return
@@ -266,7 +256,7 @@ final class ActionPerformer {
         if sendCoreDockNotification("com.apple.expose.front.awake") {
             return
         }
-        if sendConfiguredSymbolicHotKey(id: SymbolicHotKey.appExpose) {
+        if sendConfiguredSymbolicHotKey(id: SymbolicHotKeys.appExpose) {
             return
         }
         postDockNotification("com.apple.expose.front.awake")
@@ -276,7 +266,7 @@ final class ActionPerformer {
         if sendCoreDockNotification("com.apple.expose.awake") {
             return
         }
-        if sendConfiguredSymbolicHotKey(id: SymbolicHotKey.missionControl) {
+        if sendConfiguredSymbolicHotKey(id: SymbolicHotKeys.missionControl) {
             return
         }
         postDockNotification("com.apple.expose.awake")
@@ -287,45 +277,20 @@ final class ActionPerformer {
         if sendCoreDockNotification("com.apple.showdesktop.awake") {
             return
         }
-        if sendConfiguredSymbolicHotKey(id: SymbolicHotKey.showDesktop) {
+        if sendConfiguredSymbolicHotKey(id: SymbolicHotKeys.showDesktop) {
             return
         }
         postDockNotification("com.apple.showdesktop.awake")
     }
 
+    /// Sends the shortcut set for a macOS feature under System Settings → Keyboard, if it is
+    /// on. Read from the cache, then reread in the background, so a shortcut changed there
+    /// is the one sent from the next use.
     private func sendConfiguredSymbolicHotKey(id: Int) -> Bool {
-        guard
-            let domain = UserDefaults.standard.persistentDomain(forName: "com.apple.symbolichotkeys"),
-            let allHotKeys = domain["AppleSymbolicHotKeys"] as? [String: Any],
-            let hotKey = allHotKeys[String(id)] as? [String: Any],
-            (hotKey["enabled"] as? Bool) == true,
-            let value = hotKey["value"] as? [String: Any],
-            let parameters = value["parameters"] as? [Any],
-            parameters.count >= 3,
-            let keyCodeInt = intValue(from: parameters[1]),
-            let flagsInt = intValue(from: parameters[2])
-        else {
-            return false
-        }
-
-        sendShortcut(
-            keyCode: CGKeyCode(keyCodeInt),
-            flags: CGEventFlags(rawValue: UInt64(flagsInt))
-        )
+        defer { systemShortcuts.reload() }
+        guard let hotKey = systemShortcuts.hotKeys[id] else { return false }
+        sendShortcut(keyCode: CGKeyCode(hotKey.keyCode), flags: CGEventFlags(rawValue: hotKey.flags))
         return true
-    }
-
-    private func intValue(from value: Any) -> Int? {
-        if let intValue = value as? Int {
-            return intValue
-        }
-        if let numberValue = value as? NSNumber {
-            return numberValue.intValue
-        }
-        if let stringValue = value as? String {
-            return Int(stringValue)
-        }
-        return nil
     }
 
     private func sendCoreDockNotification(_ name: String) -> Bool {
