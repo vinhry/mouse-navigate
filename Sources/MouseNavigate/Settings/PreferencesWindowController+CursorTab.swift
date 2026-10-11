@@ -64,16 +64,13 @@ extension PreferencesWindowController {
             let label = NSTextField(labelWithString: "\(setting.displayName):")
             label.alignment = .right
 
-            let slider = NSSlider(
+            let slider = makeSlider(
                 value: Preferences.shared.value(for: setting),
-                minValue: setting.range.lowerBound,
-                maxValue: setting.range.upperBound,
-                target: self,
+                range: setting.range,
+                width: 160,
                 action: #selector(sliderChanged(_:))
             )
             slider.tag = CursorSetting.allCases.firstIndex(of: setting) ?? 0
-            slider.translatesAutoresizingMaskIntoConstraints = false
-            slider.widthAnchor.constraint(equalToConstant: 160).isActive = true
             if setting == .retypeWindow {
                 slider.toolTip = "Holding the activate key is taken by cursor mode. "
                     + "Tap it and press it again within this time to type its letter "
@@ -81,11 +78,7 @@ extension PreferencesWindowController {
             }
             sliders[setting] = slider
 
-            let valueLabel = NSTextField(labelWithString: "")
-            valueLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-            valueLabel.textColor = .secondaryLabelColor
-            valueLabel.translatesAutoresizingMaskIntoConstraints = false
-            valueLabel.widthAnchor.constraint(equalToConstant: 64).isActive = true
+            let valueLabel = PreferencesWindowController.makeValueLabel(width: 64)
             sliderValueLabels[setting] = valueLabel
             updateValueLabel(for: setting)
 
@@ -101,17 +94,7 @@ extension PreferencesWindowController {
         sections.alignment = .top
         sections.spacing = 36
 
-        let restore = NSButton(
-            title: "Restore Defaults",
-            target: self,
-            action: #selector(restoreDefaultsTapped)
-        )
-
-        // Pushes Restore Defaults to the trailing edge of the row.
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let footer = NSStackView(views: [spacer, restore])
-        footer.orientation = .horizontal
+        let footer = makeRestoreDefaultsFooter(action: #selector(restoreDefaultsTapped))
 
         let stack = NSStackView(views: [checkbox, hint, sections, footer])
         stack.orientation = .vertical

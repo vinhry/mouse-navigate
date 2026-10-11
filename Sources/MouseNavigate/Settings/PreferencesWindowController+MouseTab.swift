@@ -90,15 +90,7 @@ extension PreferencesWindowController {
         tester.textColor = .secondaryLabelColor
         testerLabel = tester
 
-        let restore = NSButton(
-            title: "Restore Defaults",
-            target: self,
-            action: #selector(restoreMouseDefaultsTapped)
-        )
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let footer = NSStackView(views: [spacer, restore])
-        footer.orientation = .horizontal
+        let footer = makeRestoreDefaultsFooter(action: #selector(restoreMouseDefaultsTapped))
 
         let scroll = makeScrollSection()
         let stack = NSStackView(views: [label, makeScopeRow(), grid, tester, scroll, footer])

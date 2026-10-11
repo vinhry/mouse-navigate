@@ -115,15 +115,7 @@ extension PreferencesWindowController {
             paneContainer.heightAnchor.constraint(equalToConstant: ceil(paneSizes.map(\.height).max() ?? 0)),
         ])
 
-        let restore = NSButton(
-            title: "Restore Defaults",
-            target: self,
-            action: #selector(restoreTouchDefaultsTapped)
-        )
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let footer = NSStackView(views: [spacer, restore])
-        footer.orientation = .horizontal
+        let footer = makeRestoreDefaultsFooter(action: #selector(restoreTouchDefaultsTapped))
 
         let scopeRow = makeScopeRow()
         let stack = NSStackView(views: [toggles, hint, status, conflictRow, scopeRow, panePicker, paneContainer, footer])
@@ -356,23 +348,16 @@ extension PreferencesWindowController {
     func makeDrawSpreadRow() -> NSView {
         let caption = NSTextField(labelWithString: "Finger spacing:")
 
-        let slider = NSSlider(
+        let slider = makeSlider(
             value: Preferences.shared.characterDrawSpread,
-            minValue: TouchTuning.drawSpreadRange.lowerBound,
-            maxValue: TouchTuning.drawSpreadRange.upperBound,
-            target: self,
+            range: TouchTuning.drawSpreadRange,
+            width: 160,
             action: #selector(drawSpreadChanged(_:))
         )
-        slider.translatesAutoresizingMaskIntoConstraints = false
-        slider.widthAnchor.constraint(equalToConstant: 160).isActive = true
         slider.toolTip = "Index and middle fingers sit close together; index and ring are further apart."
         drawSpreadSlider = slider
 
-        let value = NSTextField(labelWithString: "")
-        value.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        value.textColor = .secondaryLabelColor
-        value.translatesAutoresizingMaskIntoConstraints = false
-        value.widthAnchor.constraint(equalToConstant: 110).isActive = true
+        let value = PreferencesWindowController.makeValueLabel(width: 110)
         drawSpreadLabel = value
 
         let row = NSStackView(views: [caption, slider, value])

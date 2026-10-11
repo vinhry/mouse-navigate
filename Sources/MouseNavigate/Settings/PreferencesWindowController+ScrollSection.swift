@@ -155,21 +155,13 @@ extension PreferencesWindowController {
 
     private func makeSpeedRow(title: String) -> (NSView, NSSlider, NSTextField) {
         let label = NSTextField(labelWithString: title)
-        let slider = NSSlider(
+        let slider = makeSlider(
             value: 1,
-            minValue: ScrollSettings.speedRange.lowerBound,
-            maxValue: ScrollSettings.speedRange.upperBound,
-            target: self,
+            range: ScrollSettings.speedRange,
+            width: 180,
             action: #selector(scrollSettingChanged(_:))
         )
-        slider.translatesAutoresizingMaskIntoConstraints = false
-        slider.widthAnchor.constraint(equalToConstant: 180).isActive = true
-
-        let value = NSTextField(labelWithString: "")
-        value.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        value.textColor = .secondaryLabelColor
-        value.translatesAutoresizingMaskIntoConstraints = false
-        value.widthAnchor.constraint(equalToConstant: 40).isActive = true
+        let value = PreferencesWindowController.makeValueLabel(width: 40)
 
         let row = NSStackView(views: [label, slider, value])
         row.orientation = .horizontal

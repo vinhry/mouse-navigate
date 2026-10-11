@@ -60,6 +60,42 @@ extension PreferencesWindowController {
         }
     }
 
+    /// A slider of a fixed width, for a row with its label before it and its value after.
+    func makeSlider(value: Double, range: ClosedRange<Double>, width: CGFloat, action: Selector) -> NSSlider {
+        let slider = NSSlider(
+            value: value,
+            minValue: range.lowerBound,
+            maxValue: range.upperBound,
+            target: self,
+            action: action
+        )
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        slider.widthAnchor.constraint(equalToConstant: width).isActive = true
+        return slider
+    }
+
+    /// The value beside a slider: small, grey, in monospaced digits and a fixed width, so the
+    /// row keeps still as the value changes.
+    static func makeValueLabel(width: CGFloat) -> NSTextField {
+        let label = NSTextField(labelWithString: "")
+        label.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.widthAnchor.constraint(equalToConstant: width).isActive = true
+        return label
+    }
+
+    /// Restore Defaults at the trailing edge of a row, which the tab makes as wide as its
+    /// content.
+    func makeRestoreDefaultsFooter(action: Selector) -> NSStackView {
+        let restore = NSButton(title: "Restore Defaults", target: self, action: action)
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let footer = NSStackView(views: [spacer, restore])
+        footer.orientation = .horizontal
+        return footer
+    }
+
     func makeSection(title: String, content: NSView) -> NSStackView {
         let header = NSTextField(labelWithString: title)
         header.font = .systemFont(ofSize: 12, weight: .semibold)
