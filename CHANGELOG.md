@@ -27,6 +27,10 @@ All notable changes to this project will be documented in this file.
 - Opening **Grid Jump** made its window on every display while the key that opened it was
   still being held up, so keys typed straight after it waited. The grid now appears a
   moment after the key has been answered.
+- An update whose unpacking or Gatekeeper check never finished, or whose download only
+  trickled in, left **Settings → About** saying it was downloading for the rest of the
+  session, and every later check was turned away as already under way. Each step now has
+  a time limit, and an update that runs out of time is reported as failed.
 
 ## [0.7.0] - 2026-10-11
 

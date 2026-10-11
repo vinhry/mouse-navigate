@@ -92,22 +92,22 @@ enum UpdateVerifier {
     /// Gatekeeper's own verdict. Its source line is required as well as its exit status,
     /// because with Gatekeeper switched off `spctl` accepts everything.
     private static func checkNotarized(_ app: URL) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/spctl")
-        process.arguments = ["--assess", "--type", "execute", "-vv", app.path]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
+        let result: ProcessRunner.Result
         do {
-            try process.run()
+            // spctl may ask Apple about a ticket that was not stapled, which is the one
+            // part of this that waits on the network.
+            result = try ProcessRunner.run(
+                "/usr/sbin/spctl",
+                ["--assess", "--type", "execute", "-vv", app.path],
+                timeout: 60,
+                capturingOutput: true
+            )
         } catch {
-            throw Failure.notNotarized("spctl could not run")
+            throw Failure.notNotarized(error.localizedDescription)
         }
-        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        process.waitUntilExit()
 
-        guard process.terminationStatus == 0, output.contains("source=Notarized Developer ID") else {
-            let source = output.split(separator: "\n").first { $0.hasPrefix("source=") }
+        guard result.status == 0, result.output.contains("source=Notarized Developer ID") else {
+            let source = result.output.split(separator: "\n").first { $0.hasPrefix("source=") }
             throw Failure.notNotarized(source.map(String.init) ?? "rejected")
         }
     }

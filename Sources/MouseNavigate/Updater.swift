@@ -38,8 +38,15 @@ final class Updater {
 
     private let work = DispatchQueue(label: "com.vinhry.MouseNavigate.update", qos: .utility)
     /// Nothing about an update is worth keeping on disk: the answer changes, and the
-    /// download is unpacked and verified straight away.
-    private let session = URLSession(configuration: .ephemeral)
+    /// download is unpacked and verified straight away. A request's own timeout only counts
+    /// time with nothing arriving, so a download that trickles is given a ceiling too.
+    private let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForResource = 600
+        return URLSession(configuration: configuration)
+    }()
+    /// Long enough for `ditto` to unpack or copy the app on a slow disk.
+    private static let dittoTimeout: TimeInterval = 120
     private var timer: Timer?
     private var hasAskedThisLaunch = false
     /// nil when this copy cannot check an update's signature, and so never installs one.
@@ -291,7 +298,7 @@ final class Updater {
         try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
 
         // ditto, not unzip: it keeps the code signature and the stapled ticket intact.
-        try run("/usr/bin/ditto", ["-x", "-k", archive.path, folder.path])
+        try run("/usr/bin/ditto", ["-x", "-k", archive.path, folder.path], timeout: dittoTimeout)
 
         let app = folder.appendingPathComponent("MouseNavigate.app", isDirectory: true)
         guard fileManager.fileExists(atPath: app.path) else {
@@ -379,7 +386,7 @@ final class Updater {
         defer { try? fileManager.removeItem(at: scratch) }
 
         let copy = scratch.appendingPathComponent(target.lastPathComponent, isDirectory: true)
-        try Updater.run("/usr/bin/ditto", [staged.app.path, copy.path])
+        try Updater.run("/usr/bin/ditto", [staged.app.path, copy.path], timeout: Updater.dittoTimeout)
 
         // The copy is what goes live, so it is what gets checked, not the staged original.
         if let requirement {
@@ -448,16 +455,10 @@ final class Updater {
         present(alert)
     }
 
-    private static func run(_ tool: String, _ arguments: [String]) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: tool)
-        process.arguments = arguments
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw StageError("\((tool as NSString).lastPathComponent) failed with status \(process.terminationStatus).")
+    private static func run(_ tool: String, _ arguments: [String], timeout: TimeInterval) throws {
+        let result = try ProcessRunner.run(tool, arguments, timeout: timeout)
+        guard result.status == 0 else {
+            throw StageError("\((tool as NSString).lastPathComponent) failed with status \(result.status).")
         }
     }
 }
