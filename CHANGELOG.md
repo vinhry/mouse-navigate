@@ -42,6 +42,10 @@ All notable changes to this project will be documented in this file.
 - A download that failed its checks was left in the caches folder until the next launch,
   and an install cut short by a crash or a forced quit left a hidden
   `.MouseNavigate-update-…` folder beside the app for good. Both are cleaned up now.
+- A mouse connected or switched on could take up to ten seconds to get its own button
+  profile, since mice were only looked for every ten seconds. They are noticed as they come
+  and go. A trackpad or Magic Mouse that comes or goes while a menu or alert is open is
+  noticed then too, rather than once it closes.
 
 ## [0.7.0] - 2026-10-11
 

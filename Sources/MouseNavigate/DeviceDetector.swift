@@ -7,12 +7,13 @@ import MouseNavigateCore
 /// Identifies the attached pointing device so its button profile can be selected.
 ///
 /// Devices are only enumerated, never opened: reading vendor/product properties needs
-/// no Input Monitoring grant, whereas `IOHIDManagerOpen` would.
+/// no Input Monitoring grant, whereas `IOHIDManagerOpen` would. They are enumerated again
+/// whenever IOKit says a HID device came or went, which needs no grant either.
 final class DeviceDetector {
     static let didChangeNotification = Notification.Name("com.vinhry.MouseNavigate.deviceDidChange")
 
     private let manager: IOHIDManager
-    private var refreshTimer: Timer?
+    private var watcher: IOServiceWatcher?
 
     private(set) var detectedProfile: DeviceProfile?
     private(set) var detectedName: String?
@@ -33,21 +34,14 @@ final class DeviceDetector {
         IOHIDManagerSetDeviceMatchingMultiple(manager, matching as CFArray)
     }
 
-    deinit {
-        refreshTimer?.invalidate()
-    }
-
     func start() {
         refresh()
 
-        // Bluetooth mice come and go without any event we can cheaply subscribe to,
-        // so a slow poll plus a wake hook keeps the profile current.
-        let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
+        // Every HID device, keyboards included: telling them apart would mean reading their
+        // properties, which is all a refresh does anyway.
+        watcher = IOServiceWatcher(serviceClass: kIOHIDDeviceKey, delay: 0.3) { [weak self] in
             self?.refresh()
         }
-        RunLoop.main.add(timer, forMode: .common)
-        refreshTimer = timer
-
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(handleWake),
@@ -57,7 +51,7 @@ final class DeviceDetector {
     }
 
     @objc private func handleWake() {
-        refresh()
+        watcher?.poke()
     }
 
     /// The profile actually in force, honouring a manual override from preferences.

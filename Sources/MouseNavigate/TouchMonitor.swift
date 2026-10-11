@@ -1,6 +1,5 @@
 import AppKit
 import CoreGraphics
-import IOKit
 import MouseNavigateCore
 
 /// Runs the multitouch gesture engine: streams frames from every trackpad and Magic Mouse,
@@ -69,9 +68,9 @@ final class TouchMonitor {
         }
     }
 
-    private var notificationPort: IONotificationPortRef?
-    private var deviceIterators: [io_iterator_t] = []
-    private var pendingRebuild: DispatchWorkItem?
+    /// Surfaces come and go (Bluetooth, sleep), and MultitouchSupport only reports the ones
+    /// present when the list was made, so the list is rebuilt whenever IOKit sees a change.
+    private var deviceWatcher: IOServiceWatcher?
 
     init(performer: ActionPerformer) {
         self.performer = performer
@@ -79,12 +78,6 @@ final class TouchMonitor {
 
     deinit {
         stopDevices()
-        for iterator in deviceIterators {
-            IOObjectRelease(iterator)
-        }
-        if let notificationPort {
-            IONotificationPortDestroy(notificationPort)
-        }
     }
 
     func start() {
@@ -96,11 +89,13 @@ final class TouchMonitor {
         )
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
-            selector: #selector(scheduleRebuild),
+            selector: #selector(handleWake),
             name: NSWorkspace.didWakeNotification,
             object: nil
         )
-        observeDeviceChanges()
+        deviceWatcher = IOServiceWatcher(serviceClass: "AppleMultitouchDevice") { [weak self] in
+            self?.rebuild()
+        }
         reevaluate()
     }
 
@@ -231,56 +226,14 @@ final class TouchMonitor {
         NotificationCenter.default.post(name: TouchMonitor.didChangeNotification, object: nil)
     }
 
-    /// Surfaces come and go (Bluetooth, sleep), and MultitouchSupport only reports the ones
-    /// present when the list was made, so rebuild it whenever IOKit sees a change.
-    private func observeDeviceChanges() {
-        guard let port = IONotificationPortCreate(kIOMainPortDefault) else { return }
-        notificationPort = port
-        CFRunLoopAddSource(
-            CFRunLoopGetMain(),
-            IONotificationPortGetRunLoopSource(port).takeUnretainedValue(),
-            .defaultMode
-        )
-
-        let callback: IOServiceMatchingCallback = { refcon, iterator in
-            TouchMonitor.drain(iterator)
-            guard let refcon else { return }
-            Unmanaged<TouchMonitor>.fromOpaque(refcon).takeUnretainedValue().scheduleRebuild()
-        }
-        let refcon = Unmanaged.passUnretained(self).toOpaque()
-
-        for type in [kIOFirstMatchNotification, kIOTerminatedNotification] {
-            var iterator: io_iterator_t = 0
-            let result = IOServiceAddMatchingNotification(
-                port,
-                type,
-                IOServiceMatching("AppleMultitouchDevice"),
-                callback,
-                refcon,
-                &iterator
-            )
-            guard result == KERN_SUCCESS else { continue }
-            // Draining arms the notification; the devices already present need no rebuild.
-            TouchMonitor.drain(iterator)
-            deviceIterators.append(iterator)
-        }
+    @objc private func handleWake() {
+        deviceWatcher?.poke()
     }
 
-    private static func drain(_ iterator: io_iterator_t) {
-        while case let service = IOIteratorNext(iterator), service != 0 {
-            IOObjectRelease(service)
-        }
-    }
-
-    @objc private func scheduleRebuild() {
-        pendingRebuild?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, self.isRunning else { return }
-            self.stopDevices()
-            self.reevaluate()
-        }
-        pendingRebuild = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    private func rebuild() {
+        guard isRunning else { return }
+        stopDevices()
+        reevaluate()
     }
 
     // MARK: - Frames
