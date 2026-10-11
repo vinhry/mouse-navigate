@@ -14,6 +14,8 @@ final class MouseNavigator {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var permissionTimer: DispatchSourceTimer?
+    /// Runs while the tap is installed; see `checkTapHealth`.
+    private var tapHealthTimer: MainTimer?
     private var lockFileDescriptor: CInt = -1
     private var statusBarController: StatusBarController?
     private var preferencesController: PreferencesWindowController?
@@ -351,8 +353,55 @@ final class MouseNavigator {
         CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: eventTap, enable: true)
         installedEventMask = mask
+        tapHealthTimer = MainTimer(after: 10, repeating: .seconds(10)) { [weak self] in
+            self?.checkTapHealth()
+        }
         Log.permissions.info("Event tap installed.")
         return true
+    }
+
+    private func tearDownEventTap() {
+        tapHealthTimer = nil
+        guard let eventTap else { return }
+        CGEvent.tapEnable(tap: eventTap, enable: false)
+        if let runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+        }
+        CFMachPortInvalidate(eventTap)
+        self.eventTap = nil
+        runLoopSource = nil
+    }
+
+    /// macOS tells a running app nothing when its Accessibility permission is taken away:
+    /// the tap just stops hearing anything, and the menu bar went on saying Running while
+    /// no button, key or gesture did a thing. Nor is a tap that was switched off always
+    /// announced. Both are looked for every few seconds.
+    private func checkTapHealth() {
+        guard let eventTap else { return }
+        if !AXIsProcessTrusted() {
+            accessibilityWasRevoked()
+        } else if !CGEvent.tapIsEnabled(tap: eventTap) {
+            Log.tap.notice("Event tap found switched off; re-enabling it and letting go of everything held.")
+            CGEvent.tapEnable(tap: eventTap, enable: true)
+            releaseAfterMissedEvents()
+        }
+    }
+
+    /// Stops listening and shows the permission warning, then waits for the grant exactly
+    /// as at startup.
+    private func accessibilityWasRevoked() {
+        Log.permissions.notice("Accessibility was taken away; waiting for it to be granted again.")
+        releaseAfterMissedEvents()
+        tearDownEventTap()
+        waitForAccessibilityPermission()
+    }
+
+    /// The tap went deaf for a while, or is going away, so a key-up or mouse-up may never
+    /// arrive: everything held is let go of.
+    private func releaseAfterMissedEvents() {
+        cursorEngine.forceExit()
+        releaseHeldMouseInput()
+        isSwallowingLeftMouseUp = false
     }
 
     /// Clicks, keystrokes and scrolls only pass through the tap while something needs them,
@@ -462,7 +511,7 @@ final class MouseNavigator {
     @objc private func preferencesDidChange() {
         updateFrontmostDisabled()
         refreshScrollCache()
-        guard let eventTap, desiredEventMask != installedEventMask else { return }
+        guard eventTap != nil, desiredEventMask != installedEventMask else { return }
 
         // The new tap would never see the key-up a hold is waiting on, nor a left
         // release once touch gestures are off.
@@ -471,13 +520,7 @@ final class MouseNavigator {
         if !Preferences.shared.isTouchEnabled {
             isSwallowingLeftMouseUp = false
         }
-        CGEvent.tapEnable(tap: eventTap, enable: false)
-        if let runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-        }
-        CFMachPortInvalidate(eventTap)
-        self.eventTap = nil
-        runLoopSource = nil
+        tearDownEventTap()
         if !installEventTap() {
             // Accessibility was taken away since the tap was first made. Say so, and keep
             // trying, exactly as at startup.
@@ -526,10 +569,14 @@ final class MouseNavigator {
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
-            // The tap went deaf, so a key-up or a mouse-up may have been missed entirely.
-            cursorEngine.forceExit()
-            releaseHeldMouseInput()
-            isSwallowingLeftMouseUp = false
+            releaseAfterMissedEvents()
+            if !AXIsProcessTrusted() {
+                // Not from inside the tap's own callback.
+                DispatchQueue.main.async { [weak self] in
+                    guard self?.eventTap != nil else { return }
+                    self?.accessibilityWasRevoked()
+                }
+            }
             return Unmanaged.passUnretained(event)
         }
 

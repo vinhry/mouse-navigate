@@ -10,6 +10,9 @@ All notable changes to this project will be documented in this file.
   could run where nobody was looking. Everything stands down while the Mac is asleep,
   locked or switched to another user, and comes back once you are in front of it again.
   A side-button press waiting on a hold or double-click is let go of too.
+- Taking Accessibility away from MouseNavigate while it ran left the menu bar saying
+  Running while nothing worked. It now notices within seconds, shows the permission
+  warning, and starts again by itself once access is granted.
 
 ## [0.7.0] - 2026-10-11
 
