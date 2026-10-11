@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.7.1] - 2026-10-11
 
 ### Added
 - **Copy Diagnostics** on **Settings → About** copies what MouseNavigate can see to paste
