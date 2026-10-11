@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- Touch gestures went on working behind the lock screen and while another user's session
+  was in front, so a gesture bound to an app, a web address, a shortcut or a keystroke
+  could run where nobody was looking. Everything stands down while the Mac is asleep,
+  locked or switched to another user, and comes back once you are in front of it again.
+  A side-button press waiting on a hold or double-click is let go of too.
+
 ## [0.7.0] - 2026-10-11
 
 ### Added

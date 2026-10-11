@@ -612,6 +612,8 @@ Or run the built binary directly:
 - With touch gestures on, it also reads finger positions from the trackpad and Magic
   Mouse, and sees clicks and scrolls, only to recognize gestures. Nothing is recorded or
   stored.
+- Nothing runs while the Mac is asleep, its screen is locked or another user's session is
+  in front: gestures stop listening and every button and key is handed straight through.
 - MouseNavigate sends local keyboard/system actions. **Open URL…** hands the address to
   whichever app opens it, and **Run Shortcut…** runs `/usr/bin/shortcuts`; neither makes a
   network request of MouseNavigate's own.

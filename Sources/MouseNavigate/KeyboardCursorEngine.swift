@@ -57,7 +57,8 @@ final class KeyboardCursorEngine {
     private var holdThreshold = CursorSetting.holdThreshold.defaultValue
     private var retypeWindow = CursorSetting.retypeWindow.defaultValue
 
-    /// Suspends the engine entirely while the app is paused from the status menu.
+    /// Suspends the engine entirely while the app is paused from the status menu, turned off
+    /// in the app in front, or the session is asleep, locked or switched out.
     var isSuspended = false {
         didSet {
             if isSuspended { forceExit() }
@@ -79,21 +80,6 @@ final class KeyboardCursorEngine {
     init() {
         reloadSettings()
 
-        let workspace = NSWorkspace.shared.notificationCenter
-        for name in [
-            NSWorkspace.willSleepNotification,
-            NSWorkspace.screensDidSleepNotification,
-            NSWorkspace.sessionDidResignActiveNotification,
-        ] {
-            workspace.addObserver(self, selector: #selector(handleSystemInterruption), name: name, object: nil)
-        }
-        // Locking the screen is announced to nobody in particular, by the lock screen itself.
-        DistributedNotificationCenter.default().addObserver(
-            self,
-            selector: #selector(handleSystemInterruption),
-            name: Notification.Name("com.apple.screenIsLocked"),
-            object: nil
-        )
         // Rebinding a key or disabling the feature mid-hold would otherwise leave the
         // gate waiting on a key that no longer means anything.
         NotificationCenter.default.addObserver(
@@ -102,10 +88,6 @@ final class KeyboardCursorEngine {
             name: Preferences.didChangeNotification,
             object: nil
         )
-    }
-
-    @objc private func handleSystemInterruption() {
-        forceExit()
     }
 
     /// Only a change to cursor mode's own keys and tunables ends a hold in progress. A

@@ -21,7 +21,9 @@ final class MouseNavigator {
     private var isUserPaused = false
     /// The frontmost app has MouseNavigate turned off in its per-app settings.
     private var isFrontmostDisabled = false
-    private var isPaused: Bool { isUserPaused || isFrontmostDisabled }
+    /// Asleep, locked, or another user's session in front.
+    private let session = SessionMonitor()
+    private var isPaused: Bool { isUserPaused || isFrontmostDisabled || !session.isAvailable }
     private var installedEventMask: CGEventMask = 0
     /// Set when a Magic Mouse click became a gesture, so its release is swallowed too.
     private var isSwallowingLeftMouseUp = false
@@ -140,6 +142,17 @@ final class MouseNavigator {
 
         detector.start()
 
+        // Before touch starts, so a Mac that launches us behind the lock screen never
+        // listens to a finger until it is unlocked.
+        session.onChange = { [weak self] _ in
+            self?.applyPauseState()
+        }
+        session.onDisplaysSleep = { [weak self] in
+            self?.cursorEngine.forceExit()
+            self?.releaseHeldMouseInput()
+        }
+        session.start()
+
         strokeCapture.onStroke = { [weak self] points in
             self?.touchMonitor.handleStroke(points, in: .screen)
         }
@@ -167,15 +180,6 @@ final class MouseNavigator {
             object: nil
         )
         refreshScrollCache()
-
-        // A press held across sleep would otherwise fire its hold on waking, and a click
-        // waiting on its double-click window would run long after it was made.
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self,
-            selector: #selector(handleWillSleep),
-            name: NSWorkspace.willSleepNotification,
-            object: nil
-        )
 
         NotificationCenter.default.addObserver(
             self,
@@ -376,8 +380,10 @@ final class MouseNavigator {
         return types.reduce(CGEventMask(0)) { $0 | CGEventMask(1) << $1.rawValue }
     }
 
-    /// Pausing and an app with MouseNavigate turned off stand everything down the same way:
-    /// whatever is held is let go, so switching apps mid-hold never strands a key or click.
+    /// Pausing, an app with MouseNavigate turned off, and a session that is asleep, locked or
+    /// switched out all stand everything down the same way: whatever is held is let go, so
+    /// switching apps mid-hold never strands a key or click, a press held across sleep never
+    /// fires its hold on waking, and no gesture runs behind the lock screen.
     private func applyPauseState() {
         cursorEngine.isSuspended = isPaused
         touchMonitor.isPaused = isPaused
@@ -440,10 +446,6 @@ final class MouseNavigator {
 
     @objc private func quitFromMenu() {
         statusBarController?.onQuit?()
-    }
-
-    @objc private func handleWillSleep() {
-        releaseHeldMouseInput()
     }
 
     @objc private func deviceDidChange() {
