@@ -111,9 +111,12 @@ final class Updater {
     }
 
     /// Asked after Accessibility is granted, so it never stacks on the permission prompt a
-    /// new install already shows. A copy that could never install an update is not asked.
+    /// new install already shows, and once the Welcome window is done with, which asks it
+    /// there. A copy that could never install an update is not asked.
     private func askOnce() {
-        guard !hasAskedThisLaunch, canSelfUpdate, AXIsProcessTrusted() else { return }
+        guard !hasAskedThisLaunch, canSelfUpdate, AXIsProcessTrusted(),
+              Preferences.shared.hasCompletedOnboarding
+        else { return }
         hasAskedThisLaunch = true
 
         AlertPresenter.modal(

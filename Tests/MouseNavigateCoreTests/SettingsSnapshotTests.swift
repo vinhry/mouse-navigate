@@ -35,6 +35,7 @@ final class SettingsSnapshotTests: XCTestCase {
         preferences.deviceOverride = .generic
         preferences.automaticUpdates = true
         preferences.lastUpdateCheck = Date()
+        preferences.hasCompletedOnboarding = true
         preferences.addApp(bundleID: "com.example.app", name: "Example")
         preferences.setApp("com.example.app", disabled: false)
         preferences.setAppBinding(.builtin(.copy), for: .touch(.trackpadThreeFingerTap), app: "com.example.app")
@@ -62,8 +63,10 @@ final class SettingsSnapshotTests: XCTestCase {
         XCTAssertTrue(result.ignoredKeys.isEmpty)
         var expected = sourceStore.persistentDomain(forName: suites[0]) ?? [:]
         var actual = targetStore.persistentDomain(forName: suites[1]) ?? [:]
-        expected[SettingsKey.lastUpdateCheck] = nil
-        actual[SettingsKey.lastUpdateCheck] = nil
+        for key in SettingsKey.bookkeeping {
+            expected[key] = nil
+            actual[key] = nil
+        }
         XCTAssertEqual(expected as NSDictionary, actual as NSDictionary)
 
         XCTAssertEqual(target.globalBinding(for: .button(6, .mxMaster4, .hold)), .shortcut(Shortcut(0x00, [.command, .shift])))
@@ -259,5 +262,20 @@ final class SettingsSnapshotTests: XCTestCase {
         XCTAssertNil(SettingsValue(any: [1, 2]))
         XCTAssertNil(SettingsValue(any: Date()))
         XCTAssertNil(SettingsValue(any: Date(), as: .date))
+    }
+
+    func testImportKeepsThisMacsBookkeeping() throws {
+        let (source, _) = populated()
+        let data = try source.exportSettings(appVersion: "0.8.0")
+
+        let targetStore = makeStore()
+        let target = Preferences(store: targetStore)
+        target.hasCompletedOnboarding = true
+        let checked = Date(timeIntervalSince1970: 1_800_000_000)
+        target.lastUpdateCheck = checked
+        _ = try target.importSettings(data)
+
+        XCTAssertTrue(target.hasCompletedOnboarding, "the Welcome window does not come back")
+        XCTAssertEqual(target.lastUpdateCheck, checked)
     }
 }

@@ -29,6 +29,12 @@ public enum SettingsKey {
     public static let automaticUpdates = "update.automatic"
     /// When the updater last asked GitHub. Bookkeeping, not a setting: never exported.
     public static let lastUpdateCheck = "update.lastCheck"
+    /// The Welcome window has been seen through, or was never needed. Bookkeeping too.
+    public static let onboardingCompleted = "onboarding.completed"
+
+    /// Keys this Mac keeps for itself: never exported, and kept when settings are imported,
+    /// since another Mac's answer means nothing here.
+    public static let bookkeeping: Set<String> = [lastUpdateCheck, onboardingCompleted]
 
     /// "scroll.<field>" for all mice, "scroll.<profile>.<field>" for one mouse model.
     public static func scroll(_ field: ScrollField, profile: DeviceProfile? = nil) -> String {
@@ -50,6 +56,7 @@ public enum SettingsKey {
             touchDrawSpread: .double,
             automaticUpdates: .bool,
             lastUpdateCheck: .date,
+            onboardingCompleted: .bool,
         ]
         for field in ScrollField.allCases {
             keys[scroll(field)] = field.valueType
@@ -137,7 +144,7 @@ public enum SettingsKey {
     }
 
     public static func isExportable(_ key: String) -> Bool {
-        guard legacy[key] == nil, key != lastUpdateCheck else { return false }
+        guard legacy[key] == nil, !bookkeeping.contains(key) else { return false }
         return fixed[key] != nil || families.contains { $0.contains(key) }
     }
 

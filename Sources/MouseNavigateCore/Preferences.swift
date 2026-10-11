@@ -374,6 +374,12 @@ public final class Preferences {
         set { store.set(newValue, forKey: SettingsKey.lastUpdateCheck) }
     }
 
+    /// The Welcome window has been closed, or this Mac never needed it. Not a setting either.
+    public var hasCompletedOnboarding: Bool {
+        get { store.bool(forKey: SettingsKey.onboardingCompleted) }
+        set { store.set(newValue, forKey: SettingsKey.onboardingCompleted) }
+    }
+
     // MARK: - Keyboard cursor
 
     public var isCursorModeEnabled: Bool {

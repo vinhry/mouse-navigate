@@ -485,10 +485,14 @@ Requires macOS 13 Ventura or later, on Apple silicon or Intel.
    internet — click **Open**. A release that has not been notarized is refused on first
    open: allow it under `System Settings` → `Privacy & Security` → **Open Anyway**. Every
    release is signed with a Developer ID either way; the release notes say which it is.
-4. When asked, allow Accessibility access: `System Settings` → `Privacy & Security` →
-   `Accessibility` → turn on **MouseNavigate**. The menu bar icon shows a warning triangle
-   until you do, then switches to a mouse — no relaunch needed.
-5. If keyboard cursor keys do nothing, also allow `Input Monitoring` in the same place.
+4. The **Welcome** window says what MouseNavigate needs. Click **Grant Access…** next to
+   Accessibility and turn on **MouseNavigate** in `System Settings` → `Privacy & Security` →
+   `Accessibility`; the window shows it as allowed the moment you do, and the menu bar icon
+   switches from a warning triangle to a mouse — no relaunch needed. The same window turns
+   on **Launch at Login** and automatic update checks if you want them, and comes back any
+   time from **Welcome…** in the menu bar menu.
+5. If keyboard cursor keys do nothing, also allow `Input Monitoring`, from the same window
+   or in the same place in System Settings.
 
 Permissions survive updates, whether MouseNavigate installs them itself (see
 [Updates](#updates)) or you download the new release and replace the app.

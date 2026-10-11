@@ -60,11 +60,13 @@ final class SettingsKeyTests: XCTestCase {
         }
     }
 
-    func testEveryCurrentKeyButTheUpdateStampIsExportable() {
-        for key in everyCurrentKey where key != SettingsKey.lastUpdateCheck {
+    func testEveryCurrentKeyButBookkeepingIsExportable() {
+        for key in everyCurrentKey where !SettingsKey.bookkeeping.contains(key) {
             XCTAssertTrue(SettingsKey.isExportable(key), key)
         }
         XCTAssertFalse(SettingsKey.isExportable(SettingsKey.lastUpdateCheck))
+        XCTAssertFalse(SettingsKey.isExportable(SettingsKey.onboardingCompleted))
+        XCTAssertTrue(SettingsKey.isSetting(SettingsKey.onboardingCompleted), "still one of ours")
     }
 
     func testLegacyKeysAreKnownButNotExported() {

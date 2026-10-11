@@ -208,7 +208,7 @@ public struct SettingsSnapshot: Equatable {
     /// Replaces every setting in `store` with the snapshot's. Keys the snapshot lacks are
     /// removed, so the result is the file and nothing else; the caller migrates after.
     public func apply(to store: UserDefaults) {
-        for key in SettingsKey.userSettingKeys(in: store) where key != SettingsKey.lastUpdateCheck {
+        for key in SettingsKey.userSettingKeys(in: store) where !SettingsKey.bookkeeping.contains(key) {
             store.removeObject(forKey: key)
         }
         for (key, value) in values {

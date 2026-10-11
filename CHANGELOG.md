@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- A **Welcome** window on first launch, in place of the Accessibility prompt and the
+  update question that used to arrive one after the other with nothing to explain them.
+  It says what Accessibility and Input Monitoring are for, shows whether each is allowed
+  as you switch them on in System Settings, and offers **Launch at Login** and automatic
+  update checks. It opens again from **Welcome…** in the menu bar menu. Anyone already
+  using MouseNavigate is not shown it, and importing settings from another Mac does not
+  bring it back.
 - Each release lists the SHA-256 of `MouseNavigate.zip` in its notes, so a download can be
   checked, and carries `MouseNavigate-dSYM.zip`, the debug symbols that turn a crash
   report from your Mac into something that can be read.

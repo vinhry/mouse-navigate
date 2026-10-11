@@ -1,9 +1,5 @@
 import AppKit
-import ApplicationServices
-import IOKit.hid
-import IOKit.hidsystem
 import MouseNavigateCore
-import ServiceManagement
 
 @MainActor
 final class StatusBarController: NSObject, NSMenuDelegate {
@@ -28,6 +24,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     var onQuit: (() -> Void)?
     var onPauseToggle: ((Bool) -> Void)?
+    var onShowWelcome: (() -> Void)?
 
     private(set) var isPaused = false {
         didSet {
@@ -151,6 +148,11 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         prefsItem.target = self
         menu.addItem(prefsItem)
 
+        // The permissions and first choices again, in one place.
+        let welcomeItem = NSMenuItem(title: "Welcome\u{2026}", action: #selector(welcomeTapped), keyEquivalent: "")
+        welcomeItem.target = self
+        menu.addItem(welcomeItem)
+
         menu.addItem(.separator())
 
         // Quit
@@ -230,36 +232,19 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     // MARK: - Launch at Login
 
     private func updateLaunchAtLoginState() {
-        let status = SMAppService.mainApp.status
-        launchAtLoginMenuItem?.state = status == .enabled ? .on : .off
-        // Registered, but macOS is holding it until the user allows it in System Settings;
-        // registering again would change nothing, so say what will.
-        launchAtLoginMenuItem?.title = status == .requiresApproval
+        launchAtLoginMenuItem?.state = LoginItem.isEnabled ? .on : .off
+        // Registering again would change nothing, so say what will.
+        launchAtLoginMenuItem?.title = LoginItem.needsApproval
             ? "Launch at Login (needs approval in System Settings)"
             : "Launch at Login"
     }
 
     @objc private func launchAtLoginTapped() {
-        let service = SMAppService.mainApp
-        do {
-            switch service.status {
-            case .enabled:
-                try service.unregister()
-            case .requiresApproval:
-                SMAppService.openSystemSettingsLoginItems()
-            default:
-                try service.register()
-            }
-        } catch {
-            // Typically an unsigned or unbundled build, which macOS will not start at login.
-            Log.launch.error("Launch at Login could not be changed: \(error.localizedDescription, privacy: .public)")
-            AlertPresenter.modal(
-                "Launch at Login couldn't be changed",
-                error.localizedDescription
-                    + "\n\nmacOS starts only a signed copy that runs from an app bundle at login, "
-                    + "so a build run from source or from the Terminal cannot be registered.",
-                style: .warning
-            )
+        // While approval is pending, the item sends the user to give it rather than off.
+        if LoginItem.needsApproval {
+            LoginItem.set(true)
+        } else {
+            LoginItem.toggle()
         }
         updateLaunchAtLoginState()
     }
@@ -267,27 +252,21 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     // MARK: - Permissions
 
     private func updatePermissionWarning() {
-        let trusted = AXIsProcessTrusted()
+        let trusted = Permissions.isAccessibilityGranted
         permissionMenuItem?.isHidden = trusted
 
-        let inputMonitoringDenied = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeDenied
+        let inputMonitoringDenied = Permissions.inputMonitoring == .denied
         inputMonitoringMenuItem?.isHidden = !inputMonitoringDenied
 
         permissionSeparator?.isHidden = trusted && !inputMonitoringDenied
     }
 
     @objc private func openAccessibilitySettings() {
-        open("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        SystemSettingsPane.accessibility.open()
     }
 
     @objc private func openInputMonitoringSettings() {
-        open("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
-    }
-
-    private func open(_ urlString: String) {
-        if let url = URL(string: urlString) {
-            NSWorkspace.shared.open(url)
-        }
+        SystemSettingsPane.inputMonitoring.open()
     }
 
     // MARK: - Updates
@@ -301,6 +280,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     // MARK: - Settings
+
+    @objc private func welcomeTapped() {
+        onShowWelcome?()
+    }
 
     @objc func preferencesTapped() {
         preferencesController?.showOrFocus()

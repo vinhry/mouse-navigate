@@ -1,7 +1,4 @@
 import AppKit
-import ApplicationServices
-import IOKit.hid
-import IOKit.hidsystem
 import MouseNavigateCore
 
 /// Fills in a `DiagnosticsReport` from the running app. Main thread only.
@@ -32,11 +29,11 @@ enum DiagnosticsCollector {
         report.isTranslated = isTranslated
         report.location = .of(bundlePath: Bundle.main.bundlePath, homeDirectory: NSHomeDirectory())
 
-        report.accessibility = AXIsProcessTrusted() ? .granted : .denied
-        switch IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) {
-        case kIOHIDAccessTypeGranted: report.inputMonitoring = .granted
-        case kIOHIDAccessTypeDenied: report.inputMonitoring = .denied
-        default: report.inputMonitoring = .notAsked
+        report.accessibility = Permissions.isAccessibilityGranted ? .granted : .denied
+        switch Permissions.inputMonitoring {
+        case .granted: report.inputMonitoring = .granted
+        case .denied: report.inputMonitoring = .denied
+        case .notAsked: report.inputMonitoring = .notAsked
         }
         report.isEventTapLive = context.isEventTapLive
         report.standingDown = context.standingDown

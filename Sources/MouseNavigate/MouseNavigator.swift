@@ -58,6 +58,7 @@ final class MouseNavigator {
     }
     private let wheel = WheelScroller()
     private let updater = Updater()
+    private lazy var welcome = WelcomeWindowController(updater: updater)
 
     /// Prints touch surfaces, contacts and recognized gestures. Set by `--touch-debug`.
     var isTouchDebugEnabled = false
@@ -141,7 +142,20 @@ final class MouseNavigator {
     /// Everything that needs permission, hardware or a private framework. None of it is
     /// allowed to run before the icon exists.
     private func startServices() {
-        requestAccessibilityPermission()
+        let onboarding = OnboardingPolicy.decide(
+            isBundled: Bundle.main.bundleURL.pathExtension == "app",
+            hasCompleted: Preferences.shared.hasCompletedOnboarding,
+            isTrusted: Permissions.isAccessibilityGranted,
+            hasChosenUpdates: Preferences.shared.automaticUpdates != nil
+        )
+        if onboarding == .recordAsDone {
+            Preferences.shared.hasCompletedOnboarding = true
+        }
+        // The Welcome window asks for Accessibility itself, with the reason beside it, rather
+        // than macOS's prompt arriving out of nowhere.
+        if onboarding != .show {
+            requestAccessibilityPermission()
+        }
         let tapInstalled = installEventTap()
 
         detector.start()
@@ -212,6 +226,16 @@ final class MouseNavigator {
 
         if !tapInstalled {
             waitForAccessibilityPermission()
+        }
+
+        welcome.onOpenSettings = { [weak self] in
+            self?.showPreferences()
+        }
+        statusBarController?.onShowWelcome = { [weak self] in
+            self?.welcome.show()
+        }
+        if onboarding == .show {
+            welcome.show()
         }
 
         Log.launch.info(
@@ -309,10 +333,7 @@ final class MouseNavigator {
     }
 
     private func requestAccessibilityPermission() {
-        // The value of kAXTrustedCheckOptionPrompt, which Swift imports as a mutable
-        // global that strict concurrency checking will not let be read.
-        let options: NSDictionary = ["AXTrustedCheckOptionPrompt": true]
-        if AXIsProcessTrustedWithOptions(options) {
+        if Permissions.requestAccessibility() {
             Log.permissions.info("Accessibility already granted.")
         } else {
             Log.permissions.notice(
