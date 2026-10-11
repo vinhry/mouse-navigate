@@ -92,6 +92,12 @@ final class DeviceDetector {
         detectedName = name
 
         if changed {
+            Log.devices.info(
+                """
+                Mouse in use: \(name ?? "none", privacy: .public), \
+                profile \((profile ?? .generic).displayName, privacy: .public).
+                """
+            )
             NotificationCenter.default.post(name: DeviceDetector.didChangeNotification, object: nil)
         }
         return profile

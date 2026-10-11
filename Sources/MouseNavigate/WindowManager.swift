@@ -32,7 +32,7 @@ final class WindowManager {
 
     func minimize() {
         guard let window = focusedWindow() else { return }
-        AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanTrue)
+        report(AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanTrue), "Minimizing the window")
     }
 
     func zoom() {
@@ -120,8 +120,23 @@ final class WindowManager {
 
     private func focusedWindow() -> AXUIElement? {
         guard let pid = FrontmostApp.shared.processIdentifier else { return nil }
-        let element = bounded(AXUIElementCreateApplication(pid))
-        return copyElement(element, kAXFocusedWindowAttribute)
+        let app = bounded(AXUIElementCreateApplication(pid))
+        var value: CFTypeRef?
+        let error = AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &value)
+        guard error == .success, let value, CFGetTypeID(value) == AXUIElementGetTypeID() else {
+            report(error == .success ? .noValue : error, "Finding the focused window")
+            return nil
+        }
+        return bounded(value as! AXUIElement)
+    }
+
+    /// A window action that did nothing says why in the log: an app that is busy (a
+    /// timeout), one that keeps no windows Accessibility can reach, or one that refuses to
+    /// be moved. The drag, which sets the frame every frame, does not report.
+    private func report(_ error: AXError, _ attempt: String) {
+        guard error != .success else { return }
+        let app = FrontmostApp.shared.bundleID ?? "the app in front"
+        Log.actions.notice("\(attempt, privacy: .public) in \(app, privacy: .public) failed: AXError \(error.rawValue).")
     }
 
     /// The element with the request timeout applied. Every element the actions touch goes
@@ -199,21 +214,28 @@ final class WindowManager {
     private func setFrame(_ frame: Rect, of window: AXUIElement) {
         // Position, size, then position again: a window being grown near a screen edge can be
         // pushed back by the system before its new size lands.
-        setPosition(frame, of: window)
-        setSize(frame, of: window)
-        setPosition(frame, of: window)
+        let results = [
+            setPosition(frame, of: window),
+            setSize(frame, of: window),
+            setPosition(frame, of: window),
+        ]
+        if let failure = results.first(where: { $0 != .success }) {
+            report(failure, "Moving or resizing the window")
+        }
     }
 
-    private func setPosition(_ frame: Rect, of window: AXUIElement) {
+    @discardableResult
+    private func setPosition(_ frame: Rect, of window: AXUIElement) -> AXError {
         var point = CGPoint(x: frame.minX, y: frame.minY)
-        guard let value = AXValueCreate(.cgPoint, &point) else { return }
-        AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value)
+        guard let value = AXValueCreate(.cgPoint, &point) else { return .failure }
+        return AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, value)
     }
 
-    private func setSize(_ frame: Rect, of window: AXUIElement) {
+    @discardableResult
+    private func setSize(_ frame: Rect, of window: AXUIElement) -> AXError {
         var size = CGSize(width: frame.width, height: frame.height)
-        guard let value = AXValueCreate(.cgSize, &size) else { return }
-        AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, value)
+        guard let value = AXValueCreate(.cgSize, &size) else { return .failure }
+        return AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, value)
     }
 
     private func cursorLocation() -> Vector2 {

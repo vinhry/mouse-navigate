@@ -26,6 +26,10 @@ enum Log {
     /// process took too long to answer an event, which is the usual way buttons and
     /// keys "stop working" for a moment.
     static let tap = Logger(subsystem: subsystem, category: "tap")
+    /// Touch surfaces being listened to, and `--touch-debug` lines at debug level.
+    static let touch = Logger(subsystem: subsystem, category: "touch")
+    /// The mouse in use and the button profile it resolves to.
+    static let devices = Logger(subsystem: subsystem, category: "devices")
     /// Sleep, the lock screen and fast user switching standing everything down and back up.
     static let session = Logger(subsystem: subsystem, category: "session")
 }

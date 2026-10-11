@@ -96,6 +96,9 @@ final class TouchMonitor {
         deviceWatcher = IOServiceWatcher(serviceClass: "AppleMultitouchDevice") { [weak self] in
             self?.rebuild()
         }
+        if !bridge.isAvailable {
+            Log.touch.error("MultitouchSupport could not be loaded; touch gestures are unavailable.")
+        }
         reevaluate()
     }
 
@@ -126,7 +129,7 @@ final class TouchMonitor {
         let character = match.flatMap { strokeRecognizer.accepts($0) ? $0.gesture : nil }
         if isDebugLogging {
             let described = match.map { "\($0.gesture.displayName) (score \(String(format: "%.2f", $0.score)))" } ?? "nothing"
-            print("[touch] stroke of \(points.count) points -> \(described)\(character == nil ? ", rejected" : "")")
+            debugLog("[touch] stroke of \(points.count) points -> \(described)\(character == nil ? ", rejected" : "")")
         }
 
         let binding = character.map {
@@ -201,11 +204,13 @@ final class TouchMonitor {
         lock.unlock()
 
         isRunning = true
+        let names = bridge.devices.map { "\($0.name) (\($0.surface.displayName))" }.joined(separator: ", ")
+        Log.touch.info("Listening to \(self.bridge.devices.count) surface(s): \(names, privacy: .public)")
         if isDebugLogging {
-            print("[touch] started with \(bridge.devices.count) surface(s)")
+            debugLog("[touch] started with \(bridge.devices.count) surface(s)")
             for device in bridge.devices {
                 let family = device.familyID.map { "family \($0)" } ?? "family unknown"
-                print("[touch]   \(device.name): \(device.surface.displayName), \(family), aspect \(String(format: "%.2f", device.aspectRatio))")
+                debugLog("[touch]   \(device.name): \(device.surface.displayName), \(family), aspect \(String(format: "%.2f", device.aspectRatio))")
             }
         }
         NotificationCenter.default.post(name: TouchMonitor.didChangeNotification, object: nil)
@@ -222,6 +227,9 @@ final class TouchMonitor {
         lock.unlock()
 
         performer.windowManager.endDrag()
+        if isRunning {
+            Log.touch.info("Stopped listening to touch surfaces.")
+        }
         isRunning = false
         NotificationCenter.default.post(name: TouchMonitor.didChangeNotification, object: nil)
     }
@@ -275,13 +283,21 @@ final class TouchMonitor {
                 .sorted { $0.position.x < $1.position.x }
                 .map { String(format: "(%.2f, %.2f%@ s%d z%.1f)", $0.position.x, $0.position.y, $0.isTouching ? "" : " hover", $0.state, $0.size) }
                 .joined(separator: " ")
-            print("[touch \(debugTime(now))] \(surface.displayName): \(contacts.count) finger(s) \(described)")
+            debugLog("[touch \(debugTime(now))] \(surface.displayName): \(contacts.count) finger(s) \(described)")
         }
 
         guard !events.isEmpty else { return }
         DispatchQueue.main.async { [weak self] in
             self?.handle(events, on: surface, aspectRatio: aspectRatio)
         }
+    }
+
+    /// A `--touch-debug` line, printed for whoever runs the binary from a terminal and
+    /// logged for a copy started with `open --args --touch-debug`, whose output goes
+    /// nowhere: `log stream --level debug --predicate 'category == "touch"'` shows it.
+    private func debugLog(_ line: String) {
+        print(line)
+        Log.touch.debug("\(line, privacy: .public)")
     }
 
     private func debugTime(_ uptime: TimeInterval) -> String {
@@ -298,7 +314,7 @@ final class TouchMonitor {
             case .gesture(let gesture):
                 let binding = Preferences.shared.binding(for: .touch(gesture), app: FrontmostApp.shared.bundleID)
                 if isDebugLogging {
-                    print("[touch \(debugTime(ProcessInfo.processInfo.systemUptime))] \(gesture.displayName) -> \(binding.displayName)")
+                    debugLog("[touch \(debugTime(ProcessInfo.processInfo.systemUptime))] \(gesture.displayName) -> \(binding.displayName)")
                 }
                 if surface == .trackpad, gesture.isTap, binding != .disabled {
                     trackpadTapGestureHandler?()

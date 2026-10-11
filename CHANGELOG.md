@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- The system log says more of what MouseNavigate is doing, for working out why something
+  does not: which mouse is in use and the profile it gets, which touch surfaces are being
+  listened to, when gestures are unavailable because macOS would not load
+  MultitouchSupport, when the session stands down and comes back, and why a window action
+  such as **Minimize** or **Maximize Left** did nothing. The `--touch-debug` lines are
+  logged as well as printed, so a copy started with `open --args --touch-debug` can be
+  followed with `log stream`.
+
 ### Fixed
 - Touch gestures went on working behind the lock screen and while another user's session
   was in front, so a gesture bound to an app, a web address, a shortcut or a keystroke
