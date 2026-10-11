@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- The Touch tab warns when macOS has a three-finger gesture on that takes one of the bound
+  trackpad gestures: Mission Control and App Exposé on a three-finger swipe, three-finger
+  drag, or Look up on a three-finger tap. It names the gestures taken, says where to change
+  the setting and offers **Open Trackpad Settings…**. MouseNavigate only listens to the
+  touches, so macOS acts on them too until its gesture is moved to four fingers or off.
+
+### Fixed
+- Dragging the Settings window to another display left the Touch tab's gesture list,
+  preview and Restore Defaults drawn over the header. The pane container's size was left to
+  the layout engine, which chose differently after the move; it is pinned now.
+
 ## [0.6.0] - 2026-10-10
 
 ### Added

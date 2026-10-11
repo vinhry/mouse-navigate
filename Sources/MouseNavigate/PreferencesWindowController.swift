@@ -53,6 +53,11 @@ final class PreferencesWindowController: NSObject {
     /// Marks the one item in a picker that shows its current custom binding.
     private static let customItemTag = 1
     private(set) var window: NSWindow?
+    /// The pages and the tab view around them, kept so the window can be fitted to them
+    /// again when a page grows or shrinks.
+    private var pages: [NSView] = []
+    private var tabChrome = NSSize.zero
+    private static let windowMargin: CGFloat = 12
 
     let detector: DeviceDetector
     private let engine: KeyboardCursorEngine
@@ -96,6 +101,9 @@ final class PreferencesWindowController: NSObject {
     private var touchEnableCheckbox: NSButton?
     private var leftHandedCheckbox: NSButton?
     private var touchStatusLabel: NSTextField?
+    /// The warning that a macOS three-finger gesture takes one of the bound gestures.
+    private var touchConflictRow: NSStackView?
+    private var touchConflictLabel: NSTextField?
     private var touchPanes: [NSView] = []
     private var characterSourceCheckboxes: [CharacterSource: NSButton] = [:]
     private var showDrawingCheckbox: NSButton?
@@ -201,7 +209,7 @@ final class PreferencesWindowController: NSObject {
         aboutTab.view = aboutPage
         tabView.addTabViewItem(aboutTab)
 
-        let margin: CGFloat = 12
+        let margin = PreferencesWindowController.windowMargin
         NSLayoutConstraint.activate([
             tabView.topAnchor.constraint(equalTo: content.topAnchor, constant: margin),
             tabView.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: margin),
@@ -211,27 +219,63 @@ final class PreferencesWindowController: NSObject {
 
         // A tab view takes no size from its pages, so size the window to the larger page
         // plus the tab chrome. A fixed size clipped the cursor tab's lower rows.
-        let pages = [mousePage, cursorPage, touchPage, aboutPage].map(\.fittingSize)
+        pages = [mousePage, cursorPage, touchPage, aboutPage]
         let probe = NSRect(x: 0, y: 0, width: 1000, height: 1000)
         tabView.frame = probe
-        let chromeWidth = probe.width - tabView.contentRect.width
-        let chromeHeight = probe.height - tabView.contentRect.height
-        w.setContentSize(NSSize(
-            width: (pages.map(\.width).max() ?? 0) + chromeWidth + margin * 2,
-            height: (pages.map(\.height).max() ?? 0) + chromeHeight + margin * 2
-        ))
+        tabChrome = NSSize(
+            width: probe.width - tabView.contentRect.width,
+            height: probe.height - tabView.contentRect.height
+        )
+        w.setContentSize(contentSizeForPages())
+        window = w
+
+        // Coming back from System Settings, the trackpad warning is read again.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowDidBecomeKey),
+            name: NSWindow.didBecomeKeyNotification,
+            object: w
+        )
+
+        // Before the window shows: a refresh can make a page taller, and the window with it.
+        refreshScopeUI()
+        refreshDeviceUI()
+        refreshTouchUI()
 
         w.center()
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        window = w
-
-        refreshScopeUI()
-        refreshDeviceUI()
-        refreshTouchUI()
     }
 
     var isVisible: Bool { window?.isVisible ?? false }
+
+    /// The content size that fits the largest page plus the tab chrome and margins.
+    /// Rounded up: the frame is snapped to the pixel grid of whichever display the window
+    /// lands on, and a page a fraction short of its content would have to break a
+    /// constraint to fit.
+    private func contentSizeForPages() -> NSSize {
+        let sizes = pages.map(\.fittingSize)
+        let margin = PreferencesWindowController.windowMargin
+        return NSSize(
+            width: ceil((sizes.map(\.width).max() ?? 0) + tabChrome.width + margin * 2),
+            height: ceil((sizes.map(\.height).max() ?? 0) + tabChrome.height + margin * 2)
+        )
+    }
+
+    /// Fits the window to its pages again, keeping its top left corner where it is, for
+    /// when a page has grown or shrunk since it was sized.
+    private func fitWindowToPages() {
+        guard let window, let contentView = window.contentView else { return }
+        let size = contentSizeForPages()
+        guard size != contentView.frame.size else { return }
+        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
+        frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
+        window.setFrame(frame, display: true)
+    }
+
+    @objc private func windowDidBecomeKey() {
+        refreshTrackpadConflictUI()
+    }
 
     // MARK: - Mouse tab
 
@@ -458,11 +502,16 @@ final class PreferencesWindowController: NSObject {
         content.translatesAutoresizingMaskIntoConstraints = false
         page.addSubview(content)
 
+        // The bottom margin yields rather than being required: a page a point short of its
+        // content then overflows the margin by that point, where a required constraint
+        // AppKit had to drop would take the layout with it.
+        let bottom = content.bottomAnchor.constraint(lessThanOrEqualTo: page.bottomAnchor, constant: -16)
+        bottom.priority = .init(999)
         NSLayoutConstraint.activate([
             content.topAnchor.constraint(equalTo: page.topAnchor, constant: 16),
             content.centerXAnchor.constraint(equalTo: page.centerXAnchor),
             content.leadingAnchor.constraint(greaterThanOrEqualTo: page.leadingAnchor, constant: 20),
-            content.bottomAnchor.constraint(lessThanOrEqualTo: page.bottomAnchor, constant: -16),
+            bottom,
         ])
 
         return page
@@ -713,6 +762,8 @@ final class PreferencesWindowController: NSObject {
         defer {
             refreshBinding(slot)
             if case .button = slot { updateBindingMarkers() }
+            // Binding or freeing a gesture macOS also uses changes what there is to warn of.
+            if case .touch = slot { refreshTrackpadConflictUI() }
         }
         guard !cancelled else { return }
 
@@ -797,6 +848,8 @@ final class PreferencesWindowController: NSObject {
         }
         refreshBindings()
         refreshScrollUI()
+        // The scope decides which bindings the warning speaks of, and whether any fire.
+        refreshTrackpadConflictUI()
     }
 
     @objc private func scopeChanged(_ sender: NSPopUpButton) {
@@ -999,6 +1052,7 @@ final class PreferencesWindowController: NSObject {
         let toggles = NSStackView(views: [enable, leftHanded])
         toggles.orientation = .horizontal
         toggles.spacing = 24
+        toggles.setHuggingPriority(.required, for: .horizontal)
 
         let hint = NSTextField(wrappingLabelWithString:
             "Gestures work alongside the ones built into macOS. Turn off any that overlap in "
@@ -1013,6 +1067,38 @@ final class PreferencesWindowController: NSObject {
         let status = NSTextField(labelWithString: "")
         status.font = .systemFont(ofSize: 11, weight: .medium)
         touchStatusLabel = status
+
+        // Shown while a macOS three-finger gesture takes one of the bound gestures. Hidden,
+        // it leaves the layout, and the window is fitted to the page again either way.
+        let warningIcon = NSImageView()
+        warningIcon.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: "Warning")
+        warningIcon.setContentHuggingPriority(.required, for: .horizontal)
+        let conflictLabel = NSTextField(wrappingLabelWithString: "")
+        conflictLabel.font = .systemFont(ofSize: 11)
+        conflictLabel.translatesAutoresizingMaskIntoConstraints = false
+        // As wide as the hint above less the icon, so lines wrap where it does.
+        let conflictTextWidth: CGFloat = 580 - 24
+        conflictLabel.preferredMaxLayoutWidth = conflictTextWidth
+        conflictLabel.widthAnchor.constraint(equalToConstant: conflictTextWidth).isActive = true
+        let openSettings = NSButton(
+            title: "Open Trackpad Settings…",
+            target: self,
+            action: #selector(openTrackpadSettingsTapped)
+        )
+        openSettings.bezelStyle = .rounded
+        openSettings.controlSize = .small
+        openSettings.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        let conflictColumn = NSStackView(views: [conflictLabel, openSettings])
+        conflictColumn.orientation = .vertical
+        conflictColumn.alignment = .leading
+        conflictColumn.spacing = 6
+        let conflictRow = NSStackView(views: [warningIcon, conflictColumn])
+        conflictRow.orientation = .horizontal
+        conflictRow.alignment = .top
+        conflictRow.spacing = 8
+        conflictRow.isHidden = true
+        touchConflictRow = conflictRow
+        touchConflictLabel = conflictLabel
 
         let panePicker = NSSegmentedControl(
             labels: ["Trackpad", "Magic Mouse", "Characters"],
@@ -1033,9 +1119,13 @@ final class PreferencesWindowController: NSObject {
         strokePreview?.isAnimating = false
 
         // Panes overlap in one container that is as large as the largest, so switching
-        // never resizes the window.
+        // never resizes the window. The container is pinned to that size: left with only
+        // the panes' lower bounds its size was ambiguous, and the engine chose a different
+        // solution after the window crossed to another display, which put the list and
+        // the footer up over the header.
         let paneContainer = NSView()
         paneContainer.translatesAutoresizingMaskIntoConstraints = false
+        let paneSizes = panes.map(\.fittingSize)
         for (index, pane) in panes.enumerated() {
             pane.translatesAutoresizingMaskIntoConstraints = false
             pane.isHidden = index != 0
@@ -1047,6 +1137,12 @@ final class PreferencesWindowController: NSObject {
                 pane.bottomAnchor.constraint(lessThanOrEqualTo: paneContainer.bottomAnchor),
             ])
         }
+        NSLayoutConstraint.activate([
+            paneContainer.widthAnchor.constraint(
+                equalToConstant: ceil(max(hint.fittingSize.width, paneSizes.map(\.width).max() ?? 0))
+            ),
+            paneContainer.heightAnchor.constraint(equalToConstant: ceil(paneSizes.map(\.height).max() ?? 0)),
+        ])
 
         let restore = NSButton(
             title: "Restore Defaults",
@@ -1059,17 +1155,16 @@ final class PreferencesWindowController: NSObject {
         footer.orientation = .horizontal
 
         let scopeRow = makeScopeRow()
-        let stack = NSStackView(views: [toggles, hint, status, scopeRow, panePicker, paneContainer, footer])
+        let stack = NSStackView(views: [toggles, hint, status, conflictRow, scopeRow, panePicker, paneContainer, footer])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
         stack.setCustomSpacing(14, after: status)
+        stack.setCustomSpacing(14, after: conflictRow)
         stack.setCustomSpacing(14, after: scopeRow)
         stack.setCustomSpacing(12, after: panePicker)
         stack.setCustomSpacing(12, after: paneContainer)
-        // The container is at least as wide as the text, and as wide as the widest pane if
-        // that is wider; the footer follows it.
-        paneContainer.widthAnchor.constraint(greaterThanOrEqualTo: hint.widthAnchor).isActive = true
+        // The footer follows the container, which is as wide as the text or the widest pane.
         footer.widthAnchor.constraint(equalTo: paneContainer.widthAnchor).isActive = true
 
         return makePage(stack)
@@ -1183,6 +1278,9 @@ final class PreferencesWindowController: NSObject {
         column.orientation = .vertical
         column.alignment = .centerX
         column.spacing = 6
+        // As tall as its content, not as the list beside it: the stack holding both would
+        // otherwise leave the column's height open to the engine.
+        column.setHuggingPriority(.required, for: .vertical)
 
         // Measured as a label, since a label draws its text with a little room either side
         // that its intrinsic size leaves out; a column that is too narrow truncates it.
@@ -1310,6 +1408,7 @@ final class PreferencesWindowController: NSObject {
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 8
+        row.setHuggingPriority(.required, for: .horizontal)
         PreferencesWindowController.titleControls(in: [caption, slider])
         // Indented under the checkbox it belongs to.
         row.edgeInsets = NSEdgeInsets(top: 2, left: 18, bottom: 2, right: 0)
@@ -1417,6 +1516,39 @@ final class PreferencesWindowController: NSObject {
 
         touchStatusLabel?.stringValue = touchStatusText
         touchStatusLabel?.textColor = touchMonitor.isRunning ? .labelColor : .secondaryLabelColor
+        refreshTrackpadConflictUI()
+    }
+
+    /// Warns of the macOS three-finger gestures that take a trackpad gesture bound in the
+    /// current scope. The settings are read every time: System Settings changes them
+    /// under the window, and the user comes back expecting the warning to follow.
+    private func refreshTrackpadConflictUI() {
+        guard let row = touchConflictRow, let label = touchConflictLabel else { return }
+        var text: String?
+        // Nothing to warn of where no gesture fires: touch off, no trackpad, or an app in
+        // whose scope MouseNavigate is turned off.
+        if Preferences.shared.isTouchEnabled, !Preferences.shared.isAppDisabled(selectedApp),
+           touchMonitor.surfaces.contains(where: { $0.surface == .trackpad }) {
+            let conflicts = MacOSTrackpadSettings.current().conflicts { gesture in
+                let trigger = BindingTrigger.touch(gesture)
+                let binding = self.selectedApp.flatMap { Preferences.shared.appBinding(for: trigger, app: $0) }
+                    ?? Preferences.shared.globalBinding(for: trigger)
+                return binding.builtinAction != .disabled
+            }
+            text = TrackpadConflictMessage.text(for: conflicts)
+        }
+        let changed = row.isHidden != (text == nil) || label.stringValue != (text ?? "")
+        row.isHidden = text == nil
+        label.stringValue = text ?? ""
+        if changed {
+            fitWindowToPages()
+        }
+    }
+
+    @objc private func openTrackpadSettingsTapped() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Trackpad-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private var touchStatusText: String {

@@ -344,10 +344,15 @@ under it. Finger names assume the right hand; tick **Left-handed** to mirror the
 included.
 
 Gestures run alongside the ones built into macOS rather than replacing them, so turn off
-any that overlap in `System Settings` → `Trackpad` (for example **Look up & data detectors**
-with a three-finger tap) and `System Settings` → `Mouse` (**Swipe between full-screen
-applications** with two fingers, and **Swipe between pages** with one). While a gesture is
-using finger movement, MouseNavigate holds back the scrolling macOS would otherwise do.
+any that overlap. On a trackpad, the three-finger gestures clash with macOS's own: set
+**Mission Control** and **App Exposé** to four fingers in `System Settings` → `Trackpad` →
+`More Gestures`, or a two-finger slide beside a resting finger opens them as well; turn off
+**Three-finger drag** under `Accessibility` → `Pointer Control` → `Trackpad Options`; and
+set **Look up & data detectors** to Force Click or off. The Touch tab warns while any of
+these is on and offers **Open Trackpad Settings…**. For a Magic Mouse, see `System
+Settings` → `Mouse` (**Swipe between full-screen applications** with two fingers, and
+**Swipe between pages** with one). While a gesture is using finger movement, MouseNavigate
+holds back the scrolling macOS would otherwise do.
 
 Magic Mouse gestures are made the way the mouse is held: with the fingers already resting on
 it. A resting finger stays a resting finger however long it has been there, and the heel of
