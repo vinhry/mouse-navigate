@@ -1732,6 +1732,8 @@ final class PreferencesWindowController: NSObject {
             text = "Downloading version \(version)…"
         case .ready(let staged):
             text = "Version \(staged.version) is ready — Install and Relaunch is in the menu bar menu."
+        case .installing(let version):
+            text = "Installing version \(version)…"
         case .failed(let message):
             text = message
         case .upToDate, .idle:

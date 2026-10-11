@@ -31,6 +31,10 @@ All notable changes to this project will be documented in this file.
   trickled in, left **Settings → About** saying it was downloading for the rest of the
   session, and every later check was turned away as already under way. Each step now has
   a time limit, and an update that runs out of time is reported as failed.
+- **Install and Relaunch** copied and checked the new version while every click and
+  keystroke on the Mac waited. It now does that in the background, and **Settings →
+  About** says it is installing. An update that macOS had cleared out of the caches folder
+  while it waited could never be installed; it is downloaded again instead.
 
 ## [0.7.0] - 2026-10-11
 

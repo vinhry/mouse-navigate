@@ -23,6 +23,7 @@ final class Updater {
         case checking
         case downloading(SemanticVersion)
         case ready(StagedUpdate)
+        case installing(SemanticVersion)
         case upToDate
         case failed(String)
     }
@@ -143,7 +144,7 @@ final class Updater {
 
     var isBusy: Bool {
         switch state {
-        case .checking, .downloading: return true
+        case .checking, .downloading, .installing: return true
         default: return false
         }
     }
@@ -353,6 +354,17 @@ final class Updater {
 
     func installAndRelaunch() {
         guard case .ready(let staged) = state else { return }
+        guard FileManager.default.fileExists(atPath: staged.app.path) else {
+            Log.update.notice("The verified update is gone from the caches folder; downloading it again.")
+            state = .idle
+            showAlert(
+                "MouseNavigate \(staged.version) has to be downloaded again",
+                "The copy waiting to be installed was removed, as macOS does with caches when the disk "
+                    + "runs low. It is offered again once it has been downloaded and checked."
+            )
+            check(userInitiated: false)
+            return
+        }
 
         let target = Bundle.main.bundleURL
         let folder = target.deletingLastPathComponent()
@@ -363,22 +375,31 @@ final class Updater {
             return
         }
 
-        do {
-            try replace(target, with: staged)
-        } catch {
-            Log.update.error("Install failed: \(error.localizedDescription, privacy: .public)")
-            showAlert("The update couldn't be installed", error.localizedDescription)
-            NSWorkspace.shared.activateFileViewerSelecting([staged.app])
-            return
+        // Copying and checking a whole app takes seconds, and the main thread is where the
+        // event tap waits, so it happens on the work queue while everything else carries on.
+        state = .installing(staged.version)
+        let requirement = requirement
+        work.async {
+            let result = Result { try Updater.replace(target, with: staged, requirement: requirement) }
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    Log.update.info("Installed \(staged.version.description, privacy: .public); relaunching.")
+                    self.relaunch(target)
+                case .failure(let error):
+                    Log.update.error("Install failed: \(error.localizedDescription, privacy: .public)")
+                    self.state = .ready(staged)
+                    self.showAlert("The update couldn't be installed", error.localizedDescription)
+                    NSWorkspace.shared.activateFileViewerSelecting([staged.app])
+                }
+            }
         }
-
-        Log.update.info("Installed \(staged.version.description, privacy: .public); relaunching.")
-        relaunch(target)
     }
 
     /// The new app is copied next to the old one first, so the swap itself is a rename on
-    /// one volume: whatever happens, the folder holds one whole app or the other.
-    private func replace(_ target: URL, with staged: StagedUpdate) throws {
+    /// one volume: whatever happens, the folder holds one whole app or the other. Runs on
+    /// the work queue.
+    private static func replace(_ target: URL, with staged: StagedUpdate, requirement: SecRequirement?) throws {
         let fileManager = FileManager.default
         let scratch = target.deletingLastPathComponent()
             .appendingPathComponent(".MouseNavigate-update-\(UUID().uuidString)", isDirectory: true)
@@ -386,7 +407,7 @@ final class Updater {
         defer { try? fileManager.removeItem(at: scratch) }
 
         let copy = scratch.appendingPathComponent(target.lastPathComponent, isDirectory: true)
-        try Updater.run("/usr/bin/ditto", [staged.app.path, copy.path], timeout: Updater.dittoTimeout)
+        try run("/usr/bin/ditto", [staged.app.path, copy.path], timeout: dittoTimeout)
 
         // The copy is what goes live, so it is what gets checked, not the staged original.
         if let requirement {
