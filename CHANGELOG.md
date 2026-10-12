@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.8.0] - 2026-10-11
 
 ### Added
 - **Logitech Buttons** on **Settings → Mouse**: the MX Master's **Gesture button**, **Mode
@@ -15,6 +15,11 @@ All notable changes to this project will be documented in this file.
   for all mice or one mouse model. Trackpads are never changed, and quitting puts every
   mouse back as System Settings has it. **Restore Defaults** on the Mouse tab now includes
   the pointer.
+- **Smooth with momentum**, under **Smoothing** in **Settings → Mouse → Scroll Wheel**,
+  for all mice, one mouse or one app. A slow turn of the wheel stays precise, each notch
+  settling quickly and moving exactly its own distance; the faster the wheel spins, the
+  more freely the page slides, and when the spin stops it glides on and comes to a clean
+  stop within a second. Pages stretch at their ends and spring back, as with a trackpad.
 - A **Welcome** window on first launch, in place of the Accessibility prompt and the
   update question that used to arrive one after the other with nothing to explain them.
   It says what Accessibility and Input Monitoring are for, shows whether each is allowed
@@ -25,11 +30,6 @@ All notable changes to this project will be documented in this file.
 - Each release lists the SHA-256 of `MouseNavigate.zip` in its notes, so a download can be
   checked, and carries `MouseNavigate-dSYM.zip`, the debug symbols that turn a crash
   report from your Mac into something that can be read.
-- **Smooth with momentum**, under **Smoothing** in **Settings → Mouse → Scroll Wheel**,
-  for all mice, one mouse or one app. A slow turn of the wheel stays precise, each notch
-  settling quickly and moving exactly its own distance; the faster the wheel spins, the
-  more freely the page slides, and when the spin stops it glides on and comes to a clean
-  stop within a second. Pages stretch at their ends and spring back, as with a trackpad.
 
 ### Changed
 - **Smooth scrolling (experimental)** became the **Smoothing** menu: **Off**, **Smooth**,
