@@ -129,4 +129,53 @@ final class MomentumScrollerTests: XCTestCase {
         scroller.add(vertical: 40, horizontal: 0, at: 0)
         XCTAssertNil(scroller.cancel())
     }
+
+    // MARK: - Feel
+
+    func testReadingLineByLineStaysExact() {
+        var scroller = MomentumScroller(hasMomentum: true)
+        let notches = (0..<6).map { (time: Double($0) * 0.25, vertical: 12.0) }
+        let frames = run(&scroller, notches: notches)
+        XCTAssertEqual(distance(frames), 72)
+        XCTAssertFalse(frames.contains { $0.momentum != .none }, "a slow turn never glides")
+    }
+
+    func testANotchSettlesQuickly() {
+        var scroller = MomentumScroller(hasMomentum: true)
+        var settled = 0.0
+        var now = 0.0
+        scroller.add(vertical: 40, horizontal: 0, at: 0)
+        while now < 1, !scroller.isIdle {
+            if let frame = scroller.frame(at: now), frame.vertical != 0 { settled = now }
+            now += 1.0 / 120
+        }
+        XCTAssertLessThan(settled, 0.25)
+    }
+
+    func testAGlideEndsCleanlyWithinASecond() {
+        var scroller = MomentumScroller(hasMomentum: true)
+        let notches = flick(25, every: 0.015)
+        var lastMovement = 0.0
+        var now = 0.0
+        var pending = notches
+        while now < 5 {
+            while let next = pending.first, next.time <= now {
+                scroller.add(vertical: next.vertical, horizontal: 0, at: next.time)
+                pending.removeFirst()
+            }
+            if let frame = scroller.frame(at: now), frame.vertical != 0 { lastMovement = now }
+            if pending.isEmpty, scroller.isIdle { break }
+            now += 1.0 / 120
+        }
+        XCTAssertLessThan(lastMovement - notches.last!.time, 1.0)
+    }
+
+    func testAHarderSpinGoesFurther() {
+        var gentle = MomentumScroller(hasMomentum: true)
+        var hard = MomentumScroller(hasMomentum: true)
+        let gentleExtra = distance(run(&gentle, notches: flick(10, every: 0.03))) - 400
+        let hardExtra = distance(run(&hard, notches: flick(10, every: 0.012))) - 400
+        XCTAssertGreaterThan(hardExtra, gentleExtra)
+    }
 }
+

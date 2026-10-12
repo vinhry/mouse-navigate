@@ -26,9 +26,10 @@ All notable changes to this project will be documented in this file.
   checked, and carries `MouseNavigate-dSYM.zip`, the debug symbols that turn a crash
   report from your Mac into something that can be read.
 - **Smooth with momentum**, under **Smoothing** in **Settings → Mouse → Scroll Wheel**,
-  for all mice, one mouse or one app. A flick of the wheel coasts on and slows to a stop,
-  pages stretch at their ends and spring back, and a notch during a coast stops it, the
-  way a trackpad scrolls; a single notch still moves exactly its own distance.
+  for all mice, one mouse or one app. A slow turn of the wheel stays precise, each notch
+  settling quickly and moving exactly its own distance; the faster the wheel spins, the
+  more freely the page slides, and when the spin stops it glides on and comes to a clean
+  stop within a second. Pages stretch at their ends and spring back, as with a trackpad.
 
 ### Changed
 - **Smooth scrolling (experimental)** became the **Smoothing** menu: **Off**, **Smooth**,
