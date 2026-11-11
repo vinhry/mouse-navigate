@@ -33,6 +33,22 @@ _On the `features-0.9` branch; ships after the fixes below._
   a **Revert** button too.
 
 ### Changed
+- Drawn letters are recognised far more forgivingly. A letter may be drawn the way you
+  write it rather than the way the preview shows: O from any point and either way round;
+  C, S, U, V and W backwards as well; B, D, M, N, P and R with the stem drawn down first;
+  and several lower-case shapes, such as a, d, e, g, m, n, r, u and y. A small hook where
+  the stroke starts or ends, such as fingers rolling as they land, is ignored, and a
+  letter drawn taller, wider or slightly slanted still reads. This was measured on a
+  public set of real pen-drawn letters and on generated ones, not on trackpad drawings.
+- **Letter matching** now accepts more at the same position than before, so if you set it
+  to Strict to stop false matches, check it again.
+- A straight line with a small hook or wobble is read as a line.
+- A drawing that is turned down says what it looked most like, such as "Closest: B" or
+  "Closest: B or D" when two were about as near, so you can see how close you were. A
+  scribble that was nearly nothing is still just "no match". A letter that is recognised
+  but has no action says "No action" instead of "Disabled".
+- With `--touch-debug`, a drawn letter's line also gives the runner-up and the score it
+  needed.
 - Settings opens on the tab it was last left on, and **Settings → Touch** on the pane last
   used.
 - Importing settings no longer says there is no undo, and the confirmations for **Restore

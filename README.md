@@ -480,15 +480,22 @@ trackpad drawing only shows once both fingers have moved the same way for about 
 the trackpad's height, so fingers rolling as they land flash nothing. It appears around the pointer, where you are already looking: a trackpad drawing in the
 trackpad's own proportions, a button drag along the path the pointer takes. When you
 finish, the ink gives way for half a second to what it was recognised as and the action it
-ran — "T" over "New Tab (⌘T)" — in the middle of the screen, or a "no match" when nothing
-fit. Untick **Show the drawing on screen** in the Characters section to work without it.
+ran — "T" over "New Tab (⌘T)" — in the middle of the screen. A letter with nothing bound
+to it says "No action". When nothing fit it says "no match", and if the drawing was close
+to a letter it adds what it looked most like, "Closest: B", or "Closest: B or D" when two
+were about as near; a scribble is not told it was nearly anything. Untick **Show the drawing on screen** in the Characters section to work without it.
 
 **Letter matching** sets how strictly a drawing must resemble a letter: Loose accepts rough
 scribbles, Strict wants a neat one. It applies to every way of drawing.
 
-Letters are single strokes, loosely after Graffiti. `I` is a straight line down. To see how
-one goes, hover it in **Settings → Touch → Characters**: the stroke traces itself beside
-the list, over and over, with a ring showing where to start.
+Letters are single strokes, loosely after Graffiti. `I` is a straight line down. To see one
+way a letter goes, hover it in **Settings → Touch → Characters**: the stroke traces itself
+beside the list, over and over, with a ring showing where to start. It is only one way:
+`O` is read from any point and either way round; `C`, `S`, `U`, `V` and `W` backwards as
+well; `B`, `D`, `M`, `N`, `P` and `R` with the stem drawn down first; and several
+lower-case shapes (`a`, `d`, `e`, `g`, `m`, `n`, `r`, `u`, `y`) too. A small hook where the
+stroke starts or ends is ignored, and a straight line with a hook or a wobble is still a
+line.
 
 | Drawn | Default |
 |-------|---------|
@@ -518,6 +525,11 @@ Raw finger positions come from Apple's private `MultitouchSupport` framework, th
 source jitouch and BetterTouchTool read. It is loaded at runtime, so if a future macOS
 removes it the Touch tab says gestures are unavailable and nothing else is affected.
 Gesture recognition itself is plain Swift in `MouseNavigateCore`, covered by unit tests.
+
+A drawn letter is first tidied: pauses and jitter are removed and a short hook at either
+end is cut off. It is then matched to each letter's templates by an elastic comparison of
+position and direction of travel, so a part drawn longer or shorter than usual does not
+throw the rest off, and a letter has several templates for the other ways of writing it.
 
 To see what the recognizer sees, quit the app and run it from a terminal:
 
@@ -783,3 +795,11 @@ git push origin v0.8.1
 - App icon source: Noun Project, "Mouse Navigation" by Sergey Demushkin
   https://thenounproject.com/icon/mouse-navigation-376186/
 - Ensure your use complies with Noun Project license terms/attribution requirements.
+
+## Test Data
+
+The test suite uses a sample of UJI Pen Characters (Version 2) by F. Prat, M. Castro,
+D. Llorens, A. Marzal and J. Vilar, Universitat Jaume I, from the UCI Machine Learning
+Repository (https://doi.org/10.24432/C5FG8S), licensed under Creative Commons Attribution
+4.0 International (CC BY 4.0). The sample, changed from the original as its header says, is
+used in the tests only and is not part of the app.
