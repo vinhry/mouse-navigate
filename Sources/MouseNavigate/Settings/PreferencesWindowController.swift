@@ -122,6 +122,7 @@ final class PreferencesWindowController: NSObject {
     var ignoreMouseMovingCheckbox: NSButton?
     var touchStatusLabel: NSTextField?
     var gestureHUDCheckbox: NSButton?
+    var touchSurfaceCheckboxes: [TouchSurface: NSButton] = [:]
     /// The Touch tab's report of the gesture that fired last.
     var lastGestureLabel: NSTextField?
     /// The warning that a macOS three-finger gesture takes one of the bound gestures.

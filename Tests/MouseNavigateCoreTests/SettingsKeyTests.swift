@@ -20,6 +20,7 @@ final class SettingsKeyTests: XCTestCase {
         keys += CursorBinding.allCases.map(SettingsKey.cursorKey)
         keys += CursorSetting.allCases.map(SettingsKey.cursorSetting)
         keys += CharacterSource.allCases.map(SettingsKey.characterSource)
+        keys += TouchSurface.allCases.map(SettingsKey.touchSurface)
         for field in ScrollField.allCases {
             keys.append(SettingsKey.scroll(field))
             keys += DeviceProfile.allCases.map { SettingsKey.scroll(field, profile: $0) }
@@ -35,6 +36,15 @@ final class SettingsKeyTests: XCTestCase {
     func testGestureHUDIsAnExportableBoolean() {
         XCTAssertEqual(SettingsKey.type(of: SettingsKey.touchShowsGestureHUD), .bool)
         XCTAssertTrue(SettingsKey.isExportable(SettingsKey.touchShowsGestureHUD))
+    }
+
+    func testSurfaceSwitchesAreExportableBooleansOutsideTheBindingFamily() {
+        for surface in TouchSurface.allCases {
+            let key = SettingsKey.touchSurface(surface)
+            XCTAssertEqual(SettingsKey.type(of: key), .bool)
+            XCTAssertTrue(SettingsKey.isExportable(key))
+            XCTAssertFalse(key.hasPrefix(SettingsKey.touchPrefix), "would be read as a gesture binding")
+        }
     }
 
     func testEveryCurrentKeyHasAType() {

@@ -153,6 +153,15 @@ final class PreferencesTests: XCTestCase {
         XCTAssertFalse(preferences.ignoresTapsWhileMouseMoves)
     }
 
+    func testEverySurfaceIsOnUntilSwitchedOffAndEachIsKeptApart() {
+        let preferences = makePreferences()
+        XCTAssertTrue(preferences.isTouchSurfaceEnabled(.trackpad))
+        XCTAssertTrue(preferences.isTouchSurfaceEnabled(.magicMouse))
+        preferences.setTouchSurface(.magicMouse, enabled: false)
+        XCTAssertTrue(preferences.isTouchSurfaceEnabled(.trackpad))
+        XCTAssertFalse(preferences.isTouchSurfaceEnabled(.magicMouse))
+    }
+
     func testGestureHUDIsOffUntilAskedFor() {
         let preferences = makePreferences()
         XCTAssertFalse(preferences.showsGestureHUD)
@@ -171,6 +180,8 @@ final class PreferencesTests: XCTestCase {
         preferences.ignoresTapsWhileMouseMoves = false
         preferences.characterDrawSpread = 0.5
         preferences.showsGestureHUD = true
+        preferences.setTouchSurface(.trackpad, enabled: false)
+        preferences.setTouchSurface(.magicMouse, enabled: false)
         preferences.isTouchEnabled = true
         preferences.setKeyCode(40, for: .activate)
 
@@ -185,6 +196,8 @@ final class PreferencesTests: XCTestCase {
         XCTAssertTrue(preferences.ignoresTapsWhileMouseMoves)
         XCTAssertEqual(preferences.characterDrawSpread, TouchTuning().drawSpread)
         XCTAssertFalse(preferences.showsGestureHUD)
+        XCTAssertTrue(preferences.isTouchSurfaceEnabled(.trackpad))
+        XCTAssertTrue(preferences.isTouchSurfaceEnabled(.magicMouse))
         // Whether gestures are on at all is not a default to restore.
         XCTAssertTrue(preferences.isTouchEnabled)
         XCTAssertEqual(preferences.keyCode(for: .activate), 40)

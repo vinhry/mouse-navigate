@@ -216,6 +216,25 @@ final class TouchMonitor {
         ignoresTyping = preferences.ignoresTouchWhileTyping
         ignoresMouseMoving = preferences.ignoresTapsWhileMouseMoves
         let drawingEnabled = preferences.isCharacterSourceEnabled(.trackpad)
+        // A surface switched on or off while running gains or loses its recognizer here, so
+        // a switched-off one can neither fire, hold back scrolling nor report a pose.
+        var removedAny = false
+        if isRunning {
+            for device in bridge.devices {
+                let isWanted = preferences.isTouchSurfaceEnabled(device.surface)
+                if isWanted, recognizers[device.reference] == nil {
+                    recognizers[device.reference] = makeRecognizerState(for: device, preferences: preferences)
+                } else if !isWanted, recognizers.removeValue(forKey: device.reference) != nil {
+                    removedAny = true
+                }
+            }
+            if removedAny {
+                if !recognizers.values.contains(where: { $0.recognizer.surface == .magicMouse }) {
+                    lastMagicMouseContacts = []
+                }
+                suppressScroll = recognizers.values.contains { $0.recognizer.shouldSuppressScroll }
+            }
+        }
         for state in recognizers.values {
             state.recognizer.isLeftHanded = isLeftHanded
             state.recognizer.isDrawingEnabled = drawingEnabled
@@ -225,6 +244,13 @@ final class TouchMonitor {
             }
         }
         lock.unlock()
+
+        if removedAny {
+            // A drag or a drawing that a removed recognizer had under way would otherwise
+            // never be told it was over.
+            performer.windowManager.endDrag()
+            overlay.cancel()
+        }
 
         if shouldRun && !isRunning {
             startDevices()
@@ -244,15 +270,8 @@ final class TouchMonitor {
         ignoresMouseMoving = preferences.ignoresTapsWhileMouseMoves
         pointerMotion.reset()
         recognizers.removeAll()
-        for device in bridge.devices {
-            var recognizer = TouchGestureRecognizer(surface: device.surface)
-            recognizer.isLeftHanded = preferences.isLeftHanded
-            recognizer.isDrawingEnabled = preferences.isCharacterSourceEnabled(.trackpad)
-            recognizer.tuning.drawSpread = preferences.characterDrawSpread
-            if device.surface == .magicMouse {
-                magicMouseTuning = recognizer.tuning
-            }
-            recognizers[device.reference] = RecognizerState(recognizer: recognizer, aspectRatio: device.aspectRatio)
+        for device in bridge.devices where preferences.isTouchSurfaceEnabled(device.surface) {
+            recognizers[device.reference] = makeRecognizerState(for: device, preferences: preferences)
         }
         lock.unlock()
 
@@ -267,6 +286,18 @@ final class TouchMonitor {
             }
         }
         NotificationCenter.default.post(name: TouchMonitor.didChangeNotification, object: nil)
+    }
+
+    /// With `lock` held.
+    private func makeRecognizerState(for device: MultitouchBridge.Device, preferences: Preferences) -> RecognizerState {
+        var recognizer = TouchGestureRecognizer(surface: device.surface)
+        recognizer.isLeftHanded = preferences.isLeftHanded
+        recognizer.isDrawingEnabled = preferences.isCharacterSourceEnabled(.trackpad)
+        recognizer.tuning.drawSpread = preferences.characterDrawSpread
+        if device.surface == .magicMouse {
+            magicMouseTuning = recognizer.tuning
+        }
+        return RecognizerState(recognizer: recognizer, aspectRatio: device.aspectRatio)
     }
 
     private func stopDevices() {

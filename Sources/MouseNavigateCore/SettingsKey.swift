@@ -108,6 +108,9 @@ public enum SettingsKey {
     public static let cursorKeyPrefix = "key."
     public static let cursorSettingPrefix = "cursor."
     public static let characterSourcePrefix = "characterSource."
+    /// Not under `touchPrefix`: that family holds gesture bindings, and "touchSurface." has
+    /// a letter where that one has its dot, so the two cannot be mistaken for each other.
+    public static let touchSurfacePrefix = "touchSurface."
 
     public static let families: [Family] = [
         Family(prefix: buttonPrefix, type: .string),
@@ -119,6 +122,7 @@ public enum SettingsKey {
         Family(prefix: cursorKeyPrefix, type: .int),
         Family(prefix: cursorSettingPrefix, type: .double),
         Family(prefix: characterSourcePrefix, type: .bool),
+        Family(prefix: touchSurfacePrefix, type: .bool),
     ]
 
     public static func cursorKey(_ binding: CursorBinding) -> String {
@@ -131,6 +135,10 @@ public enum SettingsKey {
 
     public static func characterSource(_ source: CharacterSource) -> String {
         characterSourcePrefix + source.rawValue
+    }
+
+    public static func touchSurface(_ surface: TouchSurface) -> String {
+        touchSurfacePrefix + surface.rawValue
     }
 
     // MARK: - Legacy

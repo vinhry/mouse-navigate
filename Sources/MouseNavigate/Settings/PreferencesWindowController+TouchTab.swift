@@ -195,6 +195,17 @@ extension PreferencesWindowController {
         let grid = makeFormGrid(rows, rowSpacing: 6)
         grid.column(at: 1).xPlacement = .fill
 
+        let switchCheckbox = NSButton(
+            checkboxWithTitle: "\(surface.displayName) gestures",
+            target: self,
+            action: #selector(touchSurfaceChanged(_:))
+        )
+        switchCheckbox.identifier = NSUserInterfaceItemIdentifier(surface.rawValue)
+        if surface == .trackpad {
+            switchCheckbox.toolTip = "Off also stops drawing letters with two fingers on the trackpad."
+        }
+        touchSurfaceCheckboxes[surface] = switchCheckbox
+
         let hoverView = HoverTrackingView()
         hoverView.onHover = { [weak self] point, view in
             self?.hoveredGesture(at: point, in: view, on: surface)
@@ -221,7 +232,7 @@ extension PreferencesWindowController {
         hint.heightAnchor.constraint(equalToConstant: 44).isActive = true
         gestureHintLabels[surface] = hint
 
-        let pane = NSStackView(views: [listAndPreview, hint])
+        let pane = NSStackView(views: [switchCheckbox, listAndPreview, hint])
         pane.orientation = .vertical
         pane.alignment = .leading
         pane.spacing = 8
@@ -527,6 +538,9 @@ extension PreferencesWindowController {
         ignoreTypingCheckbox?.state = preferences.ignoresTouchWhileTyping ? .on : .off
         ignoreMouseMovingCheckbox?.state = preferences.ignoresTapsWhileMouseMoves ? .on : .off
         gestureHUDCheckbox?.state = preferences.showsGestureHUD ? .on : .off
+        for (surface, checkbox) in touchSurfaceCheckboxes {
+            checkbox.state = preferences.isTouchSurfaceEnabled(surface) ? .on : .off
+        }
         for preview in gesturePreviews.values {
             preview.isMirrored = preferences.isLeftHanded
         }
@@ -538,12 +552,17 @@ extension PreferencesWindowController {
         showDrawingCheckbox?.state = preferences.showsDrawingOverlay ? .on : .off
 
         drawSpreadSlider?.doubleValue = preferences.characterDrawSpread
-        drawSpreadSlider?.isEnabled = preferences.isCharacterSourceEnabled(.trackpad)
+        drawSpreadSlider?.isEnabled = drawSpreadSliderIsEnabled
         updateDrawSpreadLabel()
 
         touchStatusLabel?.stringValue = touchStatusText
         touchStatusLabel?.textColor = touchMonitor.isRunning ? .labelColor : .secondaryLabelColor
         refreshTrackpadConflictUI()
+    }
+
+    /// The trackpad's drawing needs both its source and the trackpad's gestures switched on.
+    var drawSpreadSliderIsEnabled: Bool {
+        Preferences.shared.isCharacterSourceEnabled(.trackpad) && Preferences.shared.isTouchSurfaceEnabled(.trackpad)
     }
 
     /// Warns of the macOS three-finger gestures that take a trackpad gesture bound in the
@@ -552,9 +571,10 @@ extension PreferencesWindowController {
     func refreshTrackpadConflictUI() {
         guard let row = touchConflictRow, let label = touchConflictLabel else { return }
         var text: String?
-        // Nothing to warn of where no gesture fires: touch off, no trackpad, or an app in
-        // whose scope MouseNavigate is turned off.
-        if Preferences.shared.isTouchEnabled, !Preferences.shared.isAppDisabled(selectedApp),
+        // Nothing to warn of where no gesture fires: touch off, trackpad gestures off, no
+        // trackpad, or an app in whose scope MouseNavigate is turned off.
+        if Preferences.shared.isTouchEnabled, Preferences.shared.isTouchSurfaceEnabled(.trackpad),
+           !Preferences.shared.isAppDisabled(selectedApp),
            touchMonitor.surfaces.contains(where: { $0.surface == .trackpad }) {
             let conflicts = MacOSTrackpadSettings.current().conflicts { gesture in
                 let trigger = BindingTrigger.touch(gesture)
@@ -588,9 +608,14 @@ extension PreferencesWindowController {
         guard touchMonitor.isRunning else {
             return "Gestures are paused."
         }
-        let surfaces = touchMonitor.surfaces
-        guard !surfaces.isEmpty else {
+        let found = touchMonitor.surfaces
+        guard !found.isEmpty else {
             return "No trackpad or Magic Mouse found."
+        }
+        // Only the surfaces gestures are recognised on; the others are listed as off.
+        let surfaces = found.filter { Preferences.shared.isTouchSurfaceEnabled($0.surface) }
+        guard !surfaces.isEmpty else {
+            return "Gestures are switched off for every surface found."
         }
         let names = surfaces.map { "\($0.name) (\($0.surface.displayName))" }
         return "Listening on " + names.joined(separator: ", ")
@@ -648,6 +673,13 @@ extension PreferencesWindowController {
         Preferences.shared.showsDrawingOverlay = sender.state == .on
     }
 
+    @objc func touchSurfaceChanged(_ sender: NSButton) {
+        guard let raw = sender.identifier?.rawValue, let surface = TouchSurface(rawValue: raw) else { return }
+        Preferences.shared.setTouchSurface(surface, enabled: sender.state == .on)
+        drawSpreadSlider?.isEnabled = drawSpreadSliderIsEnabled
+        refreshTouchUI()
+    }
+
     @objc func drawSpreadChanged(_ sender: NSSlider) {
         Preferences.shared.characterDrawSpread = sender.doubleValue
         updateDrawSpreadLabel()
@@ -657,7 +689,7 @@ extension PreferencesWindowController {
         guard let raw = sender.identifier?.rawValue, let source = CharacterSource(rawValue: raw) else { return }
         Preferences.shared.setCharacterSource(source, enabled: sender.state == .on)
         if source == .trackpad {
-            drawSpreadSlider?.isEnabled = sender.state == .on
+            drawSpreadSlider?.isEnabled = drawSpreadSliderIsEnabled
         }
     }
 
@@ -674,7 +706,7 @@ extension PreferencesWindowController {
         } else {
             title = "Restore the touch defaults?"
             message = "Every gesture and character binding for All Apps goes back to its default, and so do "
-                + "the touch options on this tab: left-handed, the drawing sources, finger spacing, showing "
+                + "the touch options on this tab: left-handed, the trackpad and Magic Mouse switches, the drawing sources, finger spacing, showing "
                 + "the drawing, flashing gestures on screen, and ignoring touches. Whether touch gestures are switched on, apps' own "
                 + "gestures, mouse buttons and the keyboard cursor are kept."
         }

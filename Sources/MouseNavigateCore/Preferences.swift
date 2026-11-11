@@ -582,6 +582,17 @@ public final class Preferences {
         }
     }
 
+    /// Whether gestures are recognised on a surface at all. On for both until switched off:
+    /// someone who only uses the trackpad can leave a Magic Mouse's gestures alone.
+    public func isTouchSurfaceEnabled(_ surface: TouchSurface) -> Bool {
+        store.object(forKey: SettingsKey.touchSurface(surface)) as? Bool ?? true
+    }
+
+    public func setTouchSurface(_ surface: TouchSurface, enabled: Bool) {
+        store.set(enabled, forKey: SettingsKey.touchSurface(surface))
+        notifyChange(.touch)
+    }
+
     /// Whether each gesture that fires flashes its name and action on screen. Off unless
     /// asked for: it is a way to find out which gesture fired, not something to live with.
     public var showsGestureHUD: Bool {
@@ -624,6 +635,9 @@ public final class Preferences {
         }
         for source in CharacterSource.allCases {
             store.removeObject(forKey: SettingsKey.characterSource(source))
+        }
+        for surface in TouchSurface.allCases {
+            store.removeObject(forKey: SettingsKey.touchSurface(surface))
         }
         store.removeObject(forKey: SettingsKey.touchLeftHanded)
         store.removeObject(forKey: SettingsKey.touchShowsDrawing)
