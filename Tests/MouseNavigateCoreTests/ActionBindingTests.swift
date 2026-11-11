@@ -130,6 +130,96 @@ final class ActionBindingTests: XCTestCase {
         XCTAssertEqual(BindingTrigger.button(5, .mxMaster3).defaultBinding, .disabled)
         XCTAssertEqual(BindingTrigger.character(.t).defaultBinding, .builtin(.newTab))
     }
+
+    // MARK: - Reading a key back
+
+    func testEveryTriggerReadsBackFromItsKey() {
+        var triggers: [BindingTrigger] = TouchGesture.allCases.map { .touch($0) } + CharacterGesture.allCases.map { .character($0) }
+        let modifierSets: [Shortcut.Modifiers] = [[], [.shift], [.control, .option, .shift, .command]]
+        for profile in DeviceProfile.allCases {
+            for button in Preferences.bindableButtons(for: profile) {
+                for modifiers in modifierSets {
+                    for press in ButtonPress.allCases {
+                        triggers.append(.button(button, profile, press, modifiers))
+                    }
+                    for direction in DragDirection.allCases {
+                        triggers.append(.buttonDrag(button, profile, direction, modifiers))
+                    }
+                }
+            }
+        }
+        for trigger in triggers {
+            XCTAssertEqual(BindingTrigger(storageKey: trigger.storageKey), trigger, trigger.storageKey)
+        }
+    }
+
+    func testKeysNothingWritesNameNoTrigger() {
+        for key in [
+            "", "button.", "button.mxMaster4", "button.mxMaster9.3", "button.mxMaster4.x", "button.mxMaster4.03",
+            "button.mxMaster4.3+hyper", "button.mxMaster4.3+cmd+shift", "buttonDrag.mxMaster4.3", "buttonDrag.mxMaster4.3.sideways",
+            "button.mxMaster4.3.up", "touch.nothing", "character.i", "button3", "scroll.smooth",
+        ] {
+            XCTAssertNil(BindingTrigger(storageKey: key), key)
+        }
+    }
+
+    func testTriggersAreNamedAsTheWindowNamesThem() {
+        XCTAssertEqual(BindingTrigger.button(5, .mxMaster4).displayName, "Logitech MX Master 4: Button 5 Click")
+        XCTAssertEqual(
+            BindingTrigger.button(3, .generic, .hold, [.shift, .command]).displayName,
+            "Generic Mouse: ⇧⌘ Button 3 Hold"
+        )
+        XCTAssertEqual(
+            BindingTrigger.buttonDrag(LogitechControl.gestureButton.button, .mxMaster3, .up).displayName,
+            "Logitech MX Master 3: Gesture button Drag ↑"
+        )
+        XCTAssertEqual(BindingTrigger.touch(.trackpadThreeFingerTap).displayName, "Trackpad: Three-Finger Tap")
+        XCTAssertEqual(BindingTrigger.character(.b).displayName, "Drawing: B")
+    }
+
+    func testFullDescriptionLeavesNothingOut() {
+        let url = URL(string: "file:///Users/someone/Downloads/x.command")!
+        XCTAssertEqual(ActionBinding.openURL(url).displayName, "Open file:///Users/someone/Downloads/x.command", "no host to show")
+        XCTAssertEqual(
+            ActionBinding.openURL(URL(string: "https://example.com/a/b?c=d")!).fullDescription,
+            "Open https://example.com/a/b?c=d"
+        )
+        XCTAssertEqual(
+            ActionBinding.launchApp(bundleID: "com.example.evil", name: "Safari").fullDescription,
+            "Launch Safari (com.example.evil)"
+        )
+        XCTAssertEqual(ActionBinding.launchApp(bundleID: "com.example.app", name: "com.example.app").fullDescription, "Launch com.example.app")
+        XCTAssertEqual(ActionBinding.shortcut(Shortcut(KeyCode.q, [.command])).fullDescription, "Shortcut ⌘Q")
+        XCTAssertEqual(ActionBinding.runShortcut(name: "Wipe").fullDescription, "Run Shortcut “Wipe”")
+        XCTAssertFalse(ActionBinding.builtin(.back).isCustom)
+        XCTAssertTrue(ActionBinding.runShortcut(name: "Wipe").isCustom)
+    }
+
+    // MARK: - Link kinds
+
+    func testWebAndMailLinksAreOrdinary() {
+        for text in ["https://example.com", "http://example.com", "HTTPS://EXAMPLE.COM", "HtTp://example.com",
+                     "mailto:me@example.com", "MAILTO:me@example.com", "example.com"] {
+            XCTAssertEqual(ActionBinding.linkKind(of: text), .ordinary, text)
+        }
+    }
+
+    func testOtherSchemesAreNamedLowercased() {
+        XCTAssertEqual(ActionBinding.linkKind(of: "file:///Users/someone/x.command"), .other(scheme: "file"))
+        XCTAssertEqual(ActionBinding.linkKind(of: "FILE:///tmp/x"), .other(scheme: "file"))
+        XCTAssertEqual(ActionBinding.linkKind(of: "javascript:alert(1)"), .other(scheme: "javascript"))
+        XCTAssertEqual(ActionBinding.linkKind(of: "smb://host/share"), .other(scheme: "smb"))
+        XCTAssertEqual(ActionBinding.linkKind(of: "shortcuts://run-shortcut?name=x"), .other(scheme: "shortcuts"))
+        XCTAssertEqual(ActionBinding.linkKind(of: "raycast://extensions/x"), .other(scheme: "raycast"))
+        XCTAssertEqual(ActionBinding.linkKind(of: URL(string: "x-apple.systempreferences:com.apple.preference")!), .other(scheme: "x-apple.systempreferences"))
+    }
+
+    func testEmptyAndInvalidLinksAreInvalid() {
+        for text in ["", "   ", "not a url", "nothing"] {
+            XCTAssertEqual(ActionBinding.linkKind(of: text), .invalid, text)
+        }
+        XCTAssertEqual(ActionBinding.linkKind(of: URL(string: "relative/path")!), .invalid)
+    }
 }
 
 final class BindingResolverTests: XCTestCase {

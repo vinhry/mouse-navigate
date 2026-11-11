@@ -98,6 +98,23 @@ public enum ActionBinding: Equatable, Sendable {
         }
     }
 
+    /// Anything but a built-in action: a keystroke, an app, a link or a shortcut, each of
+    /// which can do whatever the value it carries says.
+    public var isCustom: Bool {
+        builtinAction == nil
+    }
+
+    /// What the binding does with nothing left out, for the user to check before taking a
+    /// binding from a file: the whole URL rather than its host, and the app's bundle ID,
+    /// since the name beside it is only a label the file supplies.
+    public var fullDescription: String {
+        switch self {
+        case .openURL(let url): return "Open \(url.absoluteString)"
+        case .launchApp(let bundleID, let name) where name != bundleID: return "Launch \(name) (\(bundleID))"
+        default: return displayName
+        }
+    }
+
     /// A URL worth opening: it has to name a scheme, or `NSWorkspace` has nothing to hand
     /// it to. Bare hosts such as "example.com" are taken as web addresses.
     public static func validURL(_ text: String) -> URL? {
@@ -110,6 +127,31 @@ public enum ActionBinding: Equatable, Sendable {
         }
         guard !trimmed.contains(" "), trimmed.contains(".") else { return nil }
         return URL(string: "https://" + trimmed)
+    }
+
+    /// Whether a link goes where people expect links to go.
+    public enum LinkKind: Equatable, Sendable {
+        /// A web page or a new email, opened in the browser or mail app.
+        case ordinary
+        /// Handed to whichever app claims the scheme, which can be anything: `file:` opens
+        /// or runs a file, `smb:` mounts a share, `shortcuts:` runs a shortcut. Lowercased.
+        case other(scheme: String)
+        /// Not a URL `validURL` accepts.
+        case invalid
+    }
+
+    public static let ordinarySchemes: Set<String> = ["http", "https", "mailto"]
+
+    /// Read the way `validURL` reads the text, so a bare host counts as the web address it
+    /// becomes. Schemes are case-insensitive, so "HTTPS:" is ordinary.
+    public static func linkKind(of text: String) -> LinkKind {
+        guard let url = validURL(text) else { return .invalid }
+        return linkKind(of: url)
+    }
+
+    public static func linkKind(of url: URL) -> LinkKind {
+        guard let scheme = url.scheme?.lowercased(), !scheme.isEmpty else { return .invalid }
+        return ordinarySchemes.contains(scheme) ? .ordinary : .other(scheme: scheme)
     }
 
     private struct Stored: Codable {
@@ -195,6 +237,69 @@ public enum BindingTrigger: Hashable {
         }
     }
 
+    /// The trigger a settings key belongs to, so a key read from a file can be named. Only
+    /// a key written exactly as `storageKey` writes it counts: anything else is a key
+    /// nothing looks up.
+    public init?(storageKey key: String) {
+        let trigger: BindingTrigger?
+        if let rest = key.dropPrefix(SettingsKey.touchPrefix) {
+            trigger = TouchGesture(rawValue: rest).map { .touch($0) }
+        } else if let rest = key.dropPrefix(SettingsKey.characterPrefix) {
+            trigger = CharacterGesture(rawValue: rest).map { .character($0) }
+        } else if let rest = key.dropPrefix(SettingsKey.buttonDragPrefix) {
+            trigger = BindingTrigger.parseButton(rest, hasDirection: true, press: .click)
+        } else if let rest = key.dropPrefix(SettingsKey.buttonHoldPrefix) {
+            trigger = BindingTrigger.parseButton(rest, hasDirection: false, press: .hold)
+        } else if let rest = key.dropPrefix(SettingsKey.buttonDoublePrefix) {
+            trigger = BindingTrigger.parseButton(rest, hasDirection: false, press: .doubleClick)
+        } else if let rest = key.dropPrefix(SettingsKey.buttonPrefix) {
+            trigger = BindingTrigger.parseButton(rest, hasDirection: false, press: .click)
+        } else {
+            trigger = nil
+        }
+        guard let trigger, trigger.storageKey == key else { return nil }
+        self = trigger
+    }
+
+    /// "<profile>.<number>[.<direction>][+modifiers]".
+    private static func parseButton(_ text: String, hasDirection: Bool, press: ButtonPress) -> BindingTrigger? {
+        let modifierStart = text.firstIndex(of: "+") ?? text.endIndex
+        guard let modifiers = Shortcut.Modifiers(storageSuffix: String(text[modifierStart...])) else { return nil }
+        let parts = text[..<modifierStart].split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == (hasDirection ? 3 : 2),
+              let profile = DeviceProfile(rawValue: String(parts[0])),
+              let number = Int(parts[1]), number >= 0
+        else {
+            return nil
+        }
+        if hasDirection {
+            guard let direction = DragDirection(rawValue: String(parts[2])) else { return nil }
+            return .buttonDrag(number, profile, direction, modifiers)
+        }
+        return .button(number, profile, press, modifiers)
+    }
+
+    /// The trigger as the preferences window names it, with the mouse model or surface
+    /// first: "Logitech MX Master 4: ⇧⌘ Button 5 Hold", "Trackpad: Three-Finger Tap".
+    public var displayName: String {
+        switch self {
+        case .button(let number, let profile, let press, let modifiers):
+            return BindingTrigger.buttonName(number, profile, input: .press(press), modifiers: modifiers)
+        case .buttonDrag(let number, let profile, let direction, let modifiers):
+            return BindingTrigger.buttonName(number, profile, input: .drag(direction), modifiers: modifiers)
+        case .touch(let gesture):
+            return "\(gesture.surface.displayName): \(gesture.displayName)"
+        case .character(let gesture):
+            return "Drawing: \(gesture.displayName)"
+        }
+    }
+
+    private static func buttonName(_ number: Int, _ profile: DeviceProfile, input: ButtonInput, modifiers: Shortcut.Modifiers) -> String {
+        let button = LogitechControl(button: number)?.displayName ?? "Button \(number)"
+        let held = modifiers.isEmpty ? "" : modifiers.symbols + " "
+        return "\(profile.displayName): \(held)\(button) \(input.displayName)"
+    }
+
     /// A combination with modifiers starts unbound: the plain button's binding stands in
     /// for it until it is given one of its own.
     public var defaultBinding: ActionBinding {
@@ -216,5 +321,11 @@ public enum BindingTrigger: Hashable {
         case .touch(let gesture): return gesture.allows(action)
         case .character: return action != .moveResizeWindow
         }
+    }
+}
+
+private extension String {
+    func dropPrefix(_ prefix: String) -> String? {
+        hasPrefix(prefix) ? String(dropFirst(prefix.count)) : nil
     }
 }

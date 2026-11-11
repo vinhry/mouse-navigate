@@ -63,7 +63,7 @@ final class SettingsSnapshotTests: XCTestCase {
         XCTAssertTrue(result.ignoredKeys.isEmpty)
         var expected = sourceStore.persistentDomain(forName: suites[0]) ?? [:]
         var actual = targetStore.persistentDomain(forName: suites[1]) ?? [:]
-        for key in SettingsKey.bookkeeping {
+        for key in SettingsSnapshot.keptOnThisMac {
             expected[key] = nil
             actual[key] = nil
         }
@@ -85,6 +85,7 @@ final class SettingsSnapshotTests: XCTestCase {
         let settings = envelope["settings"] as! [String: Any]
         XCTAssertNil(settings[SettingsKey.lastUpdateCheck])
         XCTAssertNil(settings[SettingsKey.configVersion])
+        XCTAssertNil(settings[SettingsKey.automaticUpdates], "each Mac answers for its own updates")
         XCTAssertEqual(envelope["format"] as? String, SettingsSnapshot.format)
         XCTAssertEqual(envelope["configVersion"] as? Int, source.currentConfigVersion)
         XCTAssertNil(envelope["appVersion"])
@@ -277,5 +278,103 @@ final class SettingsSnapshotTests: XCTestCase {
 
         XCTAssertTrue(target.hasCompletedOnboarding, "the Welcome window does not come back")
         XCTAssertEqual(target.lastUpdateCheck, checked)
+    }
+
+    // MARK: - What a file may not set
+
+    func testAFileCannotSetBookkeepingOrUpdateConsent() throws {
+        let store = makeStore()
+        let preferences = Preferences(store: store)
+        preferences.automaticUpdates = false
+
+        let result = try preferences.importSettings(json("""
+        {"format": "MouseNavigate settings", "schemaVersion": 1, "configVersion": 3,
+         "settings": {"touchEnabled": true, "update.automatic": true, "onboarding.completed": true}}
+        """))
+
+        XCTAssertEqual(result.ignoredKeys, ["onboarding.completed", "update.automatic"], "named like configVersion")
+        XCTAssertEqual(preferences.automaticUpdates, false, "this Mac's answer stands")
+        XCTAssertFalse(preferences.hasCompletedOnboarding)
+        XCTAssertTrue(preferences.isTouchEnabled)
+    }
+
+    func testAnImportWithoutTheUpdateKeyKeepsThisMacsAnswer() throws {
+        let preferences = Preferences(store: makeStore())
+        preferences.automaticUpdates = true
+        try preferences.importSettings(json("""
+        {"format": "MouseNavigate settings", "schemaVersion": 1, "configVersion": 3, "settings": {}}
+        """))
+        XCTAssertEqual(preferences.automaticUpdates, true, "not asked again after an import")
+    }
+
+    // MARK: - Size
+
+    func testTooManyKeysAreRefused() {
+        var settings: [String: Any] = [:]
+        for index in 0...SettingsSnapshot.maximumKeyCount {
+            settings["unknown.\(index)"] = true
+        }
+        let data = try! JSONSerialization.data(withJSONObject: [
+            "format": SettingsSnapshot.format, "schemaVersion": 1, "configVersion": 3, "settings": settings,
+        ] as [String: Any])
+        XCTAssertLessThan(data.count, SettingsSnapshot.maximumFileSize, "refused for its keys, not its size")
+
+        let preferences = Preferences(store: makeStore())
+        XCTAssertThrowsError(try preferences.importSettings(data)) { error in
+            XCTAssertEqual(error as? SettingsSnapshot.ReadError, .tooManyKeys(limit: SettingsSnapshot.maximumKeyCount))
+        }
+    }
+
+    func testKeysInsideAppOverridesCount() {
+        var bindings: [String: Any] = [:]
+        for index in 0..<SettingsSnapshot.maximumKeyCount {
+            bindings["touch.\(index)"] = "back"
+        }
+        let data = try! JSONSerialization.data(withJSONObject: [
+            "format": SettingsSnapshot.format, "schemaVersion": 1, "configVersion": 3,
+            "settings": ["appOverrides": ["com.example.app": ["name": "X", "bindings": bindings]]],
+        ] as [String: Any])
+
+        XCTAssertThrowsError(try SettingsSnapshot.read(data, currentConfigVersion: 3)) { error in
+            XCTAssertEqual(error as? SettingsSnapshot.ReadError, .tooManyKeys(limit: SettingsSnapshot.maximumKeyCount))
+        }
+    }
+
+    func testARealExportIsWellInsideTheLimits() throws {
+        let (source, _) = populated()
+        for profile in DeviceProfile.allCases {
+            for button in Preferences.bindableButtons(for: profile) {
+                for raw in 0..<16 {
+                    let modifiers = Shortcut.Modifiers(rawValue: raw)
+                    for press in ButtonPress.allCases {
+                        source.setGlobalBinding(.runShortcut(name: "A shortcut with a longish name"), for: .button(button, profile, press, modifiers))
+                    }
+                    for direction in DragDirection.allCases {
+                        source.setGlobalBinding(.openURL(URL(string: "https://example.com/some/path")!), for: .buttonDrag(button, profile, direction, modifiers))
+                    }
+                }
+            }
+        }
+        let data = try source.exportSettings(appVersion: "0.8.0")
+        XCTAssertLessThan(data.count, SettingsSnapshot.maximumFileSize / 2)
+        XCTAssertNoThrow(try SettingsSnapshot.read(data, currentConfigVersion: source.currentConfigVersion))
+    }
+
+    func testAnOversizeFileIsRefused() throws {
+        let oversize = Data(repeating: 0x20, count: SettingsSnapshot.maximumFileSize + 1)
+        XCTAssertThrowsError(try SettingsSnapshot.read(oversize, currentConfigVersion: 3)) { error in
+            XCTAssertEqual(error as? SettingsSnapshot.ReadError, .fileTooLarge(limit: SettingsSnapshot.maximumFileSize))
+        }
+
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("MouseNavigateTests-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try oversize.write(to: url)
+        XCTAssertThrowsError(try SettingsSnapshot.loadFile(at: url)) { error in
+            XCTAssertEqual(error as? SettingsSnapshot.ReadError, .fileTooLarge(limit: SettingsSnapshot.maximumFileSize))
+        }
+
+        let exact = Data(repeating: 0x20, count: SettingsSnapshot.maximumFileSize)
+        try exact.write(to: url)
+        XCTAssertEqual(try SettingsSnapshot.loadFile(at: url).count, SettingsSnapshot.maximumFileSize)
     }
 }

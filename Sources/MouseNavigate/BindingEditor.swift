@@ -85,9 +85,45 @@ final class BindingEditor: NSObject, NSTextFieldDelegate, NSComboBoxDelegate {
         watch(field, confirm: alert.buttons[0]) { ActionBinding.validURL($0) != nil }
 
         alert.beginSheetModal(for: window) { response in
-            completion(response == .alertFirstButtonReturn ? ActionBinding.validURL(field.stringValue) : nil)
+            guard response == .alertFirstButtonReturn, let url = ActionBinding.validURL(field.stringValue) else {
+                completion(nil)
+                return
+            }
+            // Asked once: keeping a link that was already bound asks nothing.
+            guard case .other(let scheme) = ActionBinding.linkKind(of: url), url != current else {
+                completion(url)
+                return
+            }
+            // The sheet has to be gone before another can be shown.
+            DispatchQueue.main.async {
+                Self.confirmUnusualLink(url, scheme: scheme, in: window, completion: completion)
+            }
         }
         alert.window.makeFirstResponder(field)
+    }
+
+    /// A web page or an email is what people expect a link to open. Any other scheme goes to
+    /// whichever app claims it, so it is said once, here, while the link is being chosen,
+    /// rather than each time the input is used: `raycast:` and `things:` links are what
+    /// some people bind on purpose.
+    private static func confirmUnusualLink(_ url: URL, scheme: String, in window: NSWindow, completion: @escaping (URL?) -> Void) {
+        let message: String
+        if url.isFileURL {
+            message = "This opens \(url.path) each time the input is used, the way double-clicking it "
+                + "in the Finder would: a document opens in its app, and an app or a script runs."
+        } else {
+            message = "This opens \(url.absoluteString) with whatever app handles “\(scheme):” links, "
+                + "each time the input is used. That app decides what the link does, which can be more "
+                + "than showing a page. Use it only if you know what this link does."
+        }
+        AlertPresenter.sheet(
+            "Open a “\(scheme):” link?",
+            message,
+            buttons: ["Use This Link", "Cancel"],
+            on: window
+        ) { response in
+            completion(response == .alertFirstButtonReturn ? url : nil)
+        }
     }
 
     // MARK: - Shortcuts app

@@ -106,17 +106,35 @@ public struct SettingsSnapshot: Equatable {
         self.values = values
     }
 
+    /// Keys this Mac answers for itself, so a file never carries them either way: the
+    /// bookkeeping, and whether updates download and install on their own, which is the
+    /// user's consent on this Mac and not something a shared file may give for them.
+    /// `SettingsKey.isExportable` still says yes to the updates key; this is the narrower
+    /// list a file is written and read with.
+    public static let keptOnThisMac: Set<String> = SettingsKey.bookkeeping.union([SettingsKey.automaticUpdates])
+
+    /// Far more than a real export: every input of every button on every mouse model,
+    /// each with all sixteen modifier combinations, is about 3,500 keys, and under 1 MB
+    /// even with a custom action on every one. The limits are there so a file built to be
+    /// huge is refused, not to trim real ones.
+    public static let maximumFileSize = 1_000_000
+    /// Counted at every level, so app overrides' bindings count too.
+    public static let maximumKeyCount = 20_000
+
     public enum ReadError: Error, Equatable {
         case notASettingsFile
         case unsupportedSchema(Int)
         /// Written by a newer MouseNavigate whose settings this one cannot read.
         case newerConfigVersion(Int)
         case wrongType(key: String, expected: SettingsKey.ValueType)
+        case fileTooLarge(limit: Int)
+        case tooManyKeys(limit: Int)
     }
 
     public struct ReadResult: Equatable {
         public var snapshot: SettingsSnapshot
-        /// Keys the file had that MouseNavigate does not know, left where they were.
+        /// Keys the file had that were not taken: ones MouseNavigate does not know, and ones
+        /// a file never sets (`configVersion`, `keptOnThisMac`).
         public var ignoredKeys: [String]
     }
 
@@ -126,7 +144,7 @@ public struct SettingsSnapshot: Equatable {
     public static func capture(from store: UserDefaults, configVersion: Int, appVersion: String?) -> SettingsSnapshot {
         var values: [String: SettingsValue] = [:]
         for key in SettingsKey.userSettingKeys(in: store)
-        where SettingsKey.isExportable(key) && key != SettingsKey.configVersion {
+        where SettingsKey.isExportable(key) && key != SettingsKey.configVersion && !keptOnThisMac.contains(key) {
             guard let type = SettingsKey.type(of: key), let raw = store.object(forKey: key),
                   let value = SettingsValue(any: raw, as: type)
             else { continue }
@@ -150,17 +168,36 @@ public struct SettingsSnapshot: Equatable {
 
     // MARK: - Reading
 
+    /// The file's bytes, refused before they are all read if there are more than any
+    /// settings file has, so picking a huge file by mistake costs nothing.
+    public static func loadFile(at url: URL) throws -> Data {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        // One byte past the limit is enough to know the file is over it.
+        let data = try handle.read(upToCount: maximumFileSize + 1) ?? Data()
+        guard data.count <= maximumFileSize else {
+            throw ReadError.fileTooLarge(limit: maximumFileSize)
+        }
+        return data
+    }
+
     /// Checks the file before anything is written: a key of the wrong type refuses the
-    /// whole file rather than importing part of it. Unknown keys are ignored and named.
-    /// An older layout is accepted, since the migration that follows knows it; a newer
-    /// one is not.
+    /// whole file rather than importing part of it. Unknown keys are ignored and named,
+    /// and so are the ones a file never sets. An older layout is accepted, since the
+    /// migration that follows knows it; a newer one is not.
     public static func read(_ data: Data, currentConfigVersion: Int) throws -> ReadResult {
+        guard data.count <= maximumFileSize else {
+            throw ReadError.fileTooLarge(limit: maximumFileSize)
+        }
         guard let object = try? JSONSerialization.jsonObject(with: data),
               let envelope = object as? [String: Any],
               envelope["format"] as? String == format,
               let settings = envelope["settings"] as? [String: Any]
         else {
             throw ReadError.notASettingsFile
+        }
+        guard keyCount(settings, limit: maximumKeyCount) <= maximumKeyCount else {
+            throw ReadError.tooManyKeys(limit: maximumKeyCount)
         }
         let schemaVersion = (envelope["schemaVersion"] as? NSNumber)?.intValue ?? 0
         guard schemaVersion == currentSchemaVersion else {
@@ -174,7 +211,9 @@ public struct SettingsSnapshot: Equatable {
         var values: [String: SettingsValue] = [:]
         var ignored: [String] = []
         for (key, raw) in settings {
-            guard key != SettingsKey.configVersion, let type = SettingsKey.type(of: key), type != .date else {
+            guard key != SettingsKey.configVersion, !keptOnThisMac.contains(key),
+                  let type = SettingsKey.type(of: key), type != .date
+            else {
                 ignored.append(key)
                 continue
             }
@@ -203,12 +242,28 @@ public struct SettingsSnapshot: Equatable {
         return entries.allSatisfy { AppOverride(bundleID: $0.key, propertyList: $0.value.any) != nil }
     }
 
+    /// Keys at every level of `dictionary`, counting stopped once past `limit` so a file
+    /// built to be huge is not walked to the end.
+    private static func keyCount(_ dictionary: [String: Any], limit: Int) -> Int {
+        var count = 0
+        var pending: [[String: Any]] = [dictionary]
+        while let next = pending.popLast() {
+            count += next.count
+            if count > limit { return count }
+            for case let nested as [String: Any] in next.values {
+                pending.append(nested)
+            }
+        }
+        return count
+    }
+
     // MARK: - Applying
 
     /// Replaces every setting in `store` with the snapshot's. Keys the snapshot lacks are
     /// removed, so the result is the file and nothing else; the caller migrates after.
+    /// The keys `keptOnThisMac` names are left as they were.
     public func apply(to store: UserDefaults) {
-        for key in SettingsKey.userSettingKeys(in: store) where !SettingsKey.bookkeeping.contains(key) {
+        for key in SettingsKey.userSettingKeys(in: store) where !SettingsSnapshot.keptOnThisMac.contains(key) {
             store.removeObject(forKey: key)
         }
         for (key, value) in values {
