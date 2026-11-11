@@ -50,16 +50,17 @@ final class ActionPerformer {
         case .shortcut(let shortcut):
             send(shortcut)
             return true
-        case .launchApp(let bundleID, _):
+        case .launchApp(let bundleID, let name):
             // Finding the app asks Launch Services, which can take its time, so a missing
             // app is only found out about later; the press is spoken for either way.
-            later { self.launchApplication(bundleID: bundleID) }
+            later { self.launchApplication(bundleID: bundleID, name: name) }
             return true
         case .openURL(let url):
             later {
                 if !NSWorkspace.shared.open(url) {
                     let kind = url.scheme.map { "\($0) address" } ?? "address without a scheme"
                     Log.actions.notice("Nothing opened the \(kind, privacy: .public) \(url.absoluteString, privacy: .private).")
+                    self.reportFailure("Nothing opens that link")
                 }
             }
             return true
@@ -181,9 +182,12 @@ final class ActionPerformer {
         SupportedApps.isSupported(bundleID: FrontmostApp.shared.bundleID)
     }
 
-    private func launchApplication(bundleID: String) {
+    /// `name` is only for telling the user which app was missing; it falls back to the
+    /// bundle identifier, which is what a binding without a name holds.
+    private func launchApplication(bundleID: String, name: String? = nil) {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
             Log.actions.notice("No app found for \(bundleID, privacy: .private); nothing launched.")
+            reportFailure("Couldn't open \(name ?? bundleID)", detail: "The app is not installed")
             return
         }
         launchApplication(at: url)
@@ -202,17 +206,35 @@ final class ActionPerformer {
         process.arguments = ["run", name]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
-        process.terminationHandler = { process in
+        process.terminationHandler = { [weak self] process in
             guard process.terminationStatus != 0 else { return }
             Log.actions.notice(
                 "Shortcut \(name, privacy: .private) exited with status \(process.terminationStatus)."
             )
+            // Called on a thread of Foundation's; the user is told from the main one.
+            DispatchQueue.main.async { [weak self] in
+                self?.reportFailure("The shortcut “\(name)” didn't run")
+            }
         }
         do {
             try process.run()
         } catch {
             Log.actions.error("Could not run shortcut \(name, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            reportFailure("The shortcut “\(name)” didn't run")
         }
+    }
+
+    // MARK: - Failures
+
+    /// Told what could not be done, so it can be shown. Set by whoever owns the screen
+    /// overlay; the beep does not wait for it.
+    var failureHandler: ((_ title: String, _ detail: String?) -> Void)?
+
+    /// A failure the user should notice whatever else is going on: a beep, and the handler's
+    /// message if there is one. Main thread only.
+    private func reportFailure(_ title: String, detail: String? = nil) {
+        NSSound.beep()
+        failureHandler?(title, detail)
     }
 
     // MARK: - Keyboard shortcuts

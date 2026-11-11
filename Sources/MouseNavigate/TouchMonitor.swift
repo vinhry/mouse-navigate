@@ -92,6 +92,19 @@ final class TouchMonitor {
 
     init(performer: ActionPerformer) {
         self.performer = performer
+        // The monitor already owns the overlay and the pause state, so it is the one place
+        // that can show a failure without ActionPerformer knowing about screens. The
+        // performer is shared, so failures from mouse buttons arrive here too.
+        performer.failureHandler = { [weak self] title, detail in
+            self?.flashFailure(title: title, detail: detail)
+        }
+    }
+
+    /// Always shown, whatever the gesture HUD setting says, but never while paused or over
+    /// a drawing in progress (the overlay declines that itself; the beep has been heard).
+    private func flashFailure(title: String, detail: String?) {
+        guard !isPaused else { return }
+        overlay.flash(title: title, subtitle: detail, hold: 1.8)
     }
 
     deinit {
