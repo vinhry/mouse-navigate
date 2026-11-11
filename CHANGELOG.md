@@ -2,6 +2,71 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Ignore touches while typing** and **Ignore taps while the mouse is moving** on
+  **Settings → Touch**, both on by default. A finger or palm that lands on the trackpad
+  while you type, and for half a second after, is not a gesture, and a touch that began
+  during typing stays ignored until every finger has lifted, which also takes away a drawing
+  already on screen. A finger that touches a Magic Mouse while you push it about is
+  gripping it, and is no longer taken for a tap. The app's own keystrokes, such as the one a
+  gesture sends, do not count as typing. **Restore Defaults** on the Touch tab includes
+  both.
+- Choosing an **Open URL…** link whose scheme is not `http`, `https` or `mailto` now asks
+  first, saying which app will handle it. Keeping a link already bound asks nothing.
+- `--touch-debug` says why a near-gesture was turned down, such as a tap beside a finger that
+  had not rested long enough, and for a Magic Mouse shows how far the pointer has moved.
+- `MouseNavigate --check-update-archive <zip>` says whether the updater would unpack a zip.
+  The release workflow runs it on the archive about to be published and stops if the
+  updater would refuse it.
+
+### Fixed
+- Gestures fired by accident. A finger that brushed the trackpad beside a resting one could
+  switch tabs; a tap beside a resting finger is now only taken for a gesture when the
+  resting finger has been down for about a fifth of a second, the tapping finger touched
+  for more than an instant, and both landed above the thumb zone near the bottom edge.
+  Drawing ink flashed when two fingers or palms rested on the trackpad; two fingers now
+  have to land together, level with each other and above the thumb zone, and ink shows only
+  once both have moved the same way for about a tenth of the trackpad's height. Two fingers
+  that have not started drawing within about 0.8 seconds are treated as resting until
+  they lift. A setting for ignoring oversized palm contacts exists but is off until it can
+  be tuned on real trackpads.
+- Importing settings no longer replaces what an input does without showing you. A file that
+  binds an input to a keystroke, an app, a link or a Shortcuts shortcut now lists each one,
+  where it is bound and what it does, before anything is replaced, and **Import Without
+  Custom Actions** is the default button. A file can no longer set this Mac's consent to
+  automatic updates or bring back or hide the **Welcome** window; those stay as this Mac has
+  them and are listed as left out. A file over 1 MB or with more than 20,000 settings is
+  refused.
+- The updater checks an update's archive before unpacking it, and only takes a download
+  that is this project's release on GitHub, redirected only within GitHub's own hosts.
+  This is a precaution against a tampered release, not a response to anything that happened.
+  An update is still installed only if it is signed, notarized and the version the release
+  names.
+- A notification posted by another program saying the Mac was unlocked could wake touch
+  gestures behind the lock screen. It is now only a cue to ask macOS whether the session is
+  really unlocked and in front.
+- The system log no longer shows web addresses, app identifiers or Shortcuts names in the
+  open, and no longer says "a address".
+- **Esc** can be recorded as a keyboard cursor key. Recording is cancelled by clicking the
+  button again or anywhere else in the window.
+- **Restore Defaults** on **Settings → Touch** and **Settings → Keyboard Cursor** now asks
+  first, as on the Mouse tab, and on Keyboard Cursor it no longer turns the keyboard cursor
+  back on: the switch stays as it is.
+- **Remove App** and the three **Restore Defaults** buttons no longer answer Return.
+- Logitech tooltips came back after a refresh of the Mouse tab.
+- The gesture preview tells resting fingers from acting ones by shape, hollow or filled, as
+  well as by colour.
+- The text on the result HUD is readable in both light and dark appearance.
+- The right- and middle-button drawing sources say in their tooltips what they cost: the
+  drag cannot select or scroll, and the press is held back until release.
+- The character pickers have VoiceOver help saying how to draw each one.
+- Swapping two keyboard cursor keys says so under the key grid.
+- **Export Settings…** shows the saved file in the Finder.
+- The Touch tab explains that "Fix" in a gesture's name means a finger that stays resting,
+  and no longer blames the menu bar when gestures are paused for another reason.
+
 ## [0.8.0] - 2026-10-11
 
 ### Added
