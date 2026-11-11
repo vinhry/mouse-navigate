@@ -8,16 +8,26 @@ import XCTest
 /// recognizer on a larger set, and `MOUSENAVIGATE_UJI_PATH` to the UJI Pen Characters file to
 /// include all of its one-stroke letters.
 ///
-/// The 0.8.1 recognizer, on the full report's synthetic set (distorted strokes only) at
-/// Loose / Balanced / Strict: letters 56% / 44% / 3% correct (taught forms 84% / 66% / 6%),
-/// half of all letters rejected at Balanced; straight lines 13% at every setting; corner and
-/// out-and-back strokes 99% / 97% / 12%; 79% / 21% / 0% of non-letters accepted as a letter
-/// or stroke. On the UJI held-out writers, letters in the forms the app teaches: 44% / 31% / 1%.
+/// On the full report's synthetic set (distorted strokes only), at Loose / Balanced / Strict:
+///
+///                                0.8.1               now
+///     letters correct            56% / 44% /  3%     95% / 94% / 15%
+///       in the taught forms      84% / 66% /  6%     98% / 97% / 19%
+///     letters rejected            3% / 51% / 97%      0% /  2% / 85%
+///     straight lines             13% / 13% / 13%    100% / 100% / 100%
+///     corner, out-and-back       99% / 97% / 12%    100% / 99% / 28%
+///     non-letters accepted       79% / 21% /  0%     71% / 12% /  0%
+///
+/// Of the non-letters let through at Balanced, nearly all are shallow arcs (taken for rounded
+/// corners) and loops gone round one and a half times (taken for O); scribbles, zigzags and
+/// rows of loops are 0.7% to 2%. On the UJI held-out writers' one-stroke letters, in the forms
+/// the app teaches: 0.8.1 46% / 32% / 1%, now 74% / 67% / 1%.
 final class StrokeEvaluationTests: XCTestCase {
     private static let environment = ProcessInfo.processInfo.environment
 
-    private static let genuine = StrokeEvaluation.genuineStrokes(perCell: 1, seed: 1)
-    private static let negatives = StrokeEvaluation.negativeStrokes(perKind: 20, seed: 2)
+    /// Distorted strokes only: clean ones are the templates' own tests' business.
+    private static let genuine = StrokeEvaluation.genuineStrokes(perCell: 1, seed: 1, strengths: [0.33, 0.67, 1])
+    private static let negatives = StrokeEvaluation.negativeStrokes(perKind: 16, seed: 2)
 
     private static let synthetic = StrokeEvaluation.run(.current, on: genuine + negatives)
     private static let real: StrokeEvaluation.Run? = (try? UJIPenCharacters.fixture())
@@ -59,11 +69,32 @@ final class StrokeEvaluationTests: XCTestCase {
         let letters = run.group(.letter)
         let taught = letters.filter { $0.stroke.kind == .taught }
         printIfAsked(run)
-        XCTAssertGreaterThanOrEqual(run.accuracy(letters, at: E.balanced), 0.40)
-        XCTAssertGreaterThanOrEqual(run.accuracy(taught, at: E.balanced), 0.60)
+        if Self.environment["MOUSENAVIGATE_STROKE_REPORT"] == "1" {
+            print("scribbles accepted at the default: \(E.percent(scribbleAcceptRate(run, at: E.balanced)))")
+        }
+        // Measured 95.6%, 96.4%, 100%, 100%, 11.7% and 3.1% on this set.
+        XCTAssertGreaterThanOrEqual(run.accuracy(letters, at: E.balanced), 0.90)
+        XCTAssertGreaterThanOrEqual(run.accuracy(taught, at: E.balanced), 0.92)
         XCTAssertGreaterThanOrEqual(run.accuracy(run.group(.stroke), at: E.balanced), 0.95)
-        XCTAssertGreaterThanOrEqual(run.accuracy(run.group(.direction), at: E.balanced), 0.0)
-        XCTAssertLessThanOrEqual(run.falseAcceptRate(at: E.balanced), 0.25)
+        XCTAssertGreaterThanOrEqual(run.accuracy(run.group(.direction), at: E.balanced), 0.95)
+        XCTAssertLessThanOrEqual(run.falseAcceptRate(at: E.balanced), 0.16)
+        XCTAssertLessThanOrEqual(scribbleAcceptRate(run, at: E.balanced), 0.06)
+    }
+
+    /// Scribbles proper, leaving out the arcs and loops that look like rounded corners and Os.
+    private func scribbleAcceptRate(_ run: StrokeEvaluation.Run, at setting: Double) -> Double {
+        let kinds: [E.Negative] = [.randomWalk, .randomPoints, .loops, .zigzag, .nearLine, .shortHook]
+        return kinds.map { run.falseAcceptRate(at: setting, kind: $0) }.reduce(0, +) / Double(kinds.count)
+    }
+
+    /// Loose takes more than the default, and Strict much less.
+    func testTheSliderEndsMeanWhatTheySay() {
+        let run = Self.synthetic
+        let letters = run.group(.letter)
+        XCTAssertGreaterThanOrEqual(run.accuracy(letters, at: E.loose), run.accuracy(letters, at: E.balanced))
+        XCTAssertGreaterThan(run.falseAcceptRate(at: E.loose), run.falseAcceptRate(at: E.balanced))
+        XCTAssertLessThan(run.accuracy(letters, at: E.strict), 0.5)
+        XCTAssertEqual(run.falseAcceptRate(at: E.strict), 0)
     }
 
     func testQualityOnRealHandwriting() throws {
@@ -71,7 +102,10 @@ final class StrokeEvaluationTests: XCTestCase {
         let letters = run.group(.letter)
         let taught = letters.filter { $0.stroke.kind == .taught }
         printIfAsked(run)
-        XCTAssertGreaterThanOrEqual(run.accuracy(taught, at: E.balanced), 0.25)
+        // Measured 62.7% and 64.5% on this sample; 71.8% of letters at Loose.
+        XCTAssertGreaterThanOrEqual(run.accuracy(letters, at: E.balanced), 0.56)
+        XCTAssertGreaterThanOrEqual(run.accuracy(taught, at: E.balanced), 0.58)
+        XCTAssertGreaterThanOrEqual(run.accuracy(letters, at: E.loose), 0.65)
     }
 
     /// Moving the slider towards Strict never accepts more, of anything.

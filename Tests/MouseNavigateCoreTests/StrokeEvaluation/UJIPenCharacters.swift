@@ -26,10 +26,10 @@ enum UJIPenCharacters {
     }
 
     /// Letters whose usual one-stroke form is the one the app's preview teaches. `I` is a
-    /// straight line down.
+    /// straight line down. Lower-case l is not here: handwritten, it is a tall loop, not an L.
     static let taught: [Character: CharacterGesture] = [
         "A": .a, "B": .b, "b": .b, "C": .c, "c": .c, "D": .d, "G": .g, "h": .h, "I": .down,
-        "J": .j, "L": .l, "l": .l, "M": .m, "N": .n, "O": .o, "o": .o, "P": .p, "p": .p,
+        "J": .j, "L": .l, "M": .m, "N": .n, "O": .o, "o": .o, "P": .p, "p": .p,
         "R": .r, "S": .s, "s": .s, "U": .u, "u": .u, "V": .v, "v": .v, "W": .w, "w": .w,
         "Y": .y, "y": .y, "Z": .z, "z": .z,
     ]
