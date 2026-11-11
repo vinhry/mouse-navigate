@@ -102,6 +102,33 @@ final class DrawingOverlay {
         fadeOut(after: DrawingOverlay.holdDuration)
     }
 
+    /// Flashes a short message in the middle of the screen, in the same window and plate a
+    /// drawn character's result uses, for a gesture that fired or an action that failed.
+    /// Shown whether or not the drawing itself is switched on. Left alone while a stroke is
+    /// being drawn, which would lose its ink. Returns whether it was shown.
+    @discardableResult
+    func flash(title: String, subtitle: String?, hold: TimeInterval = 0.9) -> Bool {
+        guard strokeAnchor == nil, let screen = activeScreen else { return false }
+
+        pendingFade?.cancel()
+        pendingFade = nil
+
+        let size = DrawingOverlay.resultSize
+        let panel = panel(on: screen, frame: NSRect(
+            x: screen.frame.midX - size.width / 2,
+            y: screen.frame.midY - size.height / 2,
+            width: size.width,
+            height: size.height
+        ))
+        canvas?.showResult(title: title, subtitle: subtitle, compact: true)
+        panel.alphaValue = 1
+        if !panel.isVisible {
+            panel.orderFrontRegardless()
+        }
+        fadeOut(after: hold)
+        return true
+    }
+
     /// The stroke came to nothing, so take the ink away.
     func cancel() {
         guard panel?.isVisible == true else { return }
@@ -320,11 +347,13 @@ private final class OverlayCanvas: NSView {
         }
     }
 
-    func showResult(title text: String, subtitle detail: String?) {
+    /// `compact` is for sentences, such as a gesture's name or what went wrong, rather than
+    /// the single large letter a drawing is recognised as.
+    func showResult(title text: String, subtitle detail: String?, compact: Bool = false) {
         // Always in the middle, wherever on the surface or the screen the stroke was made.
         let centre = CGPoint(x: bounds.midX, y: bounds.midY)
         // A single letter can be large; "Down ↓ (I)" and the like need to fit.
-        let titleSize: CGFloat = text.count <= 2 ? 76 : 40
+        let titleSize: CGFloat = compact ? 26 : (text.count <= 2 ? 76 : 40)
         let titleHeight = titleSize * 1.3
         let subtitleHeight: CGFloat = detail == nil ? 0 : 30
         let top = centre.y + (titleHeight + subtitleHeight) / 2
@@ -337,12 +366,15 @@ private final class OverlayCanvas: NSView {
             let x = min(max(centre.x - width / 2, 0), max(bounds.width - width, 0))
             let titleY = min(max(top - titleHeight, subtitleHeight), bounds.height - titleHeight)
 
+            // A long name is cut short rather than running past the plate.
+            title.truncationMode = .end
+            subtitle.truncationMode = .end
             let titleText = attributed(text, size: titleSize, weight: .bold, alpha: 1)
             title.string = titleText
             title.frame = CGRect(x: x, y: titleY, width: width, height: titleHeight)
             title.isHidden = false
 
-            let subtitleText = detail.map { attributed($0, size: 20, weight: .bold, alpha: 1) }
+            let subtitleText = detail.map { attributed($0, size: compact ? 18 : 20, weight: .bold, alpha: 1) }
             subtitle.string = subtitleText
             subtitle.frame = CGRect(
                 x: x,

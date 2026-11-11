@@ -582,6 +582,16 @@ public final class Preferences {
         }
     }
 
+    /// Whether each gesture that fires flashes its name and action on screen. Off unless
+    /// asked for: it is a way to find out which gesture fired, not something to live with.
+    public var showsGestureHUD: Bool {
+        get { store.object(forKey: SettingsKey.touchShowsGestureHUD) as? Bool ?? false }
+        set {
+            store.set(newValue, forKey: SettingsKey.touchShowsGestureHUD)
+            notifyChange(.touch)
+        }
+    }
+
     /// How far apart the two fingers must be to draw rather than scroll, as a fraction of
     /// the trackpad's width.
     public var characterDrawSpread: Double {
@@ -618,6 +628,7 @@ public final class Preferences {
         store.removeObject(forKey: SettingsKey.touchLeftHanded)
         store.removeObject(forKey: SettingsKey.touchShowsDrawing)
         store.removeObject(forKey: SettingsKey.touchDrawSpread)
+        store.removeObject(forKey: SettingsKey.touchShowsGestureHUD)
         store.removeObject(forKey: SettingsKey.touchIgnoreWhileTyping)
         store.removeObject(forKey: SettingsKey.touchIgnoreWhileMoving)
         notifyChange(.touch)

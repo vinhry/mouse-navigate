@@ -10,6 +10,10 @@ import MouseNavigateCore
 @MainActor
 final class TouchMonitor {
     static let didChangeNotification = Notification.Name("com.vinhry.MouseNavigate.touchDidChange")
+    /// Posted on the main thread when a gesture or drawn character fires, for the Settings
+    /// window's "Last gesture" line. The text is in `userInfo` under `gestureTextKey`.
+    static let gestureDidFireNotification = Notification.Name("com.vinhry.MouseNavigate.gestureDidFire")
+    static let gestureTextKey = "text"
 
     /// Main thread only, apart from stopping the frames in deinit.
     nonisolated(unsafe) private let bridge = MultitouchBridge()
@@ -153,8 +157,24 @@ final class TouchMonitor {
         overlay.show(points, in: space)
         overlay.finish(character: character, binding: binding)
 
-        guard let binding else { return }
+        guard let character, let binding else { return }
+        // The overlay has just shown the character and its action, so no second flash.
+        announce(character.displayName, binding: binding, source: "Drawing", flashes: false)
         performer.perform(binding)
+    }
+
+    /// Tells the Settings window which gesture just fired, and flashes it on screen if the
+    /// user asked for that. A gesture bound to Disabled does nothing, so it is reported to
+    /// the window (that is how its name is found) but never flashed.
+    private func announce(_ name: String, binding: ActionBinding, source: String, flashes: Bool) {
+        NotificationCenter.default.post(
+            name: TouchMonitor.gestureDidFireNotification,
+            object: nil,
+            userInfo: [TouchMonitor.gestureTextKey: "\(name) → \(binding.displayName) (\(source))"]
+        )
+        if flashes, binding != .disabled, Preferences.shared.showsGestureHUD, !isPaused {
+            overlay.flash(title: name, subtitle: binding.displayName)
+        }
     }
 
     /// Draws a stroke from a mouse-button drag while it is being made.
@@ -373,6 +393,7 @@ final class TouchMonitor {
                 if surface == .trackpad, gesture.isTap, binding != .disabled {
                     trackpadTapGestureHandler?()
                 }
+                announce(gesture.displayName, binding: binding, source: surface.displayName, flashes: true)
                 if binding == .builtin(.moveResizeWindow) {
                     performer.windowManager.beginDrag()
                 } else {

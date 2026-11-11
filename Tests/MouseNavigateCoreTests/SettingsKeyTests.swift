@@ -32,6 +32,11 @@ final class SettingsKeyTests: XCTestCase {
         XCTAssertEqual(SettingsKey.type(of: SettingsKey.touchIgnoreWhileMoving), .bool)
     }
 
+    func testGestureHUDIsAnExportableBoolean() {
+        XCTAssertEqual(SettingsKey.type(of: SettingsKey.touchShowsGestureHUD), .bool)
+        XCTAssertTrue(SettingsKey.isExportable(SettingsKey.touchShowsGestureHUD))
+    }
+
     func testEveryCurrentKeyHasAType() {
         for key in everyCurrentKey {
             XCTAssertNotNil(SettingsKey.type(of: key), key)

@@ -121,6 +121,9 @@ final class PreferencesWindowController: NSObject {
     var ignoreTypingCheckbox: NSButton?
     var ignoreMouseMovingCheckbox: NSButton?
     var touchStatusLabel: NSTextField?
+    var gestureHUDCheckbox: NSButton?
+    /// The Touch tab's report of the gesture that fired last.
+    var lastGestureLabel: NSTextField?
     /// The warning that a macOS three-finger gesture takes one of the bound gestures.
     var touchConflictRow: NSStackView?
     var touchConflictLabel: NSTextField?
@@ -167,6 +170,12 @@ final class PreferencesWindowController: NSObject {
             self,
             selector: #selector(touchDidChange),
             name: TouchMonitor.didChangeNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(gestureDidFire(_:)),
+            name: TouchMonitor.gestureDidFireNotification,
             object: nil
         )
     }

@@ -153,6 +153,13 @@ final class PreferencesTests: XCTestCase {
         XCTAssertFalse(preferences.ignoresTapsWhileMouseMoves)
     }
 
+    func testGestureHUDIsOffUntilAskedFor() {
+        let preferences = makePreferences()
+        XCTAssertFalse(preferences.showsGestureHUD)
+        preferences.showsGestureHUD = true
+        XCTAssertTrue(preferences.showsGestureHUD)
+    }
+
     func testRestoreTouchDefaultsRemovesOnlyTouchKeys() {
         let preferences = makePreferences()
         preferences.setGlobalBinding(.builtin(.copy), for: .touch(.trackpadThreeFingerTap))
@@ -163,6 +170,7 @@ final class PreferencesTests: XCTestCase {
         preferences.ignoresTouchWhileTyping = false
         preferences.ignoresTapsWhileMouseMoves = false
         preferences.characterDrawSpread = 0.5
+        preferences.showsGestureHUD = true
         preferences.isTouchEnabled = true
         preferences.setKeyCode(40, for: .activate)
 
@@ -176,6 +184,7 @@ final class PreferencesTests: XCTestCase {
         XCTAssertTrue(preferences.ignoresTouchWhileTyping)
         XCTAssertTrue(preferences.ignoresTapsWhileMouseMoves)
         XCTAssertEqual(preferences.characterDrawSpread, TouchTuning().drawSpread)
+        XCTAssertFalse(preferences.showsGestureHUD)
         // Whether gestures are on at all is not a default to restore.
         XCTAssertTrue(preferences.isTouchEnabled)
         XCTAssertEqual(preferences.keyCode(for: .activate), 40)

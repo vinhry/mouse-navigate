@@ -48,6 +48,14 @@ extension PreferencesWindowController {
         guards.spacing = 24
         guards.setHuggingPriority(.required, for: .horizontal)
 
+        let gestureHUD = NSButton(
+            checkboxWithTitle: "Show gestures on screen as they fire",
+            target: self,
+            action: #selector(gestureHUDChanged(_:))
+        )
+        gestureHUD.toolTip = "Handy for finding out which gesture fired when something happens that you did not mean."
+        gestureHUDCheckbox = gestureHUD
+
         let hint = NSTextField(wrappingLabelWithString:
             "Gestures work alongside the ones built into macOS. Turn off any that overlap in "
                 + "System Settings → Trackpad, such as Look Up with a three-finger tap. "
@@ -62,6 +70,15 @@ extension PreferencesWindowController {
         let status = NSTextField(labelWithString: "")
         status.font = .systemFont(ofSize: 11, weight: .medium)
         touchStatusLabel = status
+
+        // Always holds a line, so the first gesture does not make the window grow.
+        let lastGesture = NSTextField(labelWithString: PreferencesWindowController.noGestureYet)
+        lastGesture.font = .systemFont(ofSize: 11)
+        lastGesture.textColor = .secondaryLabelColor
+        lastGesture.lineBreakMode = .byTruncatingTail
+        lastGesture.translatesAutoresizingMaskIntoConstraints = false
+        lastGesture.widthAnchor.constraint(equalToConstant: 580).isActive = true
+        lastGestureLabel = lastGesture
 
         // Shown while a macOS three-finger gesture takes one of the bound gestures. Hidden,
         // it leaves the layout, and the window is fitted to the page again either way.
@@ -142,11 +159,11 @@ extension PreferencesWindowController {
         let footer = makeRestoreDefaultsFooter(action: #selector(restoreTouchDefaultsTapped))
 
         let scopeRow = makeScopeRow()
-        let stack = NSStackView(views: [toggles, guards, hint, status, conflictRow, scopeRow, panePicker, paneContainer, footer])
+        let stack = NSStackView(views: [toggles, guards, gestureHUD, hint, status, lastGesture, conflictRow, scopeRow, panePicker, paneContainer, footer])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
-        stack.setCustomSpacing(14, after: status)
+        stack.setCustomSpacing(14, after: lastGesture)
         stack.setCustomSpacing(14, after: conflictRow)
         stack.setCustomSpacing(14, after: scopeRow)
         stack.setCustomSpacing(12, after: panePicker)
@@ -509,6 +526,7 @@ extension PreferencesWindowController {
         leftHandedCheckbox?.state = preferences.isLeftHanded ? .on : .off
         ignoreTypingCheckbox?.state = preferences.ignoresTouchWhileTyping ? .on : .off
         ignoreMouseMovingCheckbox?.state = preferences.ignoresTapsWhileMouseMoves ? .on : .off
+        gestureHUDCheckbox?.state = preferences.showsGestureHUD ? .on : .off
         for preview in gesturePreviews.values {
             preview.isMirrored = preferences.isLeftHanded
         }
@@ -584,6 +602,18 @@ extension PreferencesWindowController {
         }
     }
 
+    static let noGestureYet = "Last gesture: none yet"
+
+    /// Called when a gesture or drawn character fires, wherever the window is.
+    @objc func gestureDidFire(_ note: Notification) {
+        guard let text = note.userInfo?[TouchMonitor.gestureTextKey] as? String else { return }
+        lastGestureLabel?.stringValue = "Last gesture: " + text
+    }
+
+    @objc func gestureHUDChanged(_ sender: NSButton) {
+        Preferences.shared.showsGestureHUD = sender.state == .on
+    }
+
     @objc func touchEnabledChanged(_ sender: NSButton) {
         Preferences.shared.isTouchEnabled = sender.state == .on
         refreshTouchUI()
@@ -645,7 +675,7 @@ extension PreferencesWindowController {
             title = "Restore the touch defaults?"
             message = "Every gesture and character binding for All Apps goes back to its default, and so do "
                 + "the touch options on this tab: left-handed, the drawing sources, finger spacing, showing "
-                + "the drawing, and ignoring touches. Whether touch gestures are switched on, apps' own "
+                + "the drawing, flashing gestures on screen, and ignoring touches. Whether touch gestures are switched on, apps' own "
                 + "gestures, mouse buttons and the keyboard cursor are kept."
         }
         AlertPresenter.confirmDestructive(title, message, confirm: "Restore", on: window) { [weak self] in
