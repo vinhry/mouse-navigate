@@ -39,7 +39,7 @@ _On the `features-0.9` branch; ships after the fixes below._
   Defaults** and **Remove App** say they can be taken back with **Revert Last Change**
   until you quit.
 
-## [Unreleased]
+## [0.8.1] - 2026-11-10
 
 ### Added
 - **Ignore touches while typing** and **Ignore taps while the mouse is moving** on
