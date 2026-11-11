@@ -76,7 +76,7 @@ To see what MouseNavigate detects:
   - **Install MouseNavigate X.Y.Z and Relaunch** — shown only once an update has been downloaded and verified
   - **Grant Accessibility Permission…**, with a warning sign — shown only while the permission is missing; clicking opens System Settings → Accessibility directly
   - **Grant Input Monitoring…**, with a warning sign — shown only when keyboard events are blocked
-  - **Pause** / **Resume** — temporarily suspends all button handling without quitting
+  - **Pause** / **Resume** — temporarily stands everything down without quitting: buttons, wheel options, touch gestures, the keyboard cursor and the Logitech buttons
   - **Launch at Login** ✓ — toggle to start MouseNavigate automatically at login. When macOS is still waiting for you to allow it, the item says so and opens System Settings → Login Items instead.
   - **Check for Updates…** — ask GitHub for a newer release now
   - **Settings…** (`⌘,`) — open the Settings window
@@ -123,7 +123,8 @@ The custom actions each take a value of their own:
   in apps outside the supported list too.
 - **Launch App…** opens, or brings forward, an app you choose.
 - **Open URL…** opens a web address or any link an app on the Mac handles, such as
-  `mailto:` or an app's own scheme.
+  `mailto:` or an app's own scheme. A scheme other than `http`, `https` or
+  `mailto` asks for confirmation when you choose it.
 - **Run Shortcut…** runs a shortcut from the Shortcuts app by name, without bringing
   Shortcuts forward. This is the way to anything MouseNavigate does not do itself.
 
@@ -287,7 +288,7 @@ to engage, then:
 | `G` | Grid jump (see below) |
 | `H` | Click hints (see below) |
 | `;` | Lock cursor mode so it stays on after releasing `A` |
-| `Esc` | Exit, releasing anything still held |
+| `Esc` | Exit, releasing anything still held (it can be recorded as any other key, so it is a key you can rebind) |
 
 Speed tiers, held alongside `A`:
 
@@ -300,7 +301,8 @@ Speed tiers, held alongside `A`:
 
 Movement eases in rather than starting at full speed, and diagonals travel at the same
 rate as the axes. Every key and every speed is rebindable in **Settings → Keyboard
-Cursor**, along with the hold delay.
+Cursor**, along with the hold delay. Swapping two keys says so under the grid, and
+**Restore Defaults** there asks first and leaves the on/off switch as it is.
 
 ### Grid jump
 
@@ -381,7 +383,9 @@ They are **off by default**: turn them on in **Settings → Touch**, where every
 can be bound to any action. Hover over a gesture there and a picture of it plays beside the
 list — resting fingers in grey, the ones that tap or slide in red — with the how-to in words
 under it. Finger names assume the right hand; tick **Left-handed** to mirror them, picture
-included.
+included. In a gesture's name, **Fix** is a finger that stays resting. Two options beside
+it, both on by default, keep accidental touches out: **Ignore touches while typing** and
+**Ignore taps while the mouse is moving**.
 
 Gestures run alongside the ones built into macOS rather than replacing them, so turn off
 any that overlap. On a trackpad, the three-finger gestures clash with macOS's own: set
@@ -397,7 +401,8 @@ holds back the scrolling macOS would otherwise do.
 Magic Mouse gestures are made the way the mouse is held: with the fingers already resting on
 it. A resting finger stays a resting finger however long it has been there, and the heel of
 the hand on the back of the mouse is never taken for a finger. Clicking beside a resting
-finger is a click, not a tap.
+finger is a click, not a tap. A tap made while the pointer is moving is a grip, not a
+gesture, unless **Ignore taps while the mouse is moving** is turned off.
 
 ### Trackpad
 
@@ -412,8 +417,12 @@ finger is a click, not a tap.
 | Index-to-Pinky / Pinky-to-Index | Roll four fingers down in order, lift together | Minimize / Maximize |
 | One-Fix One-Slide Down | Rest the index, slide the middle down, then move with the index; tap the middle to switch to resizing; lift to finish | Move / Resize Window |
 
-A finger resting in the bottom edge of the trackpad is taken for a thumb and never starts a
-gesture, so resting your thumb while tapping or scrolling stays safe. With **Tap to click**
+A finger resting in the bottom edge of the trackpad is taken for a thumb and does not start
+a gesture, so resting your thumb while tapping or scrolling is safe. A tap beside a resting
+finger counts only if that finger has rested for about a fifth of a second and both are
+above the thumb zone; a graze that lifts at once is not a tap. Fingers and palms that land
+while you type, and for half a second after, are ignored, which **Ignore touches while
+typing** turns off. With **Tap to click**
 on, macOS also makes a click out of a tap beside a resting finger; once that tap has been a
 gesture, MouseNavigate holds the click back.
 
@@ -434,7 +443,9 @@ gesture, MouseNavigate holds the click back.
 Draw a letter or a straight line and it runs the bound action. Sources, each toggled in
 **Settings → Touch → Characters**:
 
-- **Trackpad** (on): move two widely spread fingers, such as index and ring, together.
+- **Trackpad** (on): move two widely spread fingers, such as index and ring, together. They
+  have to land together, side by side and above the thumb zone; two fingers or palms that
+  rest there, or that have not started drawing within about 0.8 seconds, are left alone.
   **Finger spacing** sets how far apart they must be, from 12% to 60% of the trackpad's
   width (30% by default, about 47 mm on a MacBook Pro). Lower it to draw with index and
   middle; raise it if ordinary two-finger scrolling is being taken for a drawing. The
@@ -447,8 +458,9 @@ Draw a letter or a straight line and it runs the bound action. Sources, each tog
 A button drag holds the click back until release; a short one is replayed as a normal
 click, so context menus open on release while this is on.
 
-The stroke is drawn on screen as you make it, so you can see the shape the app sees. It
-appears around the pointer, where you are already looking: a trackpad drawing in the
+The stroke is drawn on screen as you make it, so you can see the shape the app sees. A
+trackpad drawing only shows once both fingers have moved the same way for about a tenth of
+the trackpad's height, so fingers rolling as they land flash nothing. It appears around the pointer, where you are already looking: a trackpad drawing in the
 trackpad's own proportions, a button drag along the path the pointer takes. When you
 finish, the ink gives way for half a second to what it was recognised as and the action it
 ran — "T" over "New Tab (⌘T)" — in the middle of the screen, or a "no match" when nothing
@@ -494,7 +506,10 @@ dist/MouseNavigate.app/Contents/MacOS/MouseNavigate --touch-debug
 ```
 
 It prints each surface, every change in finger count with positions, and every recognized
-gesture and drawn letter with its match score.
+gesture and drawn letter with its match score. A near-gesture that was turned down is
+printed with the reason, and for a Magic Mouse each line shows how far the pointer has
+moved. The recognizer can also refuse oversized trackpad contacts as palms; that is off
+until real logs show what sizes fingers and palms report.
 
 ## Resource Usage
 
@@ -549,6 +564,9 @@ Updates…** in the menu bar menu.
 - **A newer release is downloaded and verified in the background**, then offered as
   **Install MouseNavigate X and Relaunch** at the top of the menu bar menu. Nothing is
   installed until you choose it, because relaunching drops cursor mode and anything held.
+- **Before it is unpacked**, the archive is checked: only MouseNavigate.app's own files, of
+  a sane size, are let through. The download itself has to be this repository's release on
+  github.com and stays on GitHub's hosts. This is a precaution against a tampered release.
 - **Before anything is replaced**, the download has to be signed by the same developer
   identity as the running copy — the one macOS ties the Accessibility permission to — and
   notarized by Apple, and has to be the version the release says it is. A download the app
@@ -644,6 +662,10 @@ This creates:
 dist/MouseNavigate.app
 ```
 
+`dist/MouseNavigate.app/Contents/MacOS/MouseNavigate --check-update-archive MouseNavigate.zip`
+says whether the updater would unpack a release zip; the release workflow runs it before
+publishing.
+
 ## About
 
 **Settings → About** shows the version, links to this repository and the issue tracker,
@@ -655,7 +677,10 @@ features are on and any other mouse software running. It names no apps, shortcut
 addresses or files.
 
 **Export Settings…** there writes every setting to a JSON file you can read, edit and keep;
-**Import Settings…** replaces them all with a file's, after checking it. Bindings appear in
+**Import Settings…** replaces them all with a file's, after checking it. A file that binds
+inputs to keystrokes, apps, links or shortcuts lists each one first and imports without them
+unless you choose otherwise. This Mac keeps its own update consent and **Welcome** state, and
+a file over 1 MB is refused. **Export Settings…** shows the saved file in the Finder. Bindings appear in
 the file exactly as they are stored, a built-in action by name, so a file is easy to edit
 by hand. A file with a setting of the wrong type is refused whole, and one from a newer
 MouseNavigate is refused until this copy is updated; settings a file has that this version
@@ -683,6 +708,10 @@ Or run the built binary directly:
   stored.
 - Nothing runs while the Mac is asleep, its screen is locked or another user's session is
   in front: gestures stop listening and every button and key is handed straight through.
+  A posted unlock notification alone does not wake them; the session state is asked of macOS.
+- Web addresses, app identifiers and shortcut names are kept out of the system log in the
+  clear. An update's archive is checked before it is unpacked, and a download must come from
+  this repository's GitHub releases.
 - MouseNavigate sends local keyboard/system actions. **Open URL…** hands the address to
   whichever app opens it, and **Run Shortcut…** runs `/usr/bin/shortcuts`; neither makes a
   network request of MouseNavigate's own.
