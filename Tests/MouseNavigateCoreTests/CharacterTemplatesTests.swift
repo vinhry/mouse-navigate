@@ -52,6 +52,17 @@ final class CharacterTemplatesTests: XCTestCase {
         XCTAssertGreaterThan(travel(.downRight).y, 0)
     }
 
+    /// Other ways of drawing a letter are accepted but never shown as its how-to.
+    func testAPreviewIsNeverAnAlternative() {
+        XCTAssertFalse(CharacterTemplates.letters.contains { $0.isAlternative })
+        XCTAssertFalse(CharacterTemplates.strokes.contains { $0.isAlternative })
+        XCTAssertTrue(CharacterTemplates.alternatives.allSatisfy(\.isAlternative))
+        for gesture in CharacterGesture.allCases where !gesture.isDirection {
+            let shown = CharacterTemplates.all.first { $0.gesture == gesture && !$0.isAlternative }!
+            XCTAssertEqual(CharacterTemplates.preview(for: gesture), shown.points, "\(gesture)")
+        }
+    }
+
     func testAPreviewIsTheFirstTemplate() {
         let first = CharacterTemplates.all.first { $0.gesture == .leftThenUp }!
         XCTAssertEqual(CharacterTemplates.preview(for: .leftThenUp), first.points)

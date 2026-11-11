@@ -4,19 +4,22 @@ import Foundation
 public struct CharacterTemplate: Sendable {
     public let gesture: CharacterGesture
     public let points: [Vector2]
+    /// Another way of drawing the character that is accepted but never shown as the how-to.
+    public let isAlternative: Bool
 
-    init(_ gesture: CharacterGesture, _ points: [(Double, Double)]) {
+    init(_ gesture: CharacterGesture, _ points: [(Double, Double)], isAlternative: Bool = false) {
         self.gesture = gesture
         self.points = points.map { Vector2(x: $0.0, y: $0.1) }
+        self.isAlternative = isAlternative
     }
 }
 
 /// Single-stroke letter shapes, loosely after Graffiti, drawn in a unit box with +y down,
-/// then the corner and out-and-back strokes. Each is traced in the direction people
-/// naturally write it, because the matcher is direction-sensitive. `I` has no template: it
-/// is a straight downward stroke.
+/// then the corner and out-and-back strokes, then other common ways of writing the letters.
+/// Each is traced in the direction people naturally write it, because the matcher is
+/// direction-sensitive. `I` has no template: it is a straight downward stroke.
 public enum CharacterTemplates {
-    public static let all: [CharacterTemplate] = letters + strokes
+    public static let all: [CharacterTemplate] = letters + strokes + alternatives
 
     /// Each comes in two: legs the same length, and a second leg half as long, since the
     /// matcher keeps a stroke's proportions and a short second leg would otherwise sit far
@@ -107,12 +110,65 @@ public enum CharacterTemplates {
         CharacterTemplate(.z, [(0, 0), (1, 0), (0, 1), (1, 1)]),
     ]
 
+    /// Other ways people write the letters in one stroke, none of them shown as the how-to.
+    ///
+    /// Some are made from the letters above by a rule: a letter with no other reading when
+    /// run backwards is also taken backwards; O is also taken begun at the other three
+    /// quarters, either way round; and a stem the templates draw upwards (B, D, M, N, P, R) is
+    /// also taken drawn down first and back up, which is how many people start those letters.
+    /// The rest are common lower-case forms unlike any other letter's template.
+    static let alternatives: [CharacterTemplate] = {
+        var result: [CharacterTemplate] = []
+        let byGesture = Dictionary(grouping: letters, by: \.gesture)
+        func first(_ gesture: CharacterGesture) -> CharacterTemplate { byGesture[gesture]![0] }
+
+        for gesture in [CharacterGesture.c, .s, .u, .v, .w] {
+            result.append(CharacterTemplate(gesture, first(gesture).points.reversed(), isAlternative: true))
+        }
+        for start in [0.0, 90, 180] {
+            result.append(CharacterTemplate(.o, arc(from: start, to: start - 360), isAlternative: true))
+            result.append(CharacterTemplate(.o, arc(from: start, to: start + 360), isAlternative: true))
+        }
+        for gesture in [CharacterGesture.b, .d, .m, .n, .p, .r] {
+            let points = first(gesture).points
+            // The stem runs from the first point straight up to the second.
+            result.append(CharacterTemplate(gesture, [points[1]] + points, isAlternative: true))
+        }
+
+        let lowerCase: [CharacterTemplate] = [
+            // A round bowl, then the stem down its right side.
+            CharacterTemplate(.a, arc(from: -30, to: -390, steps: 18).map { Vector2(x: 0.1 + 0.7 * $0.x, y: 0.15 + 0.8 * $0.y) }
+                + [(0.9, 0.1), (0.9, 1)].map { Vector2(x: $0.0, y: $0.1) }, isAlternative: true),
+            // The bowl first, then a tall stem up and back down.
+            CharacterTemplate(.d, arc(from: -30, to: -390, steps: 18).map { Vector2(x: 0.05 + 0.65 * $0.x, y: 0.5 + 0.5 * $0.y) }
+                + [(0.75, 0), (0.75, 1)].map { Vector2(x: $0.0, y: $0.1) }, isAlternative: true),
+            // A bar across the middle, then round anticlockwise, open at the bottom right.
+            CharacterTemplate(.e, [(0.05, 0.5), (0.95, 0.5)].map { Vector2(x: $0.0, y: $0.1) }
+                + arc(from: 0, to: -315, steps: 18), isAlternative: true),
+            // A round bowl, then a descender hooked to the left.
+            CharacterTemplate(.g, arc(from: -30, to: -390, steps: 18).map { Vector2(x: 0.1 + 0.65 * $0.x, y: 0.5 * $0.y) }
+                + [(0.75, 0.05), (0.75, 0.85), (0.55, 1), (0.25, 1), (0.1, 0.85)].map { Vector2(x: $0.0, y: $0.1) },
+                isAlternative: true),
+            CharacterTemplate(.m, [(0, 0.2), (0, 1), (0, 0.4), (0.15, 0.2), (0.35, 0.2), (0.5, 0.4), (0.5, 1),
+                                   (0.5, 0.4), (0.65, 0.2), (0.85, 0.2), (1, 0.4), (1, 1)], isAlternative: true),
+            CharacterTemplate(.n, [(0, 0), (0, 1), (0, 0.3), (0.25, 0), (0.75, 0), (1, 0.3), (1, 1)], isAlternative: true),
+            // Down, back up, and a short shoulder.
+            CharacterTemplate(.r, [(0, 0.1), (0, 1), (0, 0.4), (0.3, 0.05), (0.7, 0), (1, 0.15)], isAlternative: true),
+            // A u, then a descender hooked to the left.
+            CharacterTemplate(.y, [(0, 0), (0, 0.35), (0.2, 0.5), (0.8, 0.5), (1, 0.35), (1, 0), (1, 0.8), (0.75, 1),
+                                   (0.3, 1), (0.1, 0.85)], isAlternative: true),
+            // A u whose second stroke comes back down.
+            CharacterTemplate(.u, [(0, 0), (0, 0.7), (0.2, 1), (0.8, 1), (1, 0.7), (1, 0), (1, 1)], isAlternative: true),
+        ]
+        return result + lowerCase
+    }()
+
     /// The stroke to show someone who wants to know how a character is drawn: the shape the
     /// recogniser matches, in the order it expects. Directions have no template, since a
     /// straight stroke is recognised by being straight, so they are drawn across the box.
     /// A corner or out-and-back stroke shows its first template, the one with equal legs.
     public static func preview(for gesture: CharacterGesture) -> [Vector2] {
-        if let template = all.first(where: { $0.gesture == gesture }) {
+        if let template = all.first(where: { $0.gesture == gesture && !$0.isAlternative }) {
             return template.points
         }
 
@@ -146,8 +202,9 @@ public enum CharacterTemplates {
 }
 
 extension CharacterTemplate {
-    init(_ gesture: CharacterGesture, _ points: [Vector2]) {
+    init(_ gesture: CharacterGesture, _ points: [Vector2], isAlternative: Bool = false) {
         self.gesture = gesture
         self.points = points
+        self.isAlternative = isAlternative
     }
 }

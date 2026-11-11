@@ -55,8 +55,10 @@ enum StrokeEvaluation {
     /// The slider's two ends and its default.
     static let loose = 0.6
     static let balanced = StrokeRecognizer.defaultMinimumScore
+    /// Where the report's per-letter detail is taken: the default, unless asked otherwise.
+    static let detailSetting = ProcessInfo.processInfo.environment["MOUSENAVIGATE_STROKE_REPORT_AT"].flatMap(Double.init) ?? balanced
     static let strict = 0.95
-    static let settings = [loose, 0.7, balanced, 0.875, strict]
+    static let settings = [loose, 0.7, 0.75, balanced, 0.85, 0.9, strict]
 
     /// Strengths of the hand model: clean, mild, moderate, rough.
     static let strengths = [0.0, 0.33, 0.67, 1.0]
@@ -65,7 +67,7 @@ enum StrokeEvaluation {
 
     /// Every reference shape at every strength, `perCell` times each, forwards and, where
     /// that is still the letter, backwards.
-    static func genuineStrokes(perCell: Int, seed: UInt64) -> [LabelledStroke] {
+    static func genuineStrokes(perCell: Int, seed: UInt64, strengths: [Double] = strengths) -> [LabelledStroke] {
         var rng = SplitMix64(seed: seed)
         var strokes: [LabelledStroke] = []
         for shape in ReferenceShapes.all {
@@ -242,8 +244,10 @@ enum StrokeEvaluation {
 
         /// Share of negatives taken for a letter or a two-legged stroke. Read as a straight
         /// line, a movement is at least what it looked like.
-        func falseAcceptRate(at setting: Double, kind: Negative? = nil) -> Double {
-            share(group(.negative, minStrength: 0).filter { kind == nil || $0.stroke.form == kind!.rawValue }) {
+        func falseAcceptRate(at setting: Double, kind: Negative? = nil, excluding: Negative? = nil) -> Double {
+            share(group(.negative, minStrength: 0).filter {
+                (kind == nil || $0.stroke.form == kind!.rawValue) && $0.stroke.form != excluding?.rawValue
+            }) {
                 accepted($0, at: setting).map { !$0.isDirection } ?? false
             }
         }
@@ -304,28 +308,39 @@ enum StrokeEvaluation {
                     run.outcomes.filter { $0.stroke.group == group && $0.stroke.strength == strength }
                 }
                 lines.append(String(format: "  %.2f  %@ %@ %@", strength,
-                                    percent(run.accuracy(at(.letter), at: balanced)),
-                                    percent(run.accuracy(at(.direction), at: balanced)),
-                                    percent(run.accuracy(at(.stroke), at: balanced))))
+                                    percent(run.accuracy(at(.letter), at: detailSetting)),
+                                    percent(run.accuracy(at(.direction), at: detailSetting)),
+                                    percent(run.accuracy(at(.stroke), at: detailSetting))))
             }
-            lines.append("false accepts at the default, by kind:")
+            lines.append("false accepts by kind at Loose, 0.7 and Balanced:")
             for kind in Negative.allCases {
-                lines.append("  \(percent(run.falseAcceptRate(at: balanced, kind: kind)))  \(kind.rawValue)")
+                let rates = [loose, 0.7, balanced].map { percent(run.falseAcceptRate(at: $0, kind: kind)) }
+                lines.append("  \(rates.joined(separator: " "))  \(kind.rawValue)")
+            }
+            var taken: [String: Int] = [:]
+            for outcome in run.group(.negative, minStrength: 0) {
+                if let got = run.accepted(outcome, at: loose), !got.isDirection {
+                    taken["\(outcome.stroke.form) → \(got.displayName)", default: 0] += 1
+                }
+            }
+            lines.append("non-letters most often taken at Loose:")
+            for (pair, count) in taken.sorted(by: { $0.value > $1.value || ($0.value == $1.value && $0.key < $1.key) }).prefix(8) {
+                lines.append("  \(count)  \(pair)")
             }
             lines.append("per letter at the default (accuracy, reject, top confusion):")
             for gesture in CharacterGesture.allCases where !gesture.isDirection && !CharacterGesture.strokes.contains(gesture) {
                 let set = letters.filter { $0.stroke.truth == gesture }
-                let confusion = run.confusions(set, at: balanced, limit: 1).first.map { "\($0.0) ×\($0.1)" } ?? ""
+                let confusion = run.confusions(set, at: detailSetting, limit: 1).first.map { "\($0.0) ×\($0.1)" } ?? ""
                 lines.append("  \(gesture.displayName.padding(toLength: 3, withPad: " ", startingAt: 0)) "
-                             + "\(percent(run.accuracy(set, at: balanced))) \(percent(run.rejectRate(set, at: balanced)))  \(confusion)")
+                             + "\(percent(run.accuracy(set, at: detailSetting))) \(percent(run.rejectRate(set, at: detailSetting)))  \(confusion)")
             }
             lines.append("worst forms at the default:")
             let forms = Dictionary(grouping: letters + run.group(.stroke)) { "\($0.stroke.truth!.displayName): \($0.stroke.form)" }
-            for (form, set) in forms.sorted(by: { run.accuracy($0.value, at: balanced) < run.accuracy($1.value, at: balanced) }).prefix(12) {
-                lines.append("  \(percent(run.accuracy(set, at: balanced)))  \(form)")
+            for (form, set) in forms.sorted(by: { run.accuracy($0.value, at: detailSetting) < run.accuracy($1.value, at: detailSetting) }).prefix(12) {
+                lines.append("  \(percent(run.accuracy(set, at: detailSetting)))  \(form)")
             }
             lines.append("commonest confusions at the default:")
-            for (pair, count) in run.confusions(letters + run.group(.stroke) + run.group(.direction), at: balanced, limit: 12) {
+            for (pair, count) in run.confusions(letters + run.group(.stroke) + run.group(.direction), at: detailSetting, limit: 12) {
                 lines.append("  \(count)  \(pair)")
             }
         }
