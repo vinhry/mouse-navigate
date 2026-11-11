@@ -79,6 +79,13 @@ jobs:
           rm MouseNavigate.zip
           ditto -c -k --keepParent MouseNavigate.app MouseNavigate.zip
 
+      # An archive the updater would refuse must never be published: every installed copy
+      # would download it, refuse it, and stay on its old version for good, with no way to
+      # fix itself. So the zip that is about to go out is put through the updater's own
+      # check, by the app that was just built, and the release stops here if it fails.
+      - name: Check the zip against the updater's rules
+        run: dist/MouseNavigate.app/Contents/MacOS/MouseNavigate --check-update-archive dist/MouseNavigate.zip
+
       # The checksum is of the stapled zip that is published, so a download can be checked
       # against it, and the Homebrew cask is pinned to it.
       - name: Checksum

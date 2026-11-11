@@ -151,13 +151,15 @@ public struct GitHubRepository: Equatable, Sendable {
     public var owner: String
     public var name: String
 
-    /// Hosts a release download is served from: github.com itself, which redirects to
-    /// the asset store, and the asset store's names, old and current.
-    public static let downloadHosts: Set<String> = [
-        "github.com",
-        "objects.githubusercontent.com",
-        "release-assets.githubusercontent.com",
-    ]
+    /// The domain GitHub serves stored files from. Its asset store has been
+    /// objects.githubusercontent.com and is now release-assets.githubusercontent.com; a
+    /// third name under it must not leave every installed copy refusing every update,
+    /// which none of them could fix for itself.
+    ///
+    /// The whole domain is GitHub's, though anyone's files can be served from it. That is
+    /// no way in: what it serves is still only installed if it is signed by this app's
+    /// developer, notarized, and the version the release names.
+    public static let assetDomain = "githubusercontent.com"
 
     public init(owner: String, name: String) {
         self.owner = owner
@@ -205,11 +207,12 @@ public struct GitHubRepository: Equatable, Sendable {
         isOnGitHub(url)
     }
 
-    /// Over https, on one of GitHub's download hosts, at its usual port, and with no
-    /// credentials in the address that could make it mean another host.
+    /// Over https, on github.com itself or the asset domain, at the usual port, and with
+    /// no credentials in the address that could make it mean another host. The domain is
+    /// matched whole or after a dot, so a host that merely ends in its letters is not it.
     private static func isOnGitHub(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased(),
-              downloadHosts.contains(host),
+              host == "github.com" || host == assetDomain || host.hasSuffix("." + assetDomain),
               url.port == nil || url.port == 443,
               url.user == nil, url.password == nil
         else {

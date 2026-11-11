@@ -156,15 +156,20 @@ final class GitHubRepositoryTests: XCTestCase {
             "https://github.com/vinhry/mouse-navigate/releases/download/v0.8.0/MouseNavigate.zip",
             "https://objects.githubusercontent.com/github-production-release-asset-2e65be/1/2?X-Amz-Signature=abc",
             "https://release-assets.githubusercontent.com/github-production-release-asset/1203320383/8e6c?sp=r&sig=abc",
+            "https://RELEASE-ASSETS.githubusercontent.com/x",
+            // Wherever GitHub moves its asset store next, under the same domain.
+            "https://assets-2.githubusercontent.com/x",
+            "https://githubusercontent.com/x",
         ] {
             XCTAssertTrue(GitHubRepository.mayRedirect(to: URL(string: address)!), address)
         }
         for address in [
             "http://release-assets.githubusercontent.com/x",
             "https://example.com/MouseNavigate.zip",
-            "https://githubusercontent.com/x",
-            "https://evil.objects.githubusercontent.com/x",
-            "https://raw.githubusercontent.com/vinhry/mouse-navigate/main/MouseNavigate.zip",
+            "https://githubusercontent.com.evil.example/x",
+            "https://evilgithubusercontent.com/x",
+            "https://github.com.evil.example/x",
+            "https://evilgithub.com/x",
             "https://api.github.com/x",
             "https://user:pass@objects.githubusercontent.com/x",
             "https://objects.githubusercontent.com:8443/x",
