@@ -80,6 +80,11 @@ enum SyntheticEvents {
 
     static func post(_ event: CGEvent) {
         stamp(event)
+        // The system counts a posted key as the keyboard's, so say it was ours, for the
+        // trackpad's typing check.
+        if event.type == .keyDown {
+            OwnKeystrokes.shared.note(at: ProcessInfo.processInfo.systemUptime)
+        }
         event.post(tap: .cghidEventTap)
     }
 }

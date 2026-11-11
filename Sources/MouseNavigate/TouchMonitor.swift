@@ -62,8 +62,8 @@ final class TouchMonitor {
     /// may read, so frames can ask without it.
     nonisolated(unsafe) private var ignoresTyping = true
     nonisolated(unsafe) private var ignoresMouseMoving = true
-    /// Keys the app sent itself, so its own shortcuts are not taken for typing.
-    nonisolated(unsafe) private var typingActivity = TypingActivity()
+    /// Tells the app's own keystrokes from typing; stateless, so frames use it freely.
+    nonisolated(unsafe) private let typingActivity = TypingActivity()
     /// Where the pointer has been over the last moments, fed by Magic Mouse frames.
     nonisolated(unsafe) private var pointerMotion = PointerMotion()
     /// The Magic Mouse recognizer's tuning, for the pose check the event tap makes.
@@ -73,9 +73,8 @@ final class TouchMonitor {
         var recognizer: TouchGestureRecognizer
         let aspectRatio: Double
         var lastContactCount = 0
-        /// The last rejection written to the debug log, so one that repeats every frame
-        /// is written once.
-        var lastLoggedRejection: String?
+        /// How many of the recognizer's rejections the debug log has had.
+        var lastLoggedRejectionCount = 0
 
         init(recognizer: TouchGestureRecognizer, aspectRatio: Double) {
             self.recognizer = recognizer
@@ -285,10 +284,15 @@ final class TouchMonitor {
         var pointerTravel = 0.0
         if surface == .trackpad, ignoresTyping {
             // The hardware counter, but it counts the app's own keystrokes too (see
-            // `TypingActivity`), which is told apart from real ones here. Modifiers alone
+            // `TypingActivity`), which is told apart from real ones by the stamp
+            // `SyntheticEvents` leaves where it posts a key. Modifiers alone
             // are not key-downs, so holding a key like Command while gesturing is no typing.
             let since = CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .keyDown)
-            isTyping = typingActivity.isTyping(now: now, secondsSinceKey: since)
+            isTyping = typingActivity.isTyping(
+                now: now,
+                secondsSinceKey: since,
+                lastOwnKey: OwnKeystrokes.shared.last
+            )
         }
         if surface == .magicMouse, ignoresMouseMoving || isDebugLogging {
             // Documented as usable from any thread, and cheap: no event is made.
@@ -307,11 +311,10 @@ final class TouchMonitor {
         )
         let events = state.recognizer.process(frame)
         var rejectionToLog: String?
-        if isDebugLogging, let rejection = state.recognizer.lastRejection, rejection != state.lastLoggedRejection {
-            // The recognizer keeps a reason until another replaces it, and some are given
-            // again every frame, so only a change is news.
-            state.lastLoggedRejection = rejection
-            rejectionToLog = rejection
+        if isDebugLogging, state.recognizer.rejectionCount != state.lastLoggedRejectionCount {
+            // The recognizer counts a rejection once however many frames it repeats it for.
+            state.lastLoggedRejectionCount = state.recognizer.rejectionCount
+            rejectionToLog = state.recognizer.lastRejection
         }
         let aspectRatio = state.aspectRatio
         if surface == .magicMouse {
@@ -359,23 +362,6 @@ final class TouchMonitor {
         guard isRunning else { return }
 
         let surfaceSpace = DrawingOverlay.Space.surface(aspectRatio: aspectRatio)
-
-        // Whatever the events set off may send keys, and those must not count as typing.
-        let startedAt = ProcessInfo.processInfo.systemUptime
-        defer {
-            let firesAction = events.contains { event in
-                switch event {
-                case .gesture, .stroke: return true
-                default: return false
-                }
-            }
-            if firesAction {
-                let endedAt = ProcessInfo.processInfo.systemUptime
-                lock.lock()
-                typingActivity.noteOwnKeys(from: startedAt, to: endedAt)
-                lock.unlock()
-            }
-        }
 
         for event in events {
             switch event {

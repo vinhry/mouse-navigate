@@ -52,39 +52,3 @@ public struct PointerMotion {
     var sampleCount: Int { samples.count }
 }
 
-/// Whether a key was pressed on the keyboard lately, told apart from the keys MouseNavigate
-/// presses itself when a gesture fires.
-///
-/// The system reports how long ago the last key went down, but counts the app's own
-/// synthetic keystrokes too (measured: both the hardware and the session counters restart
-/// at a key posted to the HID tap). Without this, a Next Tab tap would count as typing and
-/// poison the next one. So the app notes when it sent keys, and a key that went down
-/// inside that span is taken as its own.
-public struct TypingActivity {
-    /// A key press this recent is typing, in seconds. Palms and thumbs rest on the
-    /// trackpad for a moment after the last key.
-    public var window = 0.5
-    /// How long after an action finished its keys may still be reported, in seconds: the
-    /// system counts them a little late.
-    public var ownKeyGrace = 0.25
-
-    private var ownKeys: (start: Double, end: Double)?
-
-    public init() {}
-
-    /// Notes that the app performed an action from `start` to `end`, which may have sent keys.
-    public mutating func noteOwnKeys(from start: Double, to end: Double) {
-        ownKeys = (start, end + ownKeyGrace)
-    }
-
-    /// `secondsSinceKey` is how long ago the last key went down, as the system reports it;
-    /// both it and `now` are on the same clock.
-    public func isTyping(now: Double, secondsSinceKey: Double) -> Bool {
-        guard secondsSinceKey >= 0, secondsSinceKey <= window else { return false }
-        if let ownKeys {
-            let keyTime = now - secondsSinceKey
-            if keyTime >= ownKeys.start, keyTime <= ownKeys.end { return false }
-        }
-        return true
-    }
-}

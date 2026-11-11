@@ -1026,6 +1026,33 @@ final class AccidentalTouchTests: XCTestCase {
 
     // MARK: Drawing
 
+    func testSameRejectionInTwoTouchesCountsTwice() {
+        let pad = TouchDriver(.trackpad)
+        for _ in 0..<2 {
+            pad.down(1, 0.3)
+            pad.wait(0.2)
+            pad.down(2, 0.5)
+            pad.wait(0.01)
+            pad.up(2)
+            pad.wait(0.1)
+            pad.up(1)
+            pad.wait(0.3)
+        }
+        XCTAssertEqual(pad.recognizer.lastRejection, "tap too short")
+        XCTAssertEqual(pad.recognizer.rejectionCount, 2)
+    }
+
+    func testRejectionRepeatedEveryFrameOfOneTouchCountsOnce() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.15, 0.92)
+        pad.down(2, 0.8, 0.9)
+        pad.wait(0.5)
+        XCTAssertEqual(pad.recognizer.lastRejection, "drawing fingers too low")
+        XCTAssertEqual(pad.recognizer.rejectionCount, 1)
+        pad.up(1, 2)
+        XCTAssertEqual(pad.recognizer.rejectionCount, 1)
+    }
+
     func testPalmsLowOnThePadDrawNothing() {
         let pad = TouchDriver(.trackpad)
         pad.down(1, 0.15, 0.92)

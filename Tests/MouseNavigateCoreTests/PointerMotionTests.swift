@@ -84,37 +84,50 @@ final class PointerMotionTests: XCTestCase {
 }
 
 final class TypingActivityTests: XCTestCase {
-    func testRecentKeyIsTyping() {
+    func testRealKeyWithNoOwnKeyIsTyping() {
         let typing = TypingActivity()
-        XCTAssertTrue(typing.isTyping(now: 100, secondsSinceKey: 0.1))
-        XCTAssertTrue(typing.isTyping(now: 100, secondsSinceKey: 0.5))
+        XCTAssertTrue(typing.isTyping(now: 100, secondsSinceKey: 0.2, lastOwnKey: nil))
+        XCTAssertTrue(typing.isTyping(now: 100, secondsSinceKey: 0.5, lastOwnKey: nil))
     }
 
-    func testOldKeyIsNotTyping() {
+    func testKeyOlderThanTheWindowIsNotTyping() {
         let typing = TypingActivity()
-        XCTAssertFalse(typing.isTyping(now: 100, secondsSinceKey: 0.6))
-        XCTAssertFalse(typing.isTyping(now: 100, secondsSinceKey: 600))
+        XCTAssertFalse(typing.isTyping(now: 100, secondsSinceKey: 0.6, lastOwnKey: nil))
+        XCTAssertFalse(typing.isTyping(now: 100, secondsSinceKey: 600, lastOwnKey: 99))
     }
 
-    func testKeyFromOwnActionIsNotTyping() {
-        var typing = TypingActivity()
-        // An action ran from 99.9 to 99.91; its key is reported a little late.
-        typing.noteOwnKeys(from: 99.9, to: 99.91)
-        XCTAssertFalse(typing.isTyping(now: 100, secondsSinceKey: 0.095))
-        XCTAssertFalse(typing.isTyping(now: 100.1, secondsSinceKey: 0.195))
+    func testOwnKeyIsNotTyping() {
+        let typing = TypingActivity()
+        // Posted 0.2 s ago; the system reports it then, or up to 0.4 s earlier than that.
+        XCTAssertFalse(typing.isTyping(now: 100, secondsSinceKey: 0.2, lastOwnKey: 99.8))
+        XCTAssertFalse(typing.isTyping(now: 100, secondsSinceKey: 0.45, lastOwnKey: 99.8))
     }
 
-    func testKeyBeforeOwnActionIsStillTyping() {
-        var typing = TypingActivity()
-        typing.noteOwnKeys(from: 99.9, to: 99.91)
-        // Typed at 99.7, before the action began.
-        XCTAssertTrue(typing.isTyping(now: 100, secondsSinceKey: 0.3))
+    func testRealKeyAfterOwnKeyIsTyping() {
+        let typing = TypingActivity()
+        // The app pressed a key at 99.6, and a real one went down at 99.95.
+        XCTAssertTrue(typing.isTyping(now: 100, secondsSinceKey: 0.05, lastOwnKey: 99.6))
     }
 
-    func testKeyLongAfterOwnActionIsTyping() {
-        var typing = TypingActivity()
-        typing.noteOwnKeys(from: 99.9, to: 99.91)
-        // Typed at 100.3, well after the action and its grace.
-        XCTAssertTrue(typing.isTyping(now: 100.4, secondsSinceKey: 0.1))
+    func testRealKeyJustAfterOwnKeyIsTheBlindSpot() {
+        let typing = TypingActivity()
+        // Within the slack after the app's own key, a real one cannot be told from it.
+        XCTAssertFalse(typing.isTyping(now: 100, secondsSinceKey: 0.15, lastOwnKey: 99.8))
+    }
+
+    func testOwnKeyTooLongAgoNoLongerHidesTyping() {
+        let typing = TypingActivity()
+        // Own key at 98; a real key reported at 99.8 is far from it.
+        XCTAssertTrue(typing.isTyping(now: 100, secondsSinceKey: 0.2, lastOwnKey: 98))
+    }
+}
+
+final class OwnKeystrokesTests: XCTestCase {
+    func testRemembersTheLastKeyDown() {
+        let keys = OwnKeystrokes()
+        XCTAssertNil(keys.last)
+        keys.note(at: 5)
+        keys.note(at: 7)
+        XCTAssertEqual(keys.last, 7)
     }
 }

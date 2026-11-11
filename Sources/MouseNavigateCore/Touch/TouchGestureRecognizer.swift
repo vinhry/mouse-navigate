@@ -17,6 +17,12 @@ public struct TouchGestureRecognizer {
     /// `--touch-debug`: the touches people make by accident are the ones that are turned
     /// down, and the log has to say why. Kept until the next one.
     public private(set) var lastRejection: String?
+    /// How many rejections there have been, one for each time `lastRejection` is set to
+    /// something new: a different reason, or the same one in a later touch. A reason given
+    /// again every frame of one touch counts once.
+    public private(set) var rejectionCount = 0
+    /// Every finger has lifted since `lastRejection` was last set.
+    private var rejectionIsStale = false
 
     private var tracker = ContactTracker()
     private var detectors: [any GestureDetector]
@@ -61,7 +67,7 @@ public struct TouchGestureRecognizer {
         if surface == .trackpad, snapshot.isTyping, !isTypingTouch,
            !(snapshot.active.isEmpty && snapshot.lifted.isEmpty) {
             isTypingTouch = true
-            lastRejection = "touch while typing"
+            noteRejection("touch while typing")
         }
 
         var events: [TouchEvent] = []
@@ -72,7 +78,7 @@ public struct TouchGestureRecognizer {
             let blocked = isTypingTouch || (owner != nil && owner != index)
             let produced = detectors[index].update(snapshot, tuning: tuning, blocked: blocked)
             if let reason = detectors[index].rejection {
-                lastRejection = reason
+                noteRejection(reason)
             }
             // A blocked owner still winds down what it started before typing took the
             // touch from it: a drawing on screen is taken away, a window drag ended.
@@ -89,6 +95,9 @@ public struct TouchGestureRecognizer {
         if snapshot.active.isEmpty {
             owner = nil
             isTypingTouch = false
+            // The next rejection belongs to a new touch, even if it gives the same reason.
+            // Set after the detectors have run, so one made as the last finger lifts counts.
+            rejectionIsStale = true
         }
 
         guard isLeftHanded else { return events }
@@ -106,6 +115,14 @@ public struct TouchGestureRecognizer {
         }
     }
 
+    private mutating func noteRejection(_ reason: String) {
+        if reason != lastRejection || rejectionIsStale {
+            rejectionCount += 1
+        }
+        lastRejection = reason
+        rejectionIsStale = false
+    }
+
     public mutating func reset() {
         tracker.reset()
         for index in detectors.indices {
@@ -115,6 +132,8 @@ public struct TouchGestureRecognizer {
         isTypingTouch = false
         shouldSuppressScroll = false
         lastRejection = nil
+        rejectionCount = 0
+        rejectionIsStale = false
     }
 
     /// A Magic Mouse click made with the index finger held nearer the back than the resting
