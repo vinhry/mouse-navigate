@@ -131,6 +131,18 @@ final class PreferencesTests: XCTestCase {
         XCTAssertFalse(storedKeys.contains { $0.hasPrefix("key.") || $0.hasPrefix("cursor.") })
     }
 
+    func testAccidentalTouchGuardsAreOnByDefaultAndStick() {
+        let preferences = makePreferences()
+        XCTAssertTrue(preferences.ignoresTouchWhileTyping)
+        XCTAssertTrue(preferences.ignoresTapsWhileMouseMoves)
+
+        preferences.ignoresTouchWhileTyping = false
+        XCTAssertFalse(preferences.ignoresTouchWhileTyping)
+        XCTAssertTrue(preferences.ignoresTapsWhileMouseMoves)
+        preferences.ignoresTapsWhileMouseMoves = false
+        XCTAssertFalse(preferences.ignoresTapsWhileMouseMoves)
+    }
+
     func testRestoreTouchDefaultsRemovesOnlyTouchKeys() {
         let preferences = makePreferences()
         preferences.setGlobalBinding(.builtin(.copy), for: .touch(.trackpadThreeFingerTap))
@@ -138,6 +150,8 @@ final class PreferencesTests: XCTestCase {
         preferences.setCharacterSource(.middleButtonDrag, enabled: true)
         preferences.isLeftHanded = true
         preferences.showsDrawingOverlay = false
+        preferences.ignoresTouchWhileTyping = false
+        preferences.ignoresTapsWhileMouseMoves = false
         preferences.characterDrawSpread = 0.5
         preferences.isTouchEnabled = true
         preferences.setKeyCode(40, for: .activate)
@@ -149,6 +163,8 @@ final class PreferencesTests: XCTestCase {
         XCTAssertFalse(preferences.isCharacterSourceEnabled(.middleButtonDrag))
         XCTAssertFalse(preferences.isLeftHanded)
         XCTAssertTrue(preferences.showsDrawingOverlay)
+        XCTAssertTrue(preferences.ignoresTouchWhileTyping)
+        XCTAssertTrue(preferences.ignoresTapsWhileMouseMoves)
         XCTAssertEqual(preferences.characterDrawSpread, TouchTuning().drawSpread)
         // Whether gestures are on at all is not a default to restore.
         XCTAssertTrue(preferences.isTouchEnabled)

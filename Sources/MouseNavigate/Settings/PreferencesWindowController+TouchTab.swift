@@ -25,6 +25,29 @@ extension PreferencesWindowController {
         toggles.spacing = 24
         toggles.setHuggingPriority(.required, for: .horizontal)
 
+        let ignoreTyping = NSButton(
+            checkboxWithTitle: "Ignore touches while typing",
+            target: self,
+            action: #selector(ignoreTypingChanged(_:))
+        )
+        ignoreTyping.toolTip = "Fingers and palms that land on the trackpad while you type, and for half a second after, are not gestures."
+        ignoreTypingCheckbox = ignoreTyping
+
+        let ignoreMouseMoving = NSButton(
+            checkboxWithTitle: "Ignore taps while the mouse is moving",
+            target: self,
+            action: #selector(ignoreMouseMovingChanged(_:))
+        )
+        ignoreMouseMoving.toolTip = "A finger that touches a Magic Mouse while you are moving it is gripping it, not tapping."
+        ignoreMouseMovingCheckbox = ignoreMouseMoving
+
+        // A row of its own: the two together are wider than the hint's 580 points would
+        // leave room for beside "Enable" and "Left-handed".
+        let guards = NSStackView(views: [ignoreTyping, ignoreMouseMoving])
+        guards.orientation = .horizontal
+        guards.spacing = 24
+        guards.setHuggingPriority(.required, for: .horizontal)
+
         let hint = NSTextField(wrappingLabelWithString:
             "Gestures work alongside the ones built into macOS. Turn off any that overlap in "
                 + "System Settings → Trackpad, such as Look Up with a three-finger tap. "
@@ -118,7 +141,7 @@ extension PreferencesWindowController {
         let footer = makeRestoreDefaultsFooter(action: #selector(restoreTouchDefaultsTapped))
 
         let scopeRow = makeScopeRow()
-        let stack = NSStackView(views: [toggles, hint, status, conflictRow, scopeRow, panePicker, paneContainer, footer])
+        let stack = NSStackView(views: [toggles, guards, hint, status, conflictRow, scopeRow, panePicker, paneContainer, footer])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
@@ -453,6 +476,8 @@ extension PreferencesWindowController {
         let preferences = Preferences.shared
         touchEnableCheckbox?.state = preferences.isTouchEnabled ? .on : .off
         leftHandedCheckbox?.state = preferences.isLeftHanded ? .on : .off
+        ignoreTypingCheckbox?.state = preferences.ignoresTouchWhileTyping ? .on : .off
+        ignoreMouseMovingCheckbox?.state = preferences.ignoresTapsWhileMouseMoves ? .on : .off
         for preview in gesturePreviews.values {
             preview.isMirrored = preferences.isLeftHanded
         }
@@ -538,6 +563,14 @@ extension PreferencesWindowController {
         for preview in gesturePreviews.values {
             preview.isMirrored = sender.state == .on
         }
+    }
+
+    @objc func ignoreTypingChanged(_ sender: NSButton) {
+        Preferences.shared.ignoresTouchWhileTyping = sender.state == .on
+    }
+
+    @objc func ignoreMouseMovingChanged(_ sender: NSButton) {
+        Preferences.shared.ignoresTapsWhileMouseMoves = sender.state == .on
     }
 
     @objc func touchPaneChanged(_ sender: NSSegmentedControl) {

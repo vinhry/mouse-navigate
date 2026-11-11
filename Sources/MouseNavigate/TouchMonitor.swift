@@ -58,6 +58,14 @@ final class TouchMonitor {
     /// event without walking the recognizers.
     nonisolated(unsafe) private var suppressScroll = false
     nonisolated(unsafe) private var isLeftHanded = false
+    /// The two accidental-touch guards, cached from Preferences, which only the main thread
+    /// may read, so frames can ask without it.
+    nonisolated(unsafe) private var ignoresTyping = true
+    nonisolated(unsafe) private var ignoresMouseMoving = true
+    /// Keys the app sent itself, so its own shortcuts are not taken for typing.
+    nonisolated(unsafe) private var typingActivity = TypingActivity()
+    /// Where the pointer has been over the last moments, fed by Magic Mouse frames.
+    nonisolated(unsafe) private var pointerMotion = PointerMotion()
     /// The Magic Mouse recognizer's tuning, for the pose check the event tap makes.
     nonisolated(unsafe) private var magicMouseTuning = TouchTuning()
 
@@ -65,6 +73,9 @@ final class TouchMonitor {
         var recognizer: TouchGestureRecognizer
         let aspectRatio: Double
         var lastContactCount = 0
+        /// The last rejection written to the debug log, so one that repeats every frame
+        /// is written once.
+        var lastLoggedRejection: String?
 
         init(recognizer: TouchGestureRecognizer, aspectRatio: Double) {
             self.recognizer = recognizer
@@ -170,6 +181,8 @@ final class TouchMonitor {
 
         lock.lock()
         isLeftHanded = preferences.isLeftHanded
+        ignoresTyping = preferences.ignoresTouchWhileTyping
+        ignoresMouseMoving = preferences.ignoresTapsWhileMouseMoves
         let drawingEnabled = preferences.isCharacterSourceEnabled(.trackpad)
         for state in recognizers.values {
             state.recognizer.isLeftHanded = isLeftHanded
@@ -195,6 +208,9 @@ final class TouchMonitor {
 
         let preferences = Preferences.shared
         lock.lock()
+        ignoresTyping = preferences.ignoresTouchWhileTyping
+        ignoresMouseMoving = preferences.ignoresTapsWhileMouseMoves
+        pointerMotion.reset()
         recognizers.removeAll()
         for device in bridge.devices {
             var recognizer = TouchGestureRecognizer(surface: device.surface)
@@ -263,14 +279,40 @@ final class TouchMonitor {
             lock.unlock()
             return
         }
+        let surface = state.recognizer.surface
+        var isTyping = false
+        var isPointerMoving = false
+        var pointerTravel = 0.0
+        if surface == .trackpad, ignoresTyping {
+            // The hardware counter, but it counts the app's own keystrokes too (see
+            // `TypingActivity`), which is told apart from real ones here. Modifiers alone
+            // are not key-downs, so holding a key like Command while gesturing is no typing.
+            let since = CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .keyDown)
+            isTyping = typingActivity.isTyping(now: now, secondsSinceKey: since)
+        }
+        if surface == .magicMouse, ignoresMouseMoving || isDebugLogging {
+            // Documented as usable from any thread, and cheap: no event is made.
+            let location = NSEvent.mouseLocation
+            let isMoving = pointerMotion.record(time: now, position: Vector2(x: location.x, y: location.y))
+            isPointerMoving = isMoving && ignoresMouseMoving
+            pointerTravel = pointerMotion.travel
+        }
         let frame = TouchFrame(
             timestamp: now,
             contacts: contacts,
             isPrimaryButtonDown: isButtonDown,
-            aspectRatio: state.aspectRatio
+            aspectRatio: state.aspectRatio,
+            isTyping: isTyping,
+            isPointerMoving: isPointerMoving
         )
         let events = state.recognizer.process(frame)
-        let surface = state.recognizer.surface
+        var rejectionToLog: String?
+        if isDebugLogging, let rejection = state.recognizer.lastRejection, rejection != state.lastLoggedRejection {
+            // The recognizer keeps a reason until another replaces it, and some are given
+            // again every frame, so only a change is news.
+            state.lastLoggedRejection = rejection
+            rejectionToLog = rejection
+        }
         let aspectRatio = state.aspectRatio
         if surface == .magicMouse {
             // Raw positions: the pose check applies left-handed mirroring itself.
@@ -288,7 +330,11 @@ final class TouchMonitor {
                 .sorted { $0.position.x < $1.position.x }
                 .map { String(format: "(%.2f, %.2f%@ s%d z%.1f)", $0.position.x, $0.position.y, $0.isTouching ? "" : " hover", $0.state, $0.size) }
                 .joined(separator: " ")
-            debugLog("[touch \(debugTime(now))] \(surface.displayName): \(contacts.count) finger(s) \(described)")
+            let travel = surface == .magicMouse ? String(format: ", pointer moved %.1f pt", pointerTravel) : ""
+            debugLog("[touch \(debugTime(now))] \(surface.displayName): \(contacts.count) finger(s) \(described)\(travel)")
+        }
+        if let rejectionToLog {
+            debugLog("[touch \(debugTime(now))] \(surface.displayName): rejected, \(rejectionToLog)")
         }
 
         guard !events.isEmpty else { return }
@@ -313,6 +359,23 @@ final class TouchMonitor {
         guard isRunning else { return }
 
         let surfaceSpace = DrawingOverlay.Space.surface(aspectRatio: aspectRatio)
+
+        // Whatever the events set off may send keys, and those must not count as typing.
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        defer {
+            let firesAction = events.contains { event in
+                switch event {
+                case .gesture, .stroke: return true
+                default: return false
+                }
+            }
+            if firesAction {
+                let endedAt = ProcessInfo.processInfo.systemUptime
+                lock.lock()
+                typingActivity.noteOwnKeys(from: startedAt, to: endedAt)
+                lock.unlock()
+            }
+        }
 
         for event in events {
             switch event {

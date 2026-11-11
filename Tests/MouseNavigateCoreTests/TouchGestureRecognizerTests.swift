@@ -349,6 +349,23 @@ final class TrackpadGestureTests: XCTestCase {
         XCTAssertFalse(pad.wasCancelled)
     }
 
+    func testDrawingWhereOneFingerBarelyMovesIsNeverShownOrRecognised() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.2, 0.2)
+        pad.down(2, 0.7, 0.2)
+        // Both set off, but one covers a tenth of what the other does: not one hand drawing.
+        for _ in 0..<20 {
+            pad.time += 0.01
+            pad.fingers[1]?.x += 0.4 / 20
+            pad.fingers[2]?.x += 0.05 / 20
+            pad.frame()
+        }
+        pad.up(1, 2)
+        XCTAssertEqual(pad.strokes.count, 0)
+        XCTAssertEqual(pad.progressPaths.count, 0)
+        XCTAssertFalse(pad.wasCancelled)
+    }
+
     func testShortDrawingIsCancelled() {
         let pad = TouchDriver(.trackpad)
         pad.down(1, 0.2, 0.2)

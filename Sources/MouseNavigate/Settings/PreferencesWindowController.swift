@@ -111,6 +111,8 @@ final class PreferencesWindowController: NSObject {
 
     var touchEnableCheckbox: NSButton?
     var leftHandedCheckbox: NSButton?
+    var ignoreTypingCheckbox: NSButton?
+    var ignoreMouseMovingCheckbox: NSButton?
     var touchStatusLabel: NSTextField?
     /// The warning that a macOS three-finger gesture takes one of the bound gestures.
     var touchConflictRow: NSStackView?

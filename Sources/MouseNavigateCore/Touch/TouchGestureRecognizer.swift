@@ -688,9 +688,11 @@ struct DrawingDetector: GestureDetector {
 
         if first.upTime != nil || second.upTime != nil {
             isDone = true
-            // Long enough to recognise, it is a stroke whether or not it was shown yet;
-            // otherwise only what is on screen needs taking away.
-            guard isDrawing, length(of: path) >= tuning.minStrokeLength else { return stopDrawing() }
+            // Only a drawing that was shown is a stroke. One that never met the show rule
+            // (the fingers never moved alike) would otherwise be recognised, and flash ink
+            // at the very end. Too short to recognise, it is dropped, and taken off the
+            // screen if it was on it.
+            guard isShowing, length(of: path) >= tuning.minStrokeLength else { return stopDrawing() }
             isDrawing = false
             isShowing = false
             return [.stroke(path)]

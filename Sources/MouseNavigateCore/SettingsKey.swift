@@ -26,6 +26,8 @@ public enum SettingsKey {
     public static let touchLeftHanded = "touchLeftHanded"
     public static let touchShowsDrawing = "touchShowsDrawing"
     public static let touchDrawSpread = "touchDrawSpread"
+    public static let touchIgnoreWhileTyping = "touchIgnoreWhileTyping"
+    public static let touchIgnoreWhileMoving = "touchIgnoreWhileMoving"
     public static let automaticUpdates = "update.automatic"
     /// When the updater last asked GitHub. Bookkeeping, not a setting: never exported.
     public static let lastUpdateCheck = "update.lastCheck"
@@ -62,6 +64,8 @@ public enum SettingsKey {
             touchLeftHanded: .bool,
             touchShowsDrawing: .bool,
             touchDrawSpread: .double,
+            touchIgnoreWhileTyping: .bool,
+            touchIgnoreWhileMoving: .bool,
             automaticUpdates: .bool,
             lastUpdateCheck: .date,
             onboardingCompleted: .bool,

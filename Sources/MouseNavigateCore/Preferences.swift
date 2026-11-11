@@ -550,6 +550,26 @@ public final class Preferences {
         }
     }
 
+    /// Whether touches on the trackpad while a key is being pressed, and for half a second
+    /// after, are left alone: resting palms and thumbs are not gestures.
+    public var ignoresTouchWhileTyping: Bool {
+        get { store.object(forKey: SettingsKey.touchIgnoreWhileTyping) as? Bool ?? true }
+        set {
+            store.set(newValue, forKey: SettingsKey.touchIgnoreWhileTyping)
+            notifyChange(.touch)
+        }
+    }
+
+    /// Whether a finger touching a Magic Mouse that is being moved is taken for a grip
+    /// rather than a tap.
+    public var ignoresTapsWhileMouseMoves: Bool {
+        get { store.object(forKey: SettingsKey.touchIgnoreWhileMoving) as? Bool ?? true }
+        set {
+            store.set(newValue, forKey: SettingsKey.touchIgnoreWhileMoving)
+            notifyChange(.touch)
+        }
+    }
+
     // MARK: - Character gestures
 
     /// Whether the stroke is drawn on screen as it is made.
@@ -597,6 +617,8 @@ public final class Preferences {
         store.removeObject(forKey: SettingsKey.touchLeftHanded)
         store.removeObject(forKey: SettingsKey.touchShowsDrawing)
         store.removeObject(forKey: SettingsKey.touchDrawSpread)
+        store.removeObject(forKey: SettingsKey.touchIgnoreWhileTyping)
+        store.removeObject(forKey: SettingsKey.touchIgnoreWhileMoving)
         notifyChange(.touch)
     }
 

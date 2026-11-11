@@ -27,6 +27,11 @@ final class SettingsKeyTests: XCTestCase {
         return keys
     }
 
+    func testAccidentalTouchGuardsAreBooleans() {
+        XCTAssertEqual(SettingsKey.type(of: SettingsKey.touchIgnoreWhileTyping), .bool)
+        XCTAssertEqual(SettingsKey.type(of: SettingsKey.touchIgnoreWhileMoving), .bool)
+    }
+
     func testEveryCurrentKeyHasAType() {
         for key in everyCurrentKey {
             XCTAssertNotNil(SettingsKey.type(of: key), key)
