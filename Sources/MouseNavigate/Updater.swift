@@ -56,6 +56,9 @@ final class Updater {
     private var isLookingBeyondReady = false
     /// nil when this copy cannot check an update's signature, and so never installs one.
     private let requirement = UpdateVerifier.ownRequirement()
+    /// The repository the release is asked about, which its download must come from too.
+    /// Read from a fixed address, so it either always works or never does.
+    private nonisolated static let repository = GitHubRepository(latestReleaseURL: AppInfo.latestReleaseURL)!
 
     private static let firstTick: TimeInterval = 20
     private static let tickInterval: TimeInterval = 60 * 60
@@ -211,7 +214,7 @@ final class Updater {
             } else if status != 200 {
                 result = .failure(.network("GitHub answered with status \(status)."))
             } else if let data, let release = try? JSONDecoder().decode(GitHubRelease.self, from: data) {
-                result = .success(UpdateCandidate.select(from: release, current: version))
+                result = .success(UpdateCandidate.select(from: release, current: version, repository: Updater.repository))
             } else {
                 result = .failure(.network("GitHub's answer could not be read."))
             }
@@ -282,10 +285,17 @@ final class Updater {
         var request = URLRequest(url: candidate.download, timeoutInterval: 120)
         request.setValue("MouseNavigate/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
 
-        session.downloadTask(with: request) { location, response, error in
+        // GitHub answers a release download with redirects to where the file is stored,
+        // and each one is held to GitHub's hosts. The task's own delegate, so the check
+        // for the latest release is left as it was.
+        let redirects = UpdateRedirectGuard()
+        let task = session.downloadTask(with: request) { location, response, error in
             // The downloaded file is deleted when this returns, so it is claimed here.
             let result: Result<StagedUpdate, Error>
             do {
+                if let place = redirects.refusedPlace {
+                    throw StageError("The download was redirected away from GitHub, to \(place), so it was stopped.")
+                }
                 if let error { throw error }
                 guard let location, (response as? HTTPURLResponse)?.statusCode == 200 else {
                     throw StageError("The download failed.")
@@ -298,7 +308,9 @@ final class Updater {
             DispatchQueue.main.async {
                 finish(result)
             }
-        }.resume()
+        }
+        task.delegate = redirects
+        task.resume()
     }
 
     /// Looks for a release newer than the one waiting to be installed, which would
@@ -369,10 +381,22 @@ final class Updater {
             throw StageError("The download is \(size) bytes; the release lists \(candidate.size).")
         }
 
+        // Read through before anything is unpacked: ditto writes whatever the archive holds,
+        // links to anywhere and as much as it inflates to among it, and the checks below
+        // can only refuse it once it has. Nothing has been created yet to be cleared away.
+        // Mapped, not read in: the file is up to 200 MB and is only looked at once.
+        try UpdateArchive.check(Data(contentsOf: archive, options: .alwaysMapped))
+
         let fileManager = FileManager.default
         let folder = stagingDirectory.appendingPathComponent(candidate.version.description, isDirectory: true)
         try? fileManager.removeItem(at: folder)
-        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        // This account's alone, as are any folders above it this creates, so no other
+        // account on the Mac can change the app between its checks and its install.
+        try fileManager.createDirectory(
+            at: folder,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
 
         do {
             // ditto, not unzip: it keeps the code signature and the stapled ticket intact.

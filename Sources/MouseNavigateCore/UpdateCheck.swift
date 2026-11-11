@@ -113,13 +113,17 @@ public struct UpdateCandidate: Equatable, Sendable {
     /// downloaded rather than after it fills the disk.
     public static let maximumSize = 200 * 1024 * 1024
 
-    public static func select(from release: GitHubRelease, current: SemanticVersion) -> UpdateCandidate? {
+    public static func select(
+        from release: GitHubRelease,
+        current: SemanticVersion,
+        repository: GitHubRepository
+    ) -> UpdateCandidate? {
         guard !release.draft, !release.prerelease,
               let version = SemanticVersion(release.tagName), version.preRelease == nil,
               current < version,
               let asset = release.assets.first(where: { $0.name == assetName }),
               asset.size > 0, asset.size <= maximumSize,
-              asset.browserDownloadURL.scheme == "https",
+              repository.isReleaseAsset(asset.browserDownloadURL, named: assetName),
               // The release page is handed to whatever opens its scheme, so only a web
               // address will do.
               release.htmlURL.scheme == "https"
@@ -133,6 +137,127 @@ public struct UpdateCandidate: Equatable, Sendable {
             releasePage: release.htmlURL,
             notes: release.body
         )
+    }
+}
+
+/// The repository releases come from, and the addresses a download from it may use.
+///
+/// GitHub's answer is trusted for what it says about a release, not for where the bytes
+/// come from: the asset has to be one of this repository's own release downloads, and the
+/// redirects GitHub sends a download through have to stay on GitHub's hosts. A download
+/// from anywhere else is refused before anything arrives, whatever the signature check
+/// would have said about it afterwards.
+public struct GitHubRepository: Equatable, Sendable {
+    public var owner: String
+    public var name: String
+
+    /// Hosts a release download is served from: github.com itself, which redirects to
+    /// the asset store, and the asset store's names, old and current.
+    public static let downloadHosts: Set<String> = [
+        "github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+    ]
+
+    public init(owner: String, name: String) {
+        self.owner = owner
+        self.name = name
+    }
+
+    /// Read from the API address the latest release is asked for,
+    /// `https://api.github.com/repos/<owner>/<name>/releases/latest`, so the repository is
+    /// named in one place.
+    public init?(latestReleaseURL url: URL) {
+        let parts = url.path(percentEncoded: false).split(separator: "/", omittingEmptySubsequences: false)
+        guard url.scheme == "https", url.host?.lowercased() == "api.github.com",
+              parts.count == 6, parts[0].isEmpty, parts[1] == "repos",
+              !parts[2].isEmpty, !parts[3].isEmpty,
+              parts[4] == "releases", parts[5] == "latest"
+        else {
+            return nil
+        }
+        self.init(owner: String(parts[2]), name: String(parts[3]))
+    }
+
+    /// Whether `url` is this repository's release download of an asset called `asset`,
+    /// as in `https://github.com/<owner>/<name>/releases/download/<tag>/<asset>`.
+    public func isReleaseAsset(_ url: URL, named asset: String) -> Bool {
+        guard GitHubRepository.isOnGitHub(url), url.host?.lowercased() == "github.com",
+              url.query == nil, url.fragment == nil
+        else {
+            return false
+        }
+        // The decoded path, so an encoded slash or dot cannot pass for something else.
+        let parts = url.path(percentEncoded: false).split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 7, parts[0].isEmpty else { return false }
+        let tag = parts[5]
+        // GitHub's own names are not case-sensitive, and its answer may spell them as the
+        // repository's page does.
+        return parts[1].lowercased() == owner.lowercased()
+            && parts[2].lowercased() == name.lowercased()
+            && parts[3] == "releases" && parts[4] == "download"
+            && !tag.isEmpty && tag != "." && tag != ".."
+            && parts[6] == Substring(asset)
+    }
+
+    /// Whether a download may be redirected to `url`.
+    public static func mayRedirect(to url: URL) -> Bool {
+        isOnGitHub(url)
+    }
+
+    /// Over https, on one of GitHub's download hosts, at its usual port, and with no
+    /// credentials in the address that could make it mean another host.
+    private static func isOnGitHub(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased(),
+              downloadHosts.contains(host),
+              url.port == nil || url.port == 443,
+              url.user == nil, url.password == nil
+        else {
+            return false
+        }
+        return true
+    }
+}
+
+/// Stops a download that GitHub, or anything posing as it, redirects off GitHub's hosts.
+/// Set as the download task's own delegate; the task then finishes with the redirect it
+/// refused, and `refusedPlace` says where it led.
+public final class UpdateRedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    /// URLSession calls the delegate on its own queue and the completion on another.
+    private let lock = NSLock()
+    private var refused: String?
+
+    /// Where a refused redirect pointed, such as `https://example.com`, once one has been
+    /// refused.
+    public var refusedPlace: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return refused
+    }
+
+    override public init() {}
+
+    public func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        if let url = request.url, GitHubRepository.mayRedirect(to: url) {
+            completionHandler(request)
+            return
+        }
+        // Scheme, host and port only: enough to say where, without the rest of an address
+        // someone else chose.
+        var place = URLComponents()
+        place.scheme = request.url?.scheme
+        place.host = request.url?.host
+        place.port = request.url?.port
+        lock.lock()
+        refused = place.host == nil ? "an address with no host" : (place.string ?? "an unreadable address")
+        lock.unlock()
+        completionHandler(nil)
     }
 }
 
