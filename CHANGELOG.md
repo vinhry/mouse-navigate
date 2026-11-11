@@ -2,9 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased: features]
-
-_On the `features-0.9` branch; ships after the fixes below._
+## [0.9.0] - 2026-11-11
 
 ### Added
 - **Touch Gestures** and **Keyboard Cursor** switches in the menu bar menu, the same two as

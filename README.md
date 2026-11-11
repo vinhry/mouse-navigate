@@ -777,15 +777,15 @@ Or run the built binary directly:
 
 ## Versioning
 
-- Current release: `0.8.1`
+- Current release: `0.9.0`
 - The version is set in one place, `VERSION` in `scripts/build-app.sh`; the build number
   is the number of commits, so it only ever grows.
 - Pushing a version tag builds, signs, notarizes and publishes the release
   (`.github/workflows/release.yml`). The tag must match `VERSION`, or the workflow stops
   straight away:
 ```bash
-git tag v0.8.1
-git push origin v0.8.1
+git tag v0.9.0
+git push origin v0.9.0
 ```
 - Notarization has taken hours. The workflow prints nothing while it waits; that is not a
   hang.
