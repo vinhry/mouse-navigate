@@ -29,7 +29,9 @@ let package = Package(
         ),
         .testTarget(
             name: "MouseNavigateCoreTests",
-            dependencies: ["MouseNavigateCore"]
+            dependencies: ["MouseNavigateCore"],
+            // A sample of real handwriting for the drawn-letter evaluation, with its licence.
+            resources: [.copy("StrokeEvaluation/Fixtures")]
         )
     ]
 )
