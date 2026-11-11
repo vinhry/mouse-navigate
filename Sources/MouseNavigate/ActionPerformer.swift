@@ -58,7 +58,7 @@ final class ActionPerformer {
         case .openURL(let url):
             later {
                 if !NSWorkspace.shared.open(url) {
-                    Log.actions.notice("Nothing opened \(url.absoluteString, privacy: .public).")
+                    Log.actions.notice("Nothing opened \(url.scheme ?? "a", privacy: .public) address \(url.absoluteString, privacy: .private).")
                 }
             }
             return true
@@ -182,7 +182,7 @@ final class ActionPerformer {
 
     private func launchApplication(bundleID: String) {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-            Log.actions.notice("No app found for \(bundleID, privacy: .public); nothing launched.")
+            Log.actions.notice("No app found for \(bundleID, privacy: .private); nothing launched.")
             return
         }
         launchApplication(at: url)
@@ -204,7 +204,7 @@ final class ActionPerformer {
         process.terminationHandler = { process in
             guard process.terminationStatus != 0 else { return }
             Log.actions.notice(
-                "Shortcut \(name, privacy: .public) exited with status \(process.terminationStatus)."
+                "Shortcut \(name, privacy: .private) exited with status \(process.terminationStatus)."
             )
         }
         do {

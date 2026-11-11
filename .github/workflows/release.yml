@@ -13,10 +13,12 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           # The build number counts commits, so the whole history is needed.
           fetch-depth: 0
+          # Nothing later pushes to this repository with git; the release uses GH_TOKEN.
+          persist-credentials: false
 
       # Fail in seconds rather than after hours of notarization: an app whose version
       # differs from its tag is refused by every installed copy's updater.
@@ -93,10 +95,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ steps.checksum.outputs.sha256 }}
         run: |
-          gh release create "${{ github.ref_name }}" \
+          gh release create "$GITHUB_REF_NAME" \
             dist/MouseNavigate.zip \
             dist/MouseNavigate-dSYM.zip \
-            --title "${{ github.ref_name }}" \
+            --title "$GITHUB_REF_NAME" \
             --notes "SHA-256 of MouseNavigate.zip: \`$SHA\`" \
             --generate-notes
 

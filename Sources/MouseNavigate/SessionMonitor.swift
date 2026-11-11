@@ -12,6 +12,9 @@ final class SessionMonitor {
     /// Runs while the session is unavailable, asking the window server how things stand,
     /// so a missed unlock costs a few seconds rather than everything until the next one.
     private var recheckTimer: MainTimer?
+    /// One quick look a moment after an unlock is announced, for when the window server has
+    /// not caught up with the announcement yet.
+    private var settleTimer: MainTimer?
 
     var isAvailable: Bool { state.isAvailable }
 
@@ -34,7 +37,9 @@ final class SessionMonitor {
             workspace.addObserver(self, selector: selector, name: name, object: nil)
         }
 
-        // The lock screen announces itself to anyone listening. AppKit holds distributed
+        // The lock screen announces itself to anyone listening, but so can any other process:
+        // a distributed notification proves nothing about who sent it. So these are only a cue
+        // to look at the real state, never the state itself. AppKit holds distributed
         // notifications back while an app is inactive, which a menu bar app nearly always
         // is, so these are asked for at once.
         let distributed = DistributedNotificationCenter.default()
@@ -59,8 +64,22 @@ final class SessionMonitor {
     @objc private func willSleep() { apply(.willSleep) }
     @objc private func sessionDidResignActive() { apply(.sessionDidResignActive) }
     @objc private func sessionDidBecomeActive() { apply(.sessionDidBecomeActive) }
+    // A forged lock can only make the app stand down, which the next look at the window
+    // server undoes, so locking is taken at its word to be safe when the real one is early.
     @objc private func screenLocked() { apply(.screenLocked) }
-    @objc private func screenUnlocked() { apply(.screenUnlocked) }
+
+    // An unlock is never taken at its word: a forged one would let gestures run behind the
+    // lock screen. Ask the window server, and if it still says locked (it can lag the
+    // announcement by a moment) look again shortly. The five-second timer is left running
+    // until the window server itself says the session is unlocked and on the console.
+    @objc private func screenUnlocked() {
+        reconcile()
+        guard !state.isAvailable else { return }
+        settleTimer = MainTimer(after: 1) { [weak self] in
+            self?.settleTimer = nil
+            self?.reconcile()
+        }
+    }
 
     @objc private func didWake() {
         apply(.didWake)
@@ -93,6 +112,7 @@ final class SessionMonitor {
         if available {
             Log.session.info("Session in front again (\(reason, privacy: .public)); resuming.")
             recheckTimer = nil
+            settleTimer = nil
         } else {
             Log.session.info("Session out of reach (\(reason, privacy: .public)); standing down.")
             if recheckTimer == nil {

@@ -118,7 +118,7 @@ final class WindowManager {
     private func report(_ error: AXError, _ attempt: String) {
         guard error != .success else { return }
         let app = FrontmostApp.shared.bundleID ?? "the app in front"
-        Log.actions.notice("\(attempt, privacy: .public) in \(app, privacy: .public) failed: AXError \(error.rawValue).")
+        Log.actions.notice("\(attempt, privacy: .public) in \(app, privacy: .private) failed: AXError \(error.rawValue).")
     }
 
     /// The element with the request timeout applied. Every element the actions touch goes

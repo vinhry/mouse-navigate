@@ -144,8 +144,9 @@ if command -v codesign >/dev/null 2>&1; then
   if [[ -n "$SIGN_IDENTITY" ]]; then
     echo "Signing with identity: $SIGN_IDENTITY"
     # --options runtime enables the Hardened Runtime, required for notarization.
-    # Omitting --timestamp uses Apple's secure timestamp server, also required.
-    codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_DIR"
+    # --timestamp asks Apple's secure timestamp server for one, also required for
+    # notarization; without it codesign would sign with no trusted time at all.
+    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP_DIR"
     codesign --verify --deep --strict "$APP_DIR" >/dev/null
   else
     echo "Warning: no signing identity found. Falling back to ad-hoc signing (-)." >&2
