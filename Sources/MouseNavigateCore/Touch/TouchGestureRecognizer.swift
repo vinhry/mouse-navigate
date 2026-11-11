@@ -13,10 +13,16 @@ public struct TouchGestureRecognizer {
     public var isDrawingEnabled = true
 
     public private(set) var shouldSuppressScroll = false
+    /// Why the last tap or drawing that nearly happened did not, in a few words, for
+    /// `--touch-debug`: the touches people make by accident are the ones that are turned
+    /// down, and the log has to say why. Kept until the next one.
+    public private(set) var lastRejection: String?
 
     private var tracker = ContactTracker()
     private var detectors: [any GestureDetector]
     private var owner: Int?
+    /// The user typed while this touch was on the trackpad, so none of it is a gesture.
+    private var isTypingTouch = false
 
     public init(surface: TouchSurface, tuning: TouchTuning = TouchTuning()) {
         self.surface = surface
@@ -49,14 +55,28 @@ public struct TouchGestureRecognizer {
             liftGrace: surface == .magicMouse ? tuning.mouseLiftGrace : 0
         )
 
+        // Hands on the keyboard rest palms and thumbs on the trackpad, and a touch that was
+        // there while typing stays suspect until every finger has lifted: it is blocked
+        // for every detector, as though someone else owned it.
+        if surface == .trackpad, snapshot.isTyping, !isTypingTouch,
+           !(snapshot.active.isEmpty && snapshot.lifted.isEmpty) {
+            isTypingTouch = true
+            lastRejection = "touch while typing"
+        }
+
         var events: [TouchEvent] = []
         for index in detectors.indices {
             if !isDrawingEnabled && detectors[index] is DrawingDetector {
                 continue
             }
-            let blocked = owner != nil && owner != index
+            let blocked = isTypingTouch || (owner != nil && owner != index)
             let produced = detectors[index].update(snapshot, tuning: tuning, blocked: blocked)
-            guard !produced.isEmpty, !blocked else { continue }
+            if let reason = detectors[index].rejection {
+                lastRejection = reason
+            }
+            // A blocked owner still winds down what it started before typing took the
+            // touch from it: a drawing on screen is taken away, a window drag ended.
+            guard !produced.isEmpty, !blocked || owner == index else { continue }
             owner = index
             events += produced
         }
@@ -68,6 +88,7 @@ public struct TouchGestureRecognizer {
 
         if snapshot.active.isEmpty {
             owner = nil
+            isTypingTouch = false
         }
 
         guard isLeftHanded else { return events }
@@ -91,7 +112,9 @@ public struct TouchGestureRecognizer {
             detectors[index].reset()
         }
         owner = nil
+        isTypingTouch = false
         shouldSuppressScroll = false
+        lastRejection = nil
     }
 
     /// A Magic Mouse click made with the index finger held nearer the back than the resting
@@ -131,10 +154,23 @@ public struct TouchGestureRecognizer {
 // MARK: - Detectors
 
 protocol GestureDetector {
-    /// `blocked` means another detector owns the session: keep state current, start nothing.
+    /// `blocked` means another detector owns the session, or the user typed during it: keep
+    /// state current, start nothing. Blocked while owning it, end what was started.
     mutating func update(_ snapshot: ContactSnapshot, tuning: TouchTuning, blocked: Bool) -> [TouchEvent]
     var suppressesScroll: Bool { get }
+    /// Why the last update turned down what would otherwise have been a gesture, if it did.
+    var rejection: String? { get }
     mutating func reset()
+}
+
+extension GestureDetector {
+    var rejection: String? { nil }
+}
+
+/// A contact grown larger than any finger, once `TouchTuning.palmContactSize` is set. Only
+/// trackpad sizes are judged: a Magic Mouse palm is told apart by where it lies.
+private func isPalm(_ contact: TrackedContact, on surface: TouchSurface, tuning: TouchTuning) -> Bool {
+    surface == .trackpad && contact.maxSize > tuning.palmContactSize
 }
 
 private func mean(_ vectors: [Vector2]) -> Vector2 {
@@ -159,7 +195,7 @@ private func restingFingers(
         return nil
     }
     if surface == .trackpad {
-        guard others.allSatisfy({ $0.position.y <= tuning.thumbZone }),
+        guard others.allSatisfy({ $0.position.y <= tuning.thumbZone && !isPalm($0, on: surface, tuning: tuning) }),
               snapshot.landed.allSatisfy({ contact in
                   others.contains { abs($0.position.y - contact.start.y) <= tuning.neighbourMaxOffset }
               })
@@ -180,15 +216,19 @@ struct FixedTapDetector: GestureDetector {
     private var lastTwoFixTap: Double?
     /// Whether the button went down while the burst was on the surface.
     private var sawClick = false
+    /// Whether the pointer moved while the burst was on a Magic Mouse.
+    private var sawMotion = false
     private var lastTapTime: Double?
 
     var suppressesScroll: Bool { false }
+    private(set) var rejection: String?
 
     init(surface: TouchSurface) {
         self.surface = surface
     }
 
     mutating func update(_ snapshot: ContactSnapshot, tuning: TouchTuning, blocked: Bool) -> [TouchEvent] {
+        rejection = nil
         // Judged before the reset: fingers that all lift in one frame may still be a tap.
         defer {
             if snapshot.active.isEmpty { reset() }
@@ -212,6 +252,10 @@ struct FixedTapDetector: GestureDetector {
         // resting finger, and must not switch tabs as well.
         if snapshot.isPrimaryButtonDown {
             sawClick = true
+        }
+        // Moving a Magic Mouse means gripping it, and the fingers shift on it as they do.
+        if surface == .magicMouse, snapshot.isPointerMoving {
+            sawMotion = true
         }
 
         for contact in snapshot.active + snapshot.lifted where burst[contact.id] != nil {
@@ -243,7 +287,9 @@ struct FixedTapDetector: GestureDetector {
         let taps = burst.values.sorted { $0.start.x < $1.start.x }
         burst.removeAll()
         let clicked = sawClick
+        let moved = sawMotion
         sawClick = false
+        sawMotion = false
         guard !blocked, !clicked, !currentAnchors.isEmpty, anchors.count == currentAnchors.count,
               taps.allSatisfy({ $0.isTap(tuning: tuning) })
         else {
@@ -255,8 +301,46 @@ struct FixedTapDetector: GestureDetector {
         if surface == .magicMouse, let lastTapTime, snapshot.time - lastTapTime < tuning.tapRefractory {
             return []
         }
+        // Set even for a tap turned down below, so that its bounces are turned down too.
         lastTapTime = snapshot.time
+        if let refusal = refusal(of: taps, beside: currentAnchors, pointerMoved: moved, tuning: tuning) {
+            rejection = refusal
+            return []
+        }
         return classify(taps: taps, anchors: currentAnchors, time: snapshot.time, tuning: tuning)
+    }
+
+    /// Why touches short and still enough to be taps are not taps after all: they are what
+    /// a hand does beside a resting finger without meaning to.
+    private func refusal(
+        of taps: [TrackedContact],
+        beside anchors: [TrackedContact],
+        pointerMoved: Bool,
+        tuning: TouchTuning
+    ) -> String? {
+        if pointerMoved {
+            return "tap while the mouse moved"
+        }
+        if (taps + anchors).contains(where: { isPalm($0, on: surface, tuning: tuning) }) {
+            return "palm, not a finger"
+        }
+        if surface == .trackpad {
+            let grazed = taps.contains { tap in
+                tap.upTime.map { $0 - tap.downTime < tuning.tapMinDuration } ?? false
+            }
+            if grazed {
+                return "tap too short"
+            }
+            // A thumb at the near edge comes and goes as the hand shifts.
+            if taps.contains(where: { $0.start.y > tuning.thumbZone }) {
+                return "tap in the thumb zone"
+            }
+        }
+        let landing = taps.map(\.downTime).min() ?? 0
+        if anchors.contains(where: { landing - $0.downTime < tuning.tapAnchorRest }) {
+            return "resting finger not yet at rest"
+        }
+        return nil
     }
 
     private mutating func classify(
@@ -303,6 +387,7 @@ struct FixedTapDetector: GestureDetector {
         burst.removeAll()
         lastTwoFixTap = nil
         sawClick = false
+        sawMotion = false
         lastTapTime = nil
     }
 }
@@ -336,7 +421,9 @@ struct FixedSlideDetector: GestureDetector {
                 dragAnchor = nil
                 return [.dragEnded]
             }
-            // Tapping another finger switches between moving and resizing.
+            // Tapping another finger switches between moving and resizing, but not once the
+            // user has started typing; the drag itself goes on until the finger lifts.
+            guard !blocked else { return [] }
             return snapshot.lifted
                 .filter { $0.id != anchor && $0.isTap(tuning: tuning) }
                 .map { _ in .dragToggleMode }
@@ -551,13 +638,20 @@ struct SequentialTapDetector: GestureDetector {
 /// midpoint and ends when either finger lifts.
 struct DrawingDetector: GestureDetector {
     private var pair: (Int, Int)?
+    /// When the later finger of the pair landed.
+    private var landTime = 0.0
     private var path: [Vector2] = []
+    /// Both fingers have set off together, so the page must not scroll under them.
     private var isDrawing = false
+    /// The drawing is on screen. It takes more than setting off: fingers roll as they land.
+    private var isShowing = false
     private var isDone = false
 
     var suppressesScroll: Bool { isDrawing }
+    private(set) var rejection: String?
 
     mutating func update(_ snapshot: ContactSnapshot, tuning: TouchTuning, blocked: Bool) -> [TouchEvent] {
+        rejection = nil
         defer {
             if snapshot.active.isEmpty { reset() }
         }
@@ -569,10 +663,18 @@ struct DrawingDetector: GestureDetector {
         }
 
         let all = snapshot.active + snapshot.lifted
-        guard let first = all.first(where: { $0.id == firstID }),
+        // Blocked with a pair means another gesture took the touch, or the user started
+        // typing; either way the drawing is over.
+        guard !blocked,
+              let first = all.first(where: { $0.id == firstID }),
               let second = all.first(where: { $0.id == secondID }),
               snapshot.active.count <= 2
         else {
+            isDone = true
+            return stopDrawing()
+        }
+        if [first, second].contains(where: { isPalm($0, on: .trackpad, tuning: tuning) }) {
+            rejection = "palm, not a finger"
             isDone = true
             return stopDrawing()
         }
@@ -586,30 +688,47 @@ struct DrawingDetector: GestureDetector {
 
         if first.upTime != nil || second.upTime != nil {
             isDone = true
-            let wasDrawing = isDrawing
+            // Long enough to recognise, it is a stroke whether or not it was shown yet;
+            // otherwise only what is on screen needs taking away.
+            guard isDrawing, length(of: path) >= tuning.minStrokeLength else { return stopDrawing() }
             isDrawing = false
-            guard wasDrawing, !blocked else { return [] }
-            guard length(of: path) >= tuning.minStrokeLength else { return [.strokeCancelled] }
+            isShowing = false
             return [.stroke(path)]
         }
 
-        if !isDrawing, !blocked {
-            let a = first.displacement
-            let b = second.displacement
-            let together = a.x * b.x + a.y * b.y > 0
+        if !isShowing, snapshot.time - landTime > tuning.drawArmWindow {
+            // Fingers that have come to rest without drawing are resting, wherever they
+            // drift to afterwards.
+            rejection = "drawing not started in time"
+            isDone = true
+            return stopDrawing()
+        }
+
+        let a = first.displacement
+        let b = second.displacement
+        let together = a.x * b.x + a.y * b.y > 0
+        if !isDrawing {
             isDrawing = together
                 && a.magnitude >= tuning.drawStartDistance
                 && b.magnitude >= tuning.drawStartDistance
         }
+        if isDrawing, !isShowing {
+            // One hand drawing moves both fingers alike; a landing roll or a finger left
+            // behind does not, and neither covers much ground.
+            let matched = together
+                && min(a.magnitude, b.magnitude) >= max(a.magnitude, b.magnitude) * tuning.drawMatchRatio
+            isShowing = matched && length(of: path) >= tuning.drawShowLength
+        }
         // Reporting the whole path each frame keeps whatever draws it stateless.
-        return isDrawing ? [.strokeProgress(path)] : []
+        return isShowing ? [.strokeProgress(path)] : []
     }
 
-    /// Gives up on a drawing that was already showing on screen.
+    /// Gives up on the drawing, taking it off the screen if it was showing there.
     private mutating func stopDrawing() -> [TouchEvent] {
-        let wasDrawing = isDrawing
+        let wasShowing = isShowing
         isDrawing = false
-        return wasDrawing ? [.strokeCancelled] : []
+        isShowing = false
+        return wasShowing ? [.strokeCancelled] : []
     }
 
     private mutating func startIfSpread(_ snapshot: ContactSnapshot, tuning: TouchTuning, blocked: Bool) {
@@ -619,6 +738,27 @@ struct DrawingDetector: GestureDetector {
         guard abs(first.downTime - second.downTime) <= tuning.simultaneousWindow,
               abs(first.start.x - second.start.x) >= tuning.drawSpread
         else {
+            return
+        }
+        // Hands left on a trackpad lie at its near edge, often one lower than the other;
+        // fingers held up to draw are above the thumb zone and side by side.
+        if max(first.start.y, second.start.y) > tuning.thumbZone {
+            rejection = "drawing fingers too low"
+            return
+        }
+        if abs(first.start.y - second.start.y) > tuning.neighbourMaxOffset {
+            rejection = "drawing fingers not level"
+            return
+        }
+        if [first, second].contains(where: { isPalm($0, on: .trackpad, tuning: tuning) }) {
+            rejection = "palm, not a finger"
+            return
+        }
+        landTime = max(first.downTime, second.downTime)
+        if snapshot.time - landTime > tuning.drawArmWindow {
+            // Fingers that only now look like a pair, having drifted into place, are resting.
+            rejection = "drawing not started in time"
+            isDone = true
             return
         }
         pair = (first.id, second.id)
@@ -641,8 +781,10 @@ struct DrawingDetector: GestureDetector {
 
     mutating func reset() {
         pair = nil
+        landTime = 0
         path = []
         isDrawing = false
+        isShowing = false
         isDone = false
     }
 }

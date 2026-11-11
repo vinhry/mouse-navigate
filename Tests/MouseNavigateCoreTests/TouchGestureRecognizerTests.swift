@@ -7,7 +7,11 @@ private final class TouchDriver {
     var recognizer: TouchGestureRecognizer
     var time = 0.0
     var fingers: [Int: Vector2] = [:]
+    /// Contact sizes by finger; unlisted fingers report 0.
+    var sizes: [Int: Double] = [:]
     var isButtonDown = false
+    var isTyping = false
+    var isPointerMoving = false
     private(set) var events: [TouchEvent] = []
     private(set) var suppressedScroll = false
 
@@ -42,12 +46,14 @@ private final class TouchDriver {
     }
 
     func frame() {
-        let contacts = fingers.map { TouchContact(id: $0.key, position: $0.value) }
+        let contacts = fingers.map { TouchContact(id: $0.key, position: $0.value, size: sizes[$0.key] ?? 0) }
         events += recognizer.process(TouchFrame(
             timestamp: time,
             contacts: contacts,
             isPrimaryButtonDown: isButtonDown,
-            aspectRatio: 1.6
+            aspectRatio: 1.6,
+            isTyping: isTyping,
+            isPointerMoving: isPointerMoving
         ))
         suppressedScroll = suppressedScroll || recognizer.shouldSuppressScroll
     }
@@ -347,7 +353,8 @@ final class TrackpadGestureTests: XCTestCase {
         let pad = TouchDriver(.trackpad)
         pad.down(1, 0.2, 0.2)
         pad.down(2, 0.7, 0.2)
-        pad.slide([1, 2], by: Vector2(x: 0, y: 0.1))
+        // Long enough to be shown, too short to recognise.
+        pad.slide([1, 2], by: Vector2(x: 0, y: 0.15))
         pad.up(1, 2)
         XCTAssertTrue(pad.wasCancelled)
         XCTAssertEqual(pad.strokes.count, 0)
@@ -875,5 +882,188 @@ final class TrackpadFalsePositiveTests: XCTestCase {
         pad.tap(2, 0.5, 0.2)
         pad.up(1)
         XCTAssertEqual(pad.events, [])
+    }
+}
+
+/// Touches made without meaning to: fingers brushing past or coming to rest, hands left on
+/// the trackpad while typing, a Magic Mouse gripped to move it.
+final class AccidentalTouchTests: XCTestCase {
+    // MARK: Taps
+
+    func testBrushBesideARestingFingerIsNotATap() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.3)
+        pad.wait(0.2)
+        pad.down(2, 0.5)
+        pad.wait(0.01)
+        pad.up(2)
+        pad.wait(0.1)
+        pad.up(1)
+        XCTAssertEqual(pad.gestures, [])
+        XCTAssertEqual(pad.recognizer.lastRejection, "tap too short")
+    }
+
+    func testTapBesideAFingerThatHasOnlyJustLandedIsNotATap() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.3)
+        pad.wait(0.13)
+        pad.tap(2, 0.5)
+        pad.up(1)
+        XCTAssertEqual(pad.gestures, [])
+        XCTAssertEqual(pad.recognizer.lastRejection, "resting finger not yet at rest")
+    }
+
+    func testTapInTheThumbZoneIsNotATap() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.4, 0.7)
+        pad.wait(0.2)
+        pad.tap(2, 0.55, 0.92)
+        pad.up(1)
+        XCTAssertEqual(pad.gestures, [])
+        XCTAssertEqual(pad.recognizer.lastRejection, "tap in the thumb zone")
+    }
+
+    func testTapWhileTypingDoesNothing() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.3)
+        pad.wait(0.2)
+        pad.isTyping = true
+        pad.tap(2, 0.5)
+        pad.isTyping = false
+        pad.up(1)
+        XCTAssertEqual(pad.events, [])
+        XCTAssertEqual(pad.recognizer.lastRejection, "touch while typing")
+    }
+
+    func testTypingSpoilsTheTouchUntilEveryFingerLifts() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.3)
+        pad.isTyping = true
+        pad.wait(0.1)
+        pad.isTyping = false
+        pad.wait(0.2)
+        pad.tap(2, 0.5)
+        pad.up(1)
+        XCTAssertEqual(pad.events, [])
+
+        pad.down(1, 0.3)
+        pad.wait(0.2)
+        pad.tap(2, 0.5)
+        pad.up(1)
+        XCTAssertEqual(pad.gestures, [.trackpadOneFixRightTap])
+    }
+
+    func testWindowDragStillEndsWhenTypingStartsDuringIt() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.3, 0.5)
+        pad.wait(0.2)
+        pad.down(2, 0.45, 0.3)
+        pad.slide([2], by: Vector2(x: 0, y: 0.2))
+        pad.up(2)
+        pad.isTyping = true
+        pad.slide([1], by: Vector2(x: 0.2, y: 0))
+        pad.tap(3, 0.6)
+        pad.up(1)
+        XCTAssertEqual(pad.events, [.gesture(.trackpadOneFixOneSlideDown), .dragEnded])
+    }
+
+    func testMouseTapWhileThePointerMovesDoesNothing() {
+        let mouse = TouchDriver(.magicMouse)
+        mouse.down(2, 0.6, 0.4)
+        mouse.wait(0.2)
+        mouse.isPointerMoving = true
+        mouse.tap(1, 0.42, 0.42)
+        mouse.isPointerMoving = false
+        XCTAssertEqual(mouse.gestures, [])
+        XCTAssertEqual(mouse.recognizer.lastRejection, "tap while the mouse moved")
+
+        // The same tap with the mouse held still.
+        mouse.wait(0.2)
+        mouse.tap(1, 0.42, 0.42)
+        mouse.up(2)
+        XCTAssertEqual(mouse.gestures, [.mouseMiddleFixIndexNearTap])
+    }
+
+    func testOversizedContactDoesNotAnchorATap() {
+        let pad = TouchDriver(.trackpad)
+        pad.recognizer.tuning.palmContactSize = 1
+        // A palm settles onto the pad, growing as it does.
+        pad.sizes[1] = 0.6
+        pad.down(1, 0.3)
+        pad.wait(0.1)
+        pad.sizes[1] = 1.5
+        pad.wait(0.1)
+        pad.sizes[1] = 0.8
+        pad.tap(2, 0.5)
+        pad.up(1)
+        XCTAssertEqual(pad.gestures, [])
+
+        // A finger-sized contact still anchors.
+        pad.sizes[1] = 0.6
+        pad.down(1, 0.3)
+        pad.wait(0.2)
+        pad.tap(2, 0.5)
+        pad.up(1)
+        XCTAssertEqual(pad.gestures, [.trackpadOneFixRightTap])
+    }
+
+    // MARK: Drawing
+
+    func testPalmsLowOnThePadDrawNothing() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.15, 0.92)
+        pad.down(2, 0.8, 0.9)
+        pad.slide([1, 2], by: Vector2(x: 0.1, y: -0.02), over: 0.3)
+        pad.up(1, 2)
+        XCTAssertEqual(pad.events, [])
+        XCTAssertFalse(pad.suppressedScroll)
+        XCTAssertEqual(pad.recognizer.lastRejection, "drawing fingers too low")
+    }
+
+    func testSpreadFingersThatRestBeforeDriftingDrawNothing() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.2, 0.4)
+        pad.down(2, 0.7, 0.4)
+        pad.wait(1)
+        pad.slide([1, 2], by: Vector2(x: 0, y: 0.3), over: 0.3)
+        pad.up(1, 2)
+        XCTAssertEqual(pad.events, [])
+        XCTAssertFalse(pad.suppressedScroll)
+        XCTAssertEqual(pad.recognizer.lastRejection, "drawing not started in time")
+    }
+
+    func testLandingRollShowsNoInk() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.2, 0.4)
+        pad.down(2, 0.7, 0.4)
+        pad.slide([1, 2], by: Vector2(x: 0, y: 0.04), over: 0.04)
+        pad.wait(0.5)
+        pad.up(1, 2)
+        XCTAssertEqual(pad.progressPaths, [])
+        XCTAssertFalse(pad.wasCancelled)
+        XCTAssertEqual(pad.events, [])
+    }
+
+    func testTypingTakesAwayADrawingOnScreen() {
+        let pad = TouchDriver(.trackpad)
+        pad.down(1, 0.2, 0.2)
+        pad.down(2, 0.7, 0.2)
+        pad.slide([1, 2], by: Vector2(x: 0, y: 0.3), over: 0.2)
+        XCTAssertFalse(pad.progressPaths.isEmpty)
+        XCTAssertTrue(pad.recognizer.shouldSuppressScroll)
+
+        pad.isTyping = true
+        pad.slide([1, 2], by: Vector2(x: 0, y: 0.2), over: 0.1)
+        XCTAssertFalse(pad.recognizer.shouldSuppressScroll)
+        pad.up(1, 2)
+        XCTAssertEqual(pad.events.filter { $0 == .strokeCancelled }.count, 1)
+        XCTAssertEqual(pad.events.last, .strokeCancelled)
+        XCTAssertEqual(pad.strokes.count, 0)
+    }
+
+    func testMirroringKeepsWhatTheHandsAreDoing() {
+        let frame = TouchFrame(timestamp: 0, contacts: [], isTyping: true, isPointerMoving: true)
+        XCTAssertTrue(frame.mirrored().isTyping)
+        XCTAssertTrue(frame.mirrored().isPointerMoving)
     }
 }

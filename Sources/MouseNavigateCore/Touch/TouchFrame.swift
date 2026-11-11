@@ -44,17 +44,27 @@ public struct TouchFrame: Equatable {
     public var isPrimaryButtonDown: Bool
     /// Physical width over height, so drawn strokes keep their shape.
     public var aspectRatio: Double
+    /// Whether the user is typing. Hands on the keyboard rest palms and thumbs on the
+    /// trackpad, and nothing they do there is meant as a gesture.
+    public var isTyping: Bool
+    /// Whether the pointer is moving. A finger touching a Magic Mouse that is being pushed
+    /// about is gripping it, not tapping.
+    public var isPointerMoving: Bool
 
     public init(
         timestamp: Double,
         contacts: [TouchContact],
         isPrimaryButtonDown: Bool = false,
-        aspectRatio: Double = 1
+        aspectRatio: Double = 1,
+        isTyping: Bool = false,
+        isPointerMoving: Bool = false
     ) {
         self.timestamp = timestamp
         self.contacts = contacts
         self.isPrimaryButtonDown = isPrimaryButtonDown
         self.aspectRatio = aspectRatio
+        self.isTyping = isTyping
+        self.isPointerMoving = isPointerMoving
     }
 
     /// Flips left and right, so gestures defined for the right hand work for the left.
@@ -81,6 +91,15 @@ public struct TouchTuning: Equatable {
     /// is: its movement is measured from there on. Fingers resting on a Magic Mouse drift
     /// as the mouse moves, and without this they would stop counting as resting.
     public var settleDuration = 0.3
+    /// A finger beside a resting one must have rested this long before a tap next to it
+    /// counts. Two fingers set down a moment apart, or a finger landing as another brushes
+    /// past, are not someone holding one finger still to tap beside it. Slides keep
+    /// `fixDuration`: they have their own distance to cover.
+    public var tapAnchorRest = 0.18
+    /// A trackpad touch shorter than this is a finger grazing the surface, not a tap. A
+    /// Magic Mouse is left alone: a light tap there bounces, and `mouseLiftGrace` already
+    /// joins the bounces into one touch.
+    public var tapMinDuration = 0.025
     public var tapMaxDuration = 0.22
     public var tapTolerance = 0.03
     /// Fingers landing within this window count as landing together.
@@ -119,11 +138,27 @@ public struct TouchTuning: Equatable {
     /// A Magic Mouse contact hugging the left or right edge and smaller than this is the
     /// side of the hand, not a finger.
     public var mouseEdgeContactSize = 0.375
+    /// A trackpad contact that has ever been larger than this is a palm, which can neither
+    /// anchor, tap nor draw. Off until real logs show what sizes the surface reports for
+    /// fingers and palms; `--touch-debug` prints them.
+    public var palmContactSize = Double.infinity
     /// Two fingers at least this far apart draw instead of scrolling, as a fraction of the
     /// surface's width.
     public var drawSpread = 0.3
 
+    /// Once both drawing fingers have moved this far together, the page stops scrolling
+    /// under them, though nothing is drawn on screen yet.
     public var drawStartDistance = 0.03
+    /// A drawing is shown on screen once its path is this long, in surface heights. Fingers
+    /// roll as they land and move a few hundredths doing it, which must not flash ink.
+    public var drawShowLength = 0.1
+    /// Drawing fingers move as one hand: the one that has moved less must have covered at
+    /// least this fraction of the other's distance, in the same direction, before anything
+    /// is shown. A finger that stays put while its neighbour slides is not drawing.
+    public var drawMatchRatio = 0.5
+    /// Two spread fingers that have not started showing a drawing this long after landing
+    /// are resting, and stay resting until they lift: hands left on the trackpad drift.
+    public var drawArmWindow = 0.8
     /// Shortest stroke worth recognizing, in surface heights.
     public var minStrokeLength = 0.25
     /// A ceiling on the points kept for one drawing; beyond it the path is thinned by half,
@@ -176,6 +211,9 @@ public struct TrackedContact: Equatable {
     public var position: Vector2
     /// Furthest the finger has strayed from `start`.
     public var maxDisplacement: Double
+    /// The largest the contact has been. A palm settles onto the surface over a few frames,
+    /// so its size on landing says little.
+    public internal(set) var maxSize: Double
     public var upTime: Double?
 
     public var displacement: Vector2 {
@@ -205,6 +243,8 @@ public struct ContactSnapshot {
     public let lifted: [TrackedContact]
     public let isPrimaryButtonDown: Bool
     public let aspectRatio: Double
+    public let isTyping: Bool
+    public let isPointerMoving: Bool
 
     /// The last finger just lifted.
     public var sessionEnded: Bool { active.isEmpty && !lifted.isEmpty }
@@ -244,6 +284,7 @@ public struct ContactTracker {
             if var tracked = contacts[id] ?? revive(id, near: contact.position, rawID: contact.id, tuning: tuning) {
                 seen.insert(tracked.id)
                 tracked.position = contact.position
+                tracked.maxSize = max(tracked.maxSize, contact.size)
                 let offset = tracked.displacement
                 tracked.maxDisplacement = max(tracked.maxDisplacement, offset.magnitude)
                 // A finger that has stayed put has come to rest here, wherever here is.
@@ -275,6 +316,7 @@ public struct ContactTracker {
                     settleTime: time,
                     position: contact.position,
                     maxDisplacement: 0,
+                    maxSize: contact.size,
                     upTime: nil
                 )
                 contacts[contact.id] = tracked
@@ -308,7 +350,9 @@ public struct ContactTracker {
             landed: landed,
             lifted: lifted.sorted { $0.position.x < $1.position.x },
             isPrimaryButtonDown: frame.isPrimaryButtonDown,
-            aspectRatio: frame.aspectRatio
+            aspectRatio: frame.aspectRatio,
+            isTyping: frame.isTyping,
+            isPointerMoving: frame.isPointerMoving
         )
     }
 
