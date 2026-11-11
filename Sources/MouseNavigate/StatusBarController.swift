@@ -5,6 +5,7 @@ import MouseNavigateCore
 final class StatusBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var pauseMenuItem: NSMenuItem?
+    private var pauseHourMenuItem: NSMenuItem?
     private var touchMenuItem: NSMenuItem?
     private var cursorMenuItem: NSMenuItem?
     private var launchAtLoginMenuItem: NSMenuItem?
@@ -30,12 +31,23 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     /// Whether this macOS has the private touch framework. Asked each time the menu opens.
     var isTouchAvailable: () -> Bool = { true }
 
-    private(set) var isPaused = false {
+    /// Paused from here, for good or until a time. Everything below reads this, and the
+    /// owner is told only when paused or not changes, not when a pause gains or loses an end.
+    private var pauseState = PauseState() {
         didSet {
             updateIcon()
-            pauseMenuItem?.title = isPaused ? "Resume" : "Pause"
+            updatePauseItems()
+            if pauseState.isPaused != oldValue.isPaused {
+                onPauseToggle?(pauseState.isPaused)
+            }
         }
     }
+    private var pauseTimer: MainTimer?
+    private var wakeObserver: NSObjectProtocol?
+
+    var isPaused: Bool { pauseState.isPaused }
+
+    private static let timedPauseLength: TimeInterval = 3600
 
     /// Cursor mode captures keystrokes, so the icon has to make that obvious.
     var isCursorModeActive = false {
@@ -132,6 +144,11 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(pauseItem)
         pauseMenuItem = pauseItem
 
+        let pauseHourItem = NSMenuItem(title: "Pause for 1 Hour", action: #selector(pauseHourTapped), keyEquivalent: "")
+        pauseHourItem.target = self
+        menu.addItem(pauseHourItem)
+        pauseHourMenuItem = pauseHourItem
+
         menu.addItem(.separator())
 
         // The same two switches as in Settings, for the times the window is the wrong place
@@ -179,11 +196,20 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(quitItem)
 
         statusItem?.menu = menu
+
+        // A timer does not run while the Mac sleeps, so the end of a timed pause is checked
+        // against the clock on waking rather than trusted to have fired.
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkPauseEnd() }
+        }
     }
 
     // MARK: - NSMenuDelegate
 
     func menuWillOpen(_ menu: NSMenu) {
+        checkPauseEnd()
         updatePermissionWarning()
         updateLaunchAtLoginState()
         updateFeatureToggles()
@@ -217,7 +243,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             state = "Cursor mode"
         } else if isPaused {
             name = "computermouse"
-            state = "Paused"
+            state = pauseState.resumeDate.map { "Paused until \(Self.clock($0))" } ?? "Paused"
         } else if let disabledInApp {
             name = "computermouse"
             state = "Off in \(disabledInApp)"
@@ -228,7 +254,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         // The description is what VoiceOver reads for the item, so it carries the state the
         // glyph only hints at.
-        let description = "MouseNavigate, \(state.lowercased())"
+        // Lowercased to run on from "MouseNavigate,", except where a time of day would
+        // read "pm" for "PM".
+        let description = "MouseNavigate, " + (isPaused && pauseState.resumeDate != nil
+            ? "paused until \(Self.clock(pauseState.resumeDate!))" : state.lowercased())
         let image = NSImage(systemSymbolName: name, accessibilityDescription: description)
             ?? NSImage(systemSymbolName: "computermouse.fill", accessibilityDescription: description)
         image?.isTemplate = true
@@ -243,9 +272,45 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     // MARK: - Pause
 
+    /// The time of day in the user's own format, as in the Clock settings.
+    private static func clock(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
+    }
+
+    private func updatePauseItems() {
+        let title: String
+        if let end = pauseState.resumeDate {
+            title = "Resume (paused until \(Self.clock(end)))"
+        } else {
+            title = isPaused ? "Resume" : "Pause"
+        }
+        pauseMenuItem?.title = title
+        // Already paused, there is nothing left to pause for.
+        pauseHourMenuItem?.isHidden = isPaused
+    }
+
     @objc private func pauseToggleTapped() {
-        isPaused.toggle()
-        onPauseToggle?(isPaused)
+        pauseState.apply(isPaused ? .resume : .pause)
+        schedulePauseEnd()
+    }
+
+    @objc private func pauseHourTapped() {
+        pauseState.apply(.pauseFor(Self.timedPauseLength, now: Date()))
+        schedulePauseEnd()
+    }
+
+    /// Ends a timed pause whose time has come, and arms the timer again if it has not.
+    private func checkPauseEnd() {
+        pauseState.apply(.tick(now: Date()))
+        schedulePauseEnd()
+    }
+
+    private func schedulePauseEnd() {
+        pauseTimer = nil
+        guard let end = pauseState.resumeDate else { return }
+        pauseTimer = MainTimer(after: max(end.timeIntervalSinceNow, 0.5)) { [weak self] in
+            self?.checkPauseEnd()
+        }
     }
 
     // MARK: - Touch gestures and keyboard cursor
