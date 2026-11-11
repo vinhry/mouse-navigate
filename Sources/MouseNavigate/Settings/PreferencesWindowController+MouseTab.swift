@@ -104,7 +104,7 @@ extension PreferencesWindowController {
         top.spacing = 36
 
         let scroll = makeScrollSection()
-        let stack = NSStackView(views: [label, makeScopeRow(), top, tester, scroll, footer])
+        let stack = NSStackView(views: [makeConflictRow(), label, makeScopeRow(), top, tester, scroll, footer])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -215,6 +215,61 @@ extension PreferencesWindowController {
         }
     }
 
+    // MARK: - Other mouse software
+
+    /// The warning shown while other mouse software runs. Hidden, it leaves the layout.
+    private func makeConflictRow() -> NSStackView {
+        let icon = NSImageView()
+        icon.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: "Warning")
+        icon.setContentHuggingPriority(.required, for: .horizontal)
+        let label = NSTextField(wrappingLabelWithString: "")
+        label.font = .systemFont(ofSize: 11)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        let textWidth: CGFloat = 580 - 24
+        label.preferredMaxLayoutWidth = textWidth
+        label.widthAnchor.constraint(equalToConstant: textWidth).isActive = true
+        let row = NSStackView(views: [icon, label])
+        row.orientation = .horizontal
+        row.alignment = .top
+        row.spacing = 8
+        row.isHidden = true
+        mouseConflictRow = row
+        mouseConflictLabel = label
+
+        // Looked at when an app starts or quits, never on a timer. Only while the window
+        // is showing: a hidden one is refreshed when it comes back.
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+            let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                // The app that just quit may still be listed.
+                let gone = name == NSWorkspace.didTerminateApplicationNotification
+                    ? (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
+                    : nil
+                MainActor.assumeIsolated {
+                    guard let self, self.isVisible else { return }
+                    self.refreshMouseConflictUI(excluding: gone)
+                }
+            }
+            workspaceObservers.append(token)
+        }
+        return row
+    }
+
+    func refreshMouseConflictUI(excluding pid: pid_t? = nil) {
+        guard let row = mouseConflictRow, let label = mouseConflictLabel else { return }
+        let running = NSWorkspace.shared.runningApplications
+            .filter { $0.processIdentifier != pid }
+            .compactMap(\.bundleIdentifier)
+        let text = MouseSoftwareConflictMessage.text(for: KnownMouseSoftware.names(runningBundleIDs: running))
+        let changed = row.isHidden != (text == nil) || label.stringValue != (text ?? "")
+        row.isHidden = text == nil
+        label.stringValue = text ?? ""
+        if changed {
+            fitWindowToPages()
+        }
+    }
+
     @objc func deviceDidChange() {
         DispatchQueue.main.async { [weak self] in
             self?.refreshDeviceUI()
@@ -223,6 +278,7 @@ extension PreferencesWindowController {
 
     func refreshDeviceUI() {
         deviceLabel?.stringValue = detector.statusDescription
+        refreshMouseConflictUI()
         refreshScrollUI()
         // Both name the model in use in their mouse menus.
         refreshPointerUI()

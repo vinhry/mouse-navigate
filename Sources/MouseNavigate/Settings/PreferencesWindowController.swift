@@ -99,6 +99,11 @@ final class PreferencesWindowController: NSObject {
     static let boundMarker = " •"
 
     /// The Scroll Wheel section's controls, built and refreshed in their own file.
+    /// The warning that other mouse software is running, at the top of the Mouse tab, and
+    /// the workspace observers that keep it current while the window is open.
+    var mouseConflictRow: NSStackView?
+    var mouseConflictLabel: NSTextField?
+    var workspaceObservers: [NSObjectProtocol] = []
     var scrollSection: ScrollSectionControls?
     var pointerSection: PointerSectionControls?
     var logitechGrid: NSGridView?
