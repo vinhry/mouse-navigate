@@ -15,6 +15,12 @@ final class KeyRecorderButton: NSButton {
     /// Only used on the main thread, apart from being let go of in deinit.
     nonisolated(unsafe) private var monitor: Any?
     private var isRecording = false
+    /// Clicks elsewhere in the window, which end the recording like a click on the button.
+    nonisolated(unsafe) private var clickMonitor: Any?
+
+    /// Escape is a key like any other here: it is the default Exit key, so taking it as
+    /// "cancel" would leave no way to bind it again. Clicking cancels instead.
+    private static let prompt = "Press a key, click to cancel"
 
     var onRecord: ((UInt16) -> Void)?
     var onRecordingChange: ((Bool) -> Void)?
@@ -28,7 +34,10 @@ final class KeyRecorderButton: NSButton {
         target = self
         action = #selector(startRecording)
         translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(greaterThanOrEqualToConstant: 96).isActive = true
+        // Wide enough for the prompt, so the keys list does not shift while recording.
+        title = KeyRecorderButton.prompt
+        let promptWidth = ceil(intrinsicContentSize.width)
+        widthAnchor.constraint(greaterThanOrEqualToConstant: max(96, promptWidth)).isActive = true
         update(keyCode: keyCode)
     }
 
@@ -40,6 +49,9 @@ final class KeyRecorderButton: NSButton {
     deinit {
         if let monitor {
             NSEvent.removeMonitor(monitor)
+        }
+        if let clickMonitor {
+            NSEvent.removeMonitor(clickMonitor)
         }
     }
 
@@ -66,7 +78,7 @@ final class KeyRecorderButton: NSButton {
         KeyRecorderButton.active = self
 
         isRecording = true
-        title = "Press a key…"
+        title = KeyRecorderButton.prompt
         onRecordingChange?(true)
 
         NotificationCenter.default.addObserver(
@@ -78,12 +90,20 @@ final class KeyRecorderButton: NSButton {
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
             guard let self else { return event }
 
-            // Escape leaves the binding untouched.
-            if event.keyCode != UInt16(53) {
-                self.onRecord?(event.keyCode)
-            }
-            self.finishRecording(keyCode: event.keyCode == 53 ? nil : event.keyCode)
+            self.onRecord?(event.keyCode)
+            self.finishRecording(keyCode: event.keyCode)
             return nil
+        }
+        // A click anywhere but on this button backs out, and still does what it was for.
+        // A click on the button is left to its own action, which cancels.
+        clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            guard let self, self.isRecording else { return event }
+            let onButton = event.window === self.window
+                && self.bounds.contains(self.convert(event.locationInWindow, from: nil))
+            if !onButton {
+                self.cancelRecording()
+            }
+            return event
         }
     }
 
@@ -114,5 +134,9 @@ final class KeyRecorderButton: NSButton {
             NSEvent.removeMonitor(monitor)
         }
         monitor = nil
+        if let clickMonitor {
+            NSEvent.removeMonitor(clickMonitor)
+        }
+        clickMonitor = nil
     }
 }

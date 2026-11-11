@@ -106,14 +106,13 @@ extension PreferencesWindowController {
             return
         }
 
-        AlertPresenter.sheet(
+        AlertPresenter.confirmDestructive(
             "Remove \(app.name)?",
             "Its own bindings and scroll settings are deleted, MouseNavigate is "
                 + "turned back on in it, and it goes back to the settings for all apps.",
-            buttons: ["Remove", "Cancel"],
+            confirm: "Remove",
             on: window
-        ) { [weak self] response in
-            guard response == .alertFirstButtonReturn else { return }
+        ) { [weak self] in
             Preferences.shared.removeApp(bundleID: selectedApp)
             self?.selectedApp = nil
             self?.refreshScopeUI()

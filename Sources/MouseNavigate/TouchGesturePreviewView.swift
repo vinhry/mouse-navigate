@@ -3,7 +3,9 @@ import MouseNavigateCore
 import QuartzCore
 
 /// Shows how one touch gesture is done: the trackpad or mouse seen from above, the fingers
-/// that rest on it in grey and the ones that tap, click or slide in red, over and over.
+/// that rest on it as grey hollow circles and the ones that tap, click or slide as filled
+/// red dots, over and over. Shape says it as well as colour, since the two colours are close
+/// in brightness.
 final class TouchGesturePreviewView: NSView {
     private static let padding: CGFloat = 6
     private static let fingerRadius: CGFloat = 6
@@ -135,7 +137,13 @@ final class TouchGesturePreviewView: NSView {
             surface.fillColor = NSColor.quaternaryLabelColor.cgColor
             for finger in fingers {
                 let color = finger.cue.isActive ? DrawingOverlay.textColor : NSColor.secondaryLabelColor
-                finger.dot.fillColor = color.cgColor
+                if finger.cue.isActive {
+                    finger.dot.fillColor = color.cgColor
+                    finger.dot.strokeColor = nil
+                } else {
+                    finger.dot.fillColor = nil
+                    finger.dot.strokeColor = color.cgColor
+                }
                 finger.ghost?.strokeColor = color.cgColor
                 finger.ring?.strokeColor = color.cgColor
                 finger.trail?.strokeColor = color.cgColor
@@ -214,6 +222,8 @@ final class TouchGesturePreviewView: NSView {
             let dot = CAShapeLayer()
             dot.path = dotPath
             dot.position = end
+            // A resting finger is hollow, an acting one filled; applyColors sets which.
+            dot.lineWidth = 2.5
 
             var ring: CAShapeLayer?
             if cue.motion == .hold || cue.motion == .click {
@@ -280,7 +290,7 @@ final class TouchGesturePreviewView: NSView {
             }
         }
         // With Reduce Motion on, the picture at the end of the pass says the same thing: the
-        // fingers that act, in red, and each slide's trail, drawn to its end.
+        // fingers that act, filled and in red, and each slide's trail, drawn to its end.
         guard isAnimating, window != nil, let gesture, !fingers.isEmpty,
               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         else { return }

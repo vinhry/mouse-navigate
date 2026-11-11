@@ -51,7 +51,8 @@ extension PreferencesWindowController {
         let hint = NSTextField(wrappingLabelWithString:
             "Gestures work alongside the ones built into macOS. Turn off any that overlap in "
                 + "System Settings → Trackpad, such as Look Up with a three-finger tap. "
-                + "Hover over a gesture's name to see how to do it."
+                + "Hover over a gesture's name to see how to do it. "
+                + "In gesture names, “Fix” means a finger that stays resting on the surface."
         )
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
@@ -213,8 +214,8 @@ extension PreferencesWindowController {
         return pane
     }
 
-    /// Shows the gesture the pointer is over: the surface from above, resting fingers in
-    /// grey and the ones that act in red.
+    /// Shows the gesture the pointer is over: the surface from above, resting fingers as
+    /// grey hollow circles and the ones that act as filled red dots.
     func makeGesturePreviewColumn(for surface: TouchSurface) -> NSView {
         let preview = TouchGesturePreviewView()
         preview.surfaceType = surface
@@ -223,7 +224,7 @@ extension PreferencesWindowController {
 
         let column = makePreviewColumn(
             placeholder: "Hover a gesture",
-            legend: "Grey rests, red moves",
+            legend: "Hollow rests, filled acts",
             preview: preview,
             names: TouchGesture.gestures(for: surface).map(\.displayName)
         )
@@ -319,6 +320,20 @@ extension PreferencesWindowController {
             )
             checkbox.identifier = NSUserInterfaceItemIdentifier(source.rawValue)
             characterSourceCheckboxes[source] = checkbox
+            // What it costs is said where it is chosen: both button sources hold the press
+            // back, which is the price of telling a drawing from a click.
+            switch source {
+            case .trackpad:
+                break
+            case .magicMouseRightDrag:
+                checkbox.toolTip = "A right-button drag of more than about 40 points is taken as a drawing, "
+                    + "so it cannot select or drag. The press is held back until you release, so a "
+                    + "context menu opens on release instead of on press."
+            case .middleButtonDrag:
+                checkbox.toolTip = "A middle-button drag of more than about 40 points is taken as a drawing, "
+                    + "so it cannot scroll or drag. The press is held back until you release, so a "
+                    + "middle click is delayed until then."
+            }
             sources.append(checkbox)
 
             // The spacing only governs the trackpad, so it sits under that source.
@@ -335,6 +350,7 @@ extension PreferencesWindowController {
             popup.onFocus = { [weak self] in
                 self?.show(gesture)
             }
+            popup.setAccessibilityHelp(Self.accessibilityHelp(for: gesture))
             characterRows.append((gesture, popup))
             return [label, popup]
         }
@@ -364,6 +380,21 @@ extension PreferencesWindowController {
             stack.setCustomSpacing(10, after: last)
         }
         return stack
+    }
+
+    /// The how-to for VoiceOver, which cannot hover over the preview.
+    static func accessibilityHelp(for gesture: CharacterGesture) -> String {
+        let what: String
+        if gesture.isDirection {
+            what = "Draw a straight line \(gesture.displayName)"
+        } else if CharacterGesture.strokes.contains(gesture) {
+            what = "Draw \(gesture.displayName) as one stroke with a corner"
+        } else {
+            what = "Draw the letter \(gesture.displayName)"
+        }
+        return what + " with two fingers spread apart on the trackpad, or with the right or middle "
+            + "button held, starting at the dot shown in the preview. Which of these work depends on "
+            + "the drawing sources chosen above."
     }
 
     /// How far apart the two drawing fingers must be. Wide enough that ordinary two-finger
@@ -537,7 +568,7 @@ extension PreferencesWindowController {
             return "Gestures are off."
         }
         guard touchMonitor.isRunning else {
-            return "Gestures are paused from the menu bar."
+            return "Gestures are paused."
         }
         let surfaces = touchMonitor.surfaces
         guard !surfaces.isEmpty else {
@@ -603,13 +634,30 @@ extension PreferencesWindowController {
     /// In one app's scope this hands its gestures back to the ones for all apps rather than
     /// resetting those.
     @objc func restoreTouchDefaultsTapped() {
-        if let selectedApp {
-            Preferences.shared.clearAppBindings(app: selectedApp) {
-                $0.hasPrefix(SettingsKey.touchPrefix) || $0.hasPrefix(SettingsKey.characterPrefix)
-            }
+        guard let window else { return }
+        let title: String
+        let message: String
+        if let selectedApp, let app = Preferences.shared.appOverrides[selectedApp] {
+            title = "Restore the gestures for \(app.name)?"
+            message = "\(app.name) gives up its own gesture and character bindings and goes back to "
+                + "following the ones for All Apps. Those, and everything else, are kept."
         } else {
-            Preferences.shared.restoreTouchDefaults()
+            title = "Restore the touch defaults?"
+            message = "Every gesture and character binding for All Apps goes back to its default, and so do "
+                + "the touch options on this tab: left-handed, the drawing sources, finger spacing, showing "
+                + "the drawing, and ignoring touches. Whether touch gestures are switched on, apps' own "
+                + "gestures, mouse buttons and the keyboard cursor are kept."
         }
-        refreshTouchUI()
+        AlertPresenter.confirmDestructive(title, message, confirm: "Restore", on: window) { [weak self] in
+            guard let self else { return }
+            if let selectedApp = self.selectedApp {
+                Preferences.shared.clearAppBindings(app: selectedApp) {
+                    $0.hasPrefix(SettingsKey.touchPrefix) || $0.hasPrefix(SettingsKey.characterPrefix)
+                }
+            } else {
+                Preferences.shared.restoreTouchDefaults()
+            }
+            self.refreshTouchUI()
+        }
     }
 }

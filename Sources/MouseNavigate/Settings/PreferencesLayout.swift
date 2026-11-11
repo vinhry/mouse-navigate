@@ -114,6 +114,12 @@ extension PreferencesWindowController {
 final class FocusReportingPopUpButton: NSPopUpButton {
     var onFocus: (() -> Void)?
 
+    /// What the tooltip says when nothing more specific is on show. Refreshing a binding
+    /// uses the tooltip for a long custom binding, then has to hand this back.
+    var baseToolTip: String? {
+        didSet { toolTip = baseToolTip }
+    }
+
     override func becomeFirstResponder() -> Bool {
         let accepted = super.becomeFirstResponder()
         if accepted {

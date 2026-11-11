@@ -12,11 +12,11 @@ extension PreferencesWindowController {
             let popup = makeBindingPopup(for: .button(control.button))
             switch control {
             case .modeShift:
-                popup.toolTip = "Once bound, it no longer switches the wheel between ratchet and free spin."
+                popup.baseToolTip = "Once bound, it no longer switches the wheel between ratchet and free spin."
             case .hapticPanel:
-                popup.toolTip = "The panel above the thumb on an MX Master 4."
+                popup.baseToolTip = "The panel above the thumb on an MX Master 4."
             case .gestureButton:
-                popup.toolTip = "The button under the thumb."
+                popup.baseToolTip = "The button under the thumb."
             }
             rows.append([label, popup])
         }

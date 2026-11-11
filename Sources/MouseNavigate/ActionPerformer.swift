@@ -58,7 +58,8 @@ final class ActionPerformer {
         case .openURL(let url):
             later {
                 if !NSWorkspace.shared.open(url) {
-                    Log.actions.notice("Nothing opened \(url.scheme ?? "a", privacy: .public) address \(url.absoluteString, privacy: .private).")
+                    let kind = url.scheme.map { "\($0) address" } ?? "address without a scheme"
+                    Log.actions.notice("Nothing opened the \(kind, privacy: .public) \(url.absoluteString, privacy: .private).")
                 }
             }
             return true

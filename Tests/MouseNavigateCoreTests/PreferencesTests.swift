@@ -125,10 +125,20 @@ final class PreferencesTests: XCTestCase {
 
         XCTAssertEqual(preferences.keyCode(for: .activate), CursorBinding.activate.defaultKeyCode)
         XCTAssertEqual(preferences.value(for: .holdThreshold), CursorSetting.holdThreshold.defaultValue)
-        XCTAssertTrue(preferences.isCursorModeEnabled)
+        XCTAssertFalse(preferences.isCursorModeEnabled, "the on/off switch is not a default to restore")
         XCTAssertEqual(preferences.globalBinding(for: .button(4, .generic)), .builtin(.newTab))
         XCTAssertTrue(preferences.isLeftHanded)
         XCTAssertFalse(storedKeys.contains { $0.hasPrefix("key.") || $0.hasPrefix("cursor.") })
+    }
+
+    func testRestoreCursorDefaultsKeepsTheSwitchOn() {
+        let preferences = makePreferences()
+        preferences.isCursorModeEnabled = true
+        preferences.setKeyCode(40, for: .activate)
+
+        preferences.restoreCursorDefaults()
+
+        XCTAssertTrue(preferences.isCursorModeEnabled)
     }
 
     func testAccidentalTouchGuardsAreOnByDefaultAndStick() {

@@ -77,7 +77,7 @@ final class PreferencesWindowController: NSObject {
 
     var deviceLabel: NSTextField?
     var overridePopup: NSPopUpButton?
-    var bindingPopups: [BindingSlot: NSPopUpButton] = [:]
+    var bindingPopups: [BindingSlot: FocusReportingPopUpButton] = [:]
     lazy var editor = BindingEditor(engine: engine)
 
     /// nil edits the bindings for all apps; otherwise the app whose own bindings are shown.
@@ -105,6 +105,8 @@ final class PreferencesWindowController: NSObject {
     var logitechSection: NSView?
 
     var recorders: [CursorBinding: KeyRecorderButton] = [:]
+    /// The line under the cursor keys that says which two keys just swapped.
+    var keySwapNote: NSTextField?
     var sliders: [CursorSetting: NSSlider] = [:]
     var sliderValueLabels: [CursorSetting: NSTextField] = [:]
     var enableCheckbox: NSButton?

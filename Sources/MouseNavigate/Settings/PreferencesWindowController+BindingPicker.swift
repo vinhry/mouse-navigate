@@ -107,9 +107,10 @@ extension PreferencesWindowController {
         inherit?.isHidden = selectedApp == nil
         inheritSeparator?.isHidden = selectedApp == nil
         popup.isEnabled = !preferences.isAppDisabled(selectedApp)
-        // Only a custom binding gets a tooltip, with its full description; a gesture's how-to
-        // is shown in the open and would only be covered by one.
-        popup.toolTip = nil
+        // A custom binding gets its full description as a tooltip, since the picker may cut it
+        // short. Otherwise the picker has only the tooltip it was built with, if any; a
+        // gesture's how-to is shown in the open and would only be covered by one.
+        popup.toolTip = popup.baseToolTip
 
         let binding: ActionBinding
         if let selectedApp {

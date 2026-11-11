@@ -54,6 +54,8 @@ extension PreferencesWindowController {
             do {
                 let data = try Preferences.shared.exportSettings(appVersion: AppInfo.version)
                 try data.write(to: url, options: .atomic)
+                // No sheet for success; showing the file says where it went.
+                NSWorkspace.shared.activateFileViewerSelecting([url])
             } catch {
                 self?.showTransferError("Couldn't export settings", error.localizedDescription)
             }
@@ -99,17 +101,11 @@ extension PreferencesWindowController {
 
     private func confirmReplace(with result: SettingsSnapshot.ReadResult, fileName: String) {
         guard let window else { return }
-        let alert = AlertPresenter.make(
+        let alert = AlertPresenter.makeDestructive(
             "Replace your settings with the ones in “\(fileName)”?",
             Self.replaceWarning,
             buttons: ["Replace", "Cancel"]
         )
-        // Marked as destructive, Replace no longer answers Return, so a stray Return cannot
-        // throw the settings away. Cancel keeps Escape; making it the Return button instead
-        // would take Escape from it.
-        let replace = alert.buttons[0]
-        replace.hasDestructiveAction = true
-        replace.keyEquivalent = ""
 
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertFirstButtonReturn else { return }

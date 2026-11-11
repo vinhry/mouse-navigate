@@ -42,13 +42,19 @@ extension PreferencesWindowController {
                 // A key already doing something else swaps: it takes this binding's old key
                 // rather than being claimed twice, which would leave one of them unreachable.
                 let previous = Preferences.shared.keyCode(for: binding)
+                var note = ""
                 if let taken = CursorBinding.allCases.first(where: {
                     $0 != binding && Preferences.shared.keyCode(for: $0) == keyCode
                 }) {
                     Preferences.shared.setKeyCode(previous, for: taken)
                     self?.recorders[taken]?.update(keyCode: previous)
+                    // Said, since the other key changed without being touched.
+                    let name = KeyboardLayout.shared.name(for: keyCode)
+                    note = "\(name) was \(taken.displayName); \(taken.displayName) and "
+                        + "\(binding.displayName) have swapped keys."
                 }
                 Preferences.shared.setKeyCode(keyCode, for: binding)
+                self?.keySwapNote?.stringValue = note
             }
             recorder.onRecordingChange = { [weak self] recording in
                 // Stop the tap from eating the keystroke being recorded.
@@ -58,6 +64,18 @@ extension PreferencesWindowController {
 
             keyRows.append([label, recorder])
         }
+
+        // Under the grid, empty until two keys swap and emptied by the next change. It keeps
+        // its line, so the window does not change height when a note appears.
+        let swapNote = NSTextField(wrappingLabelWithString: " ")
+        swapNote.font = .systemFont(ofSize: 11)
+        swapNote.textColor = .secondaryLabelColor
+        swapNote.translatesAutoresizingMaskIntoConstraints = false
+        swapNote.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+        swapNote.widthAnchor.constraint(equalToConstant: 220).isActive = true
+        // Two lines, whether or not there is a note.
+        swapNote.heightAnchor.constraint(equalToConstant: 30).isActive = true
+        keySwapNote = swapNote
 
         var speedRows: [[NSView]] = []
         for setting in CursorSetting.allCases {
@@ -87,7 +105,7 @@ extension PreferencesWindowController {
 
         // Keys and speed side by side: stacked, the two lists outgrow a laptop screen.
         let sections = NSStackView(views: [
-            makeSection(title: "Keys", content: makeFormGrid(keyRows, rowSpacing: 6)),
+            makeSection(title: "Keys", content: keysContent(grid: makeFormGrid(keyRows, rowSpacing: 6), note: swapNote)),
             makeSection(title: "Speed", content: makeFormGrid(speedRows, rowSpacing: 12)),
         ])
         sections.orientation = .horizontal
@@ -106,6 +124,14 @@ extension PreferencesWindowController {
         hint.widthAnchor.constraint(equalTo: sections.widthAnchor).isActive = true
 
         return makePage(stack)
+    }
+
+    private func keysContent(grid: NSView, note: NSView) -> NSView {
+        let stack = NSStackView(views: [grid, note])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 6
+        return stack
     }
 
     @objc func enabledChanged(_ sender: NSButton) {
@@ -139,11 +165,21 @@ extension PreferencesWindowController {
     }
 
     @objc func restoreDefaultsTapped() {
-        Preferences.shared.restoreCursorDefaults()
-        refreshCursorUI()
+        guard let window else { return }
+        AlertPresenter.confirmDestructive(
+            "Restore the keyboard cursor defaults?",
+            "The keys and the speed settings of the keyboard cursor go back to their defaults. "
+                + "Whether it is switched on, buttons, gestures and scroll settings are kept.",
+            confirm: "Restore",
+            on: window
+        ) { [weak self] in
+            Preferences.shared.restoreCursorDefaults()
+            self?.refreshCursorUI()
+        }
     }
 
     func refreshCursorUI() {
+        keySwapNote?.stringValue = ""
         enableCheckbox?.state = Preferences.shared.isCursorModeEnabled ? .on : .off
         for (binding, recorder) in recorders {
             recorder.update(keyCode: Preferences.shared.keyCode(for: binding))

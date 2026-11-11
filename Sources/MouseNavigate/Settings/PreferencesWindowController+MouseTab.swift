@@ -165,8 +165,8 @@ extension PreferencesWindowController {
                 + "for all mice and for this mouse. Other mice, apps' own settings, gestures and the "
                 + "keyboard cursor are kept."
         }
-        AlertPresenter.sheet(title, message, buttons: ["Restore", "Cancel"], on: window) { [weak self] response in
-            guard let self, response == .alertFirstButtonReturn else { return }
+        AlertPresenter.confirmDestructive(title, message, confirm: "Restore", on: window) { [weak self] in
+            guard let self else { return }
             if let selectedApp = self.selectedApp {
                 Preferences.shared.clearAppBindings(app: selectedApp) { key in
                     [

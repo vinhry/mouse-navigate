@@ -519,7 +519,9 @@ public final class Preferences {
         )
     }
 
-    /// Reset only the cursor-mode keys and tunables; button mappings are untouched.
+    /// Reset only the cursor-mode keys and tunables; button mappings are untouched. The
+    /// on/off switch stays as the user has it: its default is on, so clearing it would
+    /// quietly turn keyboard capture back on for someone who had turned it off.
     public func restoreCursorDefaults() {
         for binding in CursorBinding.allCases {
             store.removeObject(forKey: SettingsKey.cursorKey(binding))
@@ -527,7 +529,6 @@ public final class Preferences {
         for setting in CursorSetting.allCases {
             store.removeObject(forKey: SettingsKey.cursorSetting(setting))
         }
-        store.removeObject(forKey: SettingsKey.cursorModeEnabled)
         notifyChange(.cursor)
     }
 

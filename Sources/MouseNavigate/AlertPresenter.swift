@@ -19,6 +19,32 @@ enum AlertPresenter {
         return alert
     }
 
+    /// An alert whose first button throws something away. Marked as destructive, that
+    /// button no longer answers Return, so a stray Return cannot do it. The last button
+    /// keeps Escape; making it the Return button instead would take Escape from it.
+    static func makeDestructive(_ title: String, _ message: String, buttons: [String]) -> NSAlert {
+        let alert = make(title, message, buttons: buttons)
+        let destructive = alert.buttons[0]
+        destructive.hasDestructiveAction = true
+        destructive.keyEquivalent = ""
+        return alert
+    }
+
+    /// A destructive alert on `window`, as a sheet; `confirmed` runs only if the first
+    /// button is chosen.
+    static func confirmDestructive(
+        _ title: String,
+        _ message: String,
+        confirm: String,
+        on window: NSWindow,
+        then confirmed: @escaping () -> Void
+    ) {
+        makeDestructive(title, message, buttons: [confirm, "Cancel"])
+            .beginSheetModal(for: window) { response in
+                if response == .alertFirstButtonReturn { confirmed() }
+            }
+    }
+
     /// On `window`, as a sheet. With no buttons named, the alert has a single OK.
     static func sheet(
         _ title: String,

@@ -21,8 +21,16 @@ final class DrawingOverlay {
 
     /// jitouch's trail colour, shared with anything else that shows a stroke.
     static let inkColor = NSColor(srgbRed: 0.7, green: 0, blue: 0, alpha: 0.6)
-    /// A lighter take on it, for text and for small previews.
-    static let textColor = NSColor(srgbRed: 0.87, green: 0.18, blue: 0.18, alpha: 1)
+    /// A take on it for text and for small previews, on the system's window colour: a deeper
+    /// red in the light appearance and a lighter one in the dark, each at least 4.5 to 1
+    /// against the window colour it is drawn on. The ink keeps its own colour; it is not text.
+    static let textColor = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 1, green: 0.459, blue: 0.459, alpha: 1)
+            : NSColor(srgbRed: 0.749, green: 0.102, blue: 0.102, alpha: 1)
+    }
+    /// Over the desktop, the result's backing keeps the text readable whatever is behind it.
+    static let plateOpacity: CGFloat = 0.92
 
     /// Width of the surface drawing; its height follows the surface's proportions.
     private static let surfaceWidth: CGFloat = 260
@@ -356,7 +364,7 @@ private final class OverlayCanvas: NSView {
                 height: titleHeight + subtitleHeight + OverlayCanvas.platePadding.height * 2
             )
             NSApp.effectiveAppearance.performAsCurrentDrawingAppearance {
-                plate.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.85).cgColor
+                plate.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(DrawingOverlay.plateOpacity).cgColor
             }
             plate.isHidden = false
         }
@@ -379,9 +387,15 @@ private final class OverlayCanvas: NSView {
         weight: NSFont.Weight,
         alpha: CGFloat
     ) -> NSAttributedString {
-        NSAttributedString(string: text, attributes: [
+        // Resolved here, for the appearance the plate is drawn in, since the text layer
+        // would not follow a change of appearance on its own.
+        var color = DrawingOverlay.textColor
+        NSApp.effectiveAppearance.performAsCurrentDrawingAppearance {
+            color = NSColor(cgColor: DrawingOverlay.textColor.cgColor) ?? DrawingOverlay.textColor
+        }
+        return NSAttributedString(string: text, attributes: [
             .font: OverlayCanvas.roundedFont(size: size, weight: weight),
-            .foregroundColor: DrawingOverlay.textColor.withAlphaComponent(alpha),
+            .foregroundColor: color.withAlphaComponent(alpha),
         ])
     }
 
