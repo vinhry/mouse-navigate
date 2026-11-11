@@ -109,11 +109,13 @@ extension PreferencesWindowController {
         AlertPresenter.confirmDestructive(
             "Remove \(app.name)?",
             "Its own bindings and scroll settings are deleted, MouseNavigate is "
-                + "turned back on in it, and it goes back to the settings for all apps.",
+                + "turned back on in it, and it goes back to the settings for all apps. " + Self.undoNotice,
             confirm: "Remove",
             on: window
         ) { [weak self] in
-            Preferences.shared.removeApp(bundleID: selectedApp)
+            self?.recordingUndo(.removeApp(name: app.name)) {
+                Preferences.shared.removeApp(bundleID: selectedApp)
+            }
             self?.selectedApp = nil
             self?.refreshScopeUI()
         }

@@ -748,6 +748,7 @@ extension PreferencesWindowController {
         guard let window else { return }
         let title: String
         let message: String
+        let appName = selectedApp.flatMap { Preferences.shared.appOverrides[$0]?.name }
         if let selectedApp, let app = Preferences.shared.appOverrides[selectedApp] {
             title = "Restore the gestures for \(app.name)?"
             message = "\(app.name) gives up its own gesture and character bindings and goes back to "
@@ -759,14 +760,17 @@ extension PreferencesWindowController {
                 + "the drawing, flashing gestures on screen, and ignoring touches. Whether touch gestures are switched on, apps' own "
                 + "gestures, mouse buttons and the keyboard cursor are kept."
         }
-        AlertPresenter.confirmDestructive(title, message, confirm: "Restore", on: window) { [weak self] in
+        let confirmation = message + " " + Self.undoNotice
+        AlertPresenter.confirmDestructive(title, confirmation, confirm: "Restore", on: window) { [weak self] in
             guard let self else { return }
-            if let selectedApp = self.selectedApp {
-                Preferences.shared.clearAppBindings(app: selectedApp) {
-                    $0.hasPrefix(SettingsKey.touchPrefix) || $0.hasPrefix(SettingsKey.characterPrefix)
+            self.recordingUndo(.restoreDefaults(.touch, app: appName)) {
+                if let selectedApp = self.selectedApp {
+                    Preferences.shared.clearAppBindings(app: selectedApp) {
+                        $0.hasPrefix(SettingsKey.touchPrefix) || $0.hasPrefix(SettingsKey.characterPrefix)
+                    }
+                } else {
+                    Preferences.shared.restoreTouchDefaults()
                 }
-            } else {
-                Preferences.shared.restoreTouchDefaults()
             }
             self.refreshTouchUI()
         }

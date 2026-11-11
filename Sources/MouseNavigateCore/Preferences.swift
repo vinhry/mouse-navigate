@@ -701,9 +701,57 @@ public final class Preferences {
 
     /// Writes what `readSettings` read.
     public func applySettings(_ result: SettingsSnapshot.ReadResult) {
-        result.snapshot.apply(to: store)
+        apply(result.snapshot)
+    }
+
+    /// The one way a whole snapshot is written, a file's or an undo point's: migrated
+    /// after, in case it is from an older layout, and announced as a change to everything,
+    /// so whatever follows the settings, from the touch monitor to Logitech diversion,
+    /// reads them all again.
+    private func apply(_ snapshot: SettingsSnapshot) {
+        snapshot.apply(to: store)
         migrateIfNeeded()
         notifyChange(.all)
+    }
+
+    // MARK: - Taking a change back
+
+    /// The settings from before the last import, Restore Defaults or Remove App, while
+    /// they can still be put back. Only one is kept: a newer change replaces it.
+    public private(set) var undoPoint: SettingsUndoPoint?
+
+    /// Runs `change`, keeping the settings from before it as the undo point. Nothing is
+    /// kept if `change` throws, or if it changed nothing, as Restore Defaults on a tab
+    /// already at its defaults does: an undo point for that would only push out one for a
+    /// change that did something.
+    @discardableResult
+    public func recordingUndo<Result>(
+        _ change: SettingsChange,
+        at date: Date = Date(),
+        _ body: () throws -> Result
+    ) rethrows -> Result {
+        let before = captureForUndo()
+        let result = try body()
+        if captureForUndo() != before {
+            undoPoint = SettingsUndoPoint(change: change, date: date, snapshot: before)
+        }
+        return result
+    }
+
+    /// Puts the undo point's settings back, in place of everything changed since, and
+    /// forgets it. Returns what was taken back, or nil if there was nothing to.
+    @discardableResult
+    public func revertLastChange() -> SettingsUndoPoint? {
+        guard let point = undoPoint else { return nil }
+        undoPoint = nil
+        apply(point.snapshot)
+        return point
+    }
+
+    /// What an export would write. `apply` leaves alone exactly the keys this leaves out,
+    /// `SettingsSnapshot.keptOnThisMac`, and none of the changes above touches those.
+    private func captureForUndo() -> SettingsSnapshot {
+        SettingsSnapshot.capture(from: store, configVersion: currentConfigVersion, appVersion: nil)
     }
 
     private func notifyChange(_ area: SettingsArea) {

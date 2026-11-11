@@ -75,6 +75,11 @@ final class PreferencesWindowController: NSObject {
 
     var automaticUpdatesCheckbox: NSButton?
     var updateStatusLabel: NSTextField?
+    /// Revert Last Change on the About tab, the line under it, and what that line says once
+    /// a change has been taken back, until another can be.
+    var revertButton: NSButton?
+    var revertStatusLabel: NSTextField?
+    var revertNote: String?
 
     var deviceLabel: NSTextField?
     var overridePopup: NSPopUpButton?
@@ -193,6 +198,8 @@ final class PreferencesWindowController: NSObject {
         if let window {
             if let tab { selectTab(at: tab) }
             refreshUpdatesUI()
+            // "made at 3:42 PM" becomes "made on Nov 9 …" once the day has turned.
+            refreshRevertUI()
             refreshScopeUI()
             refreshDeviceUI()
             refreshTouchUI()
@@ -336,6 +343,7 @@ final class PreferencesWindowController: NSObject {
         refreshCursorUI()
         refreshTouchUI()
         refreshUpdatesUI()
+        refreshRevertUI()
     }
 }
 

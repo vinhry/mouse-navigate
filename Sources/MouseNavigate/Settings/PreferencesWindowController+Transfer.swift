@@ -18,10 +18,16 @@ extension PreferencesWindowController {
         diagnostics.toolTip = "Copies what MouseNavigate can see and which permissions it has, to paste into a "
             + "bug report. Nothing about your apps, shortcuts or files is included."
 
-        let row = NSStackView(views: [export, importButton, diagnostics])
+        let row = NSStackView(views: [export, importButton, makeRevertButton(), diagnostics])
         row.orientation = .horizontal
         row.spacing = 12
-        return row
+
+        let section = NSStackView(views: [row, makeRevertStatusLabel()])
+        section.orientation = .vertical
+        section.alignment = .centerX
+        section.spacing = 6
+        refreshRevertUI()
+        return section
     }
 
     @objc func copyDiagnosticsTapped(_ sender: NSButton) {
@@ -97,7 +103,7 @@ extension PreferencesWindowController {
     }
 
     private static let replaceWarning = "Every button, gesture, keyboard cursor and scroll setting on this Mac "
-        + "will be replaced. There is no undo, so export first to keep a copy."
+        + "will be replaced. " + undoNotice
 
     private func confirmReplace(with result: SettingsSnapshot.ReadResult, fileName: String) {
         guard let window else { return }
@@ -111,7 +117,7 @@ extension PreferencesWindowController {
             guard response == .alertFirstButtonReturn else { return }
             // The sheet has to be gone before another can be shown.
             DispatchQueue.main.async {
-                self?.importSettings(result, leftOutActions: 0)
+                self?.importSettings(result, leftOutActions: 0, fileName: fileName)
             }
         }
     }
@@ -136,7 +142,7 @@ extension PreferencesWindowController {
                 + "only if you know what each one does and trust where the file came from.\n\n"
                 + "Import Without Custom Actions takes everything else and leaves those inputs at their "
                 + "defaults. Either way, every button, gesture, keyboard cursor and scroll setting on this "
-                + "Mac is replaced, with no undo.",
+                + "Mac is replaced. " + Self.undoNotice,
             style: .warning,
             buttons: ["Import Without Custom Actions", "Import Everything", "Cancel"]
         )
@@ -151,7 +157,7 @@ extension PreferencesWindowController {
             }
             let leftOut = response == .alertFirstButtonReturn ? actions.count : 0
             DispatchQueue.main.async {
-                self?.importSettings(chosen, leftOutActions: leftOut)
+                self?.importSettings(chosen, leftOutActions: leftOut, fileName: fileName)
             }
         }
     }
@@ -190,8 +196,12 @@ extension PreferencesWindowController {
         return scroll
     }
 
-    private func importSettings(_ result: SettingsSnapshot.ReadResult, leftOutActions: Int) {
-        Preferences.shared.applySettings(result)
+    /// Captured only now, once the replace has been agreed to: a cancelled import leaves
+    /// the undo point for whatever came before it.
+    private func importSettings(_ result: SettingsSnapshot.ReadResult, leftOutActions: Int, fileName: String) {
+        let undoPoint = recordingUndo(.importFile(name: fileName)) {
+            Preferences.shared.applySettings(result)
+        }
         refreshAllUI()
 
         guard let window else { return }
@@ -207,8 +217,38 @@ extension PreferencesWindowController {
                     + "were left out:\n" + result.ignoredKeys.joined(separator: "\n")
             )
         }
-        let message = notes.isEmpty ? "Every setting now comes from the file." : notes.joined(separator: "\n\n")
-        AlertPresenter.sheet("Settings imported", message, on: window)
+        if notes.isEmpty {
+            notes.append("Every setting now comes from the file.")
+        }
+        // A file that matched the settings already changed nothing, so there is nothing
+        // to revert, and offering to would put back an older change's settings instead.
+        guard let undoPoint else {
+            AlertPresenter.sheet("Settings imported", notes.joined(separator: "\n\n"), on: window)
+            return
+        }
+        notes.append(
+            "Revert puts back the settings you had before. Until you quit MouseNavigate, "
+                + "Revert Last Change on this tab does the same."
+        )
+        // OK stays the default button, so Return never reverts.
+        AlertPresenter.sheet(
+            "Settings imported",
+            notes.joined(separator: "\n\n"),
+            buttons: ["OK", "Revert"],
+            on: window
+        ) { [weak self] response in
+            // Only the settings this import replaced, never an older change's.
+            guard response == .alertSecondButtonReturn, Preferences.shared.undoPoint == undoPoint else { return }
+            // The sheet has to be gone before another can be shown.
+            DispatchQueue.main.async {
+                guard let self, self.revertLastChange() != nil, let window = self.window else { return }
+                AlertPresenter.sheet(
+                    "Settings reverted",
+                    "Your settings are back to how they were before \(undoPoint.change.label).",
+                    on: window
+                )
+            }
+        }
     }
 
     private func showTransferError(_ title: String, _ message: String) {

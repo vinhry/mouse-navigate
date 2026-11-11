@@ -154,6 +154,7 @@ extension PreferencesWindowController {
         let profile = detector.activeProfile
         let title: String
         let message: String
+        let appName = selectedApp.flatMap { Preferences.shared.appOverrides[$0]?.name }
         if let selectedApp, let app = Preferences.shared.appOverrides[selectedApp] {
             title = "Restore the mouse defaults for \(app.name)?"
             message = "\(app.name) gives up its own button bindings and scroll settings and "
@@ -165,18 +166,22 @@ extension PreferencesWindowController {
                 + "for all mice and for this mouse. Other mice, apps' own settings, gestures and the "
                 + "keyboard cursor are kept."
         }
-        AlertPresenter.confirmDestructive(title, message, confirm: "Restore", on: window) { [weak self] in
+        let confirmation = message + " " + Self.undoNotice
+        AlertPresenter.confirmDestructive(title, confirmation, confirm: "Restore", on: window) { [weak self] in
             guard let self else { return }
-            if let selectedApp = self.selectedApp {
-                Preferences.shared.clearAppBindings(app: selectedApp) { key in
-                    [
-                        SettingsKey.buttonPrefix, SettingsKey.buttonHoldPrefix,
-                        SettingsKey.buttonDoublePrefix, SettingsKey.buttonDragPrefix,
-                    ].contains(where: key.hasPrefix)
+            // Both halves of an app's restore are one change, taken back together.
+            self.recordingUndo(.restoreDefaults(.mouse, app: appName)) {
+                if let selectedApp = self.selectedApp {
+                    Preferences.shared.clearAppBindings(app: selectedApp) { key in
+                        [
+                            SettingsKey.buttonPrefix, SettingsKey.buttonHoldPrefix,
+                            SettingsKey.buttonDoublePrefix, SettingsKey.buttonDragPrefix,
+                        ].contains(where: key.hasPrefix)
+                    }
+                    Preferences.shared.setAppScrollOverride(.none, app: selectedApp)
+                } else {
+                    Preferences.shared.restoreMouseDefaults(profile: profile)
                 }
-                Preferences.shared.setAppScrollOverride(.none, app: selectedApp)
-            } else {
-                Preferences.shared.restoreMouseDefaults(profile: profile)
             }
             self.refreshDeviceUI()
         }

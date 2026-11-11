@@ -169,11 +169,14 @@ extension PreferencesWindowController {
         AlertPresenter.confirmDestructive(
             "Restore the keyboard cursor defaults?",
             "The keys and the speed settings of the keyboard cursor go back to their defaults. "
-                + "Whether it is switched on, buttons, gestures and scroll settings are kept.",
+                + "Whether it is switched on, buttons, gestures and scroll settings are kept. "
+                + Self.undoNotice,
             confirm: "Restore",
             on: window
         ) { [weak self] in
-            Preferences.shared.restoreCursorDefaults()
+            self?.recordingUndo(.restoreDefaults(.cursor, app: nil)) {
+                Preferences.shared.restoreCursorDefaults()
+            }
             self?.refreshCursorUI()
         }
     }
