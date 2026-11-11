@@ -81,7 +81,7 @@ final class DrawingOverlay {
     }
 
     /// Replaces the ink with what the stroke was recognised as, then fades everything out.
-    func finish(character: CharacterGesture?, binding: ActionBinding?) {
+    func finish(_ feedback: StrokeFeedback) {
         guard isEnabled, let canvas, let screen = activeScreen, panel?.isVisible == true else { return }
 
         // The ink is done with, so the window moves to the middle for the result.
@@ -93,11 +93,7 @@ final class DrawingOverlay {
             height: size.height
         ))
 
-        if let character {
-            canvas.showResult(title: character.displayName, subtitle: binding?.displayName)
-        } else {
-            canvas.showResult(title: "no match", subtitle: nil)
-        }
+        canvas.showResult(title: feedback.title, subtitle: feedback.subtitle)
         strokeAnchor = nil
         fadeOut(after: DrawingOverlay.holdDuration)
     }

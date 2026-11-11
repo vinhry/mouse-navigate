@@ -6,11 +6,23 @@ public struct CharacterTemplate: Sendable {
     public let points: [Vector2]
     /// Another way of drawing the character that is accepted but never shown as the how-to.
     public let isAlternative: Bool
+    /// What sort of other way of drawing it this is, nil for the main template. Carried so
+    /// that what the app tells people is forgiven comes from what the templates hold.
+    public let alternativeKind: AlternativeKind?
 
-    init(_ gesture: CharacterGesture, _ points: [(Double, Double)], isAlternative: Bool = false) {
-        self.gesture = gesture
-        self.points = points.map { Vector2(x: $0.0, y: $0.1) }
-        self.isAlternative = isAlternative
+    public enum AlternativeKind: Sendable {
+        /// The main shape drawn from its end to its start.
+        case reversed
+        /// A round letter begun at another point on its outline, going either way round.
+        case anyStart
+        /// A stem drawn down first and then back up, as many people begin B, D, M, N, P and R.
+        case stemFirst
+        /// A common lower-case form unlike the main shape.
+        case lowerCase
+    }
+
+    init(_ gesture: CharacterGesture, _ points: [(Double, Double)], alternative: AlternativeKind? = nil) {
+        self.init(gesture, points.map { Vector2(x: $0.0, y: $0.1) }, alternative: alternative)
     }
 }
 
@@ -123,42 +135,42 @@ public enum CharacterTemplates {
         func first(_ gesture: CharacterGesture) -> CharacterTemplate { byGesture[gesture]![0] }
 
         for gesture in [CharacterGesture.c, .s, .u, .v, .w] {
-            result.append(CharacterTemplate(gesture, first(gesture).points.reversed(), isAlternative: true))
+            result.append(CharacterTemplate(gesture, first(gesture).points.reversed(), alternative: .reversed))
         }
         for start in [0.0, 90, 180] {
-            result.append(CharacterTemplate(.o, arc(from: start, to: start - 360), isAlternative: true))
-            result.append(CharacterTemplate(.o, arc(from: start, to: start + 360), isAlternative: true))
+            result.append(CharacterTemplate(.o, arc(from: start, to: start - 360), alternative: .anyStart))
+            result.append(CharacterTemplate(.o, arc(from: start, to: start + 360), alternative: .anyStart))
         }
         for gesture in [CharacterGesture.b, .d, .m, .n, .p, .r] {
             let points = first(gesture).points
             // The stem runs from the first point straight up to the second.
-            result.append(CharacterTemplate(gesture, [points[1]] + points, isAlternative: true))
+            result.append(CharacterTemplate(gesture, [points[1]] + points, alternative: .stemFirst))
         }
 
         let lowerCase: [CharacterTemplate] = [
             // A round bowl, then the stem down its right side.
             CharacterTemplate(.a, arc(from: -30, to: -390, steps: 18).map { Vector2(x: 0.1 + 0.7 * $0.x, y: 0.15 + 0.8 * $0.y) }
-                + [(0.9, 0.1), (0.9, 1)].map { Vector2(x: $0.0, y: $0.1) }, isAlternative: true),
+                + [(0.9, 0.1), (0.9, 1)].map { Vector2(x: $0.0, y: $0.1) }, alternative: .lowerCase),
             // The bowl first, then a tall stem up and back down.
             CharacterTemplate(.d, arc(from: -30, to: -390, steps: 18).map { Vector2(x: 0.05 + 0.65 * $0.x, y: 0.5 + 0.5 * $0.y) }
-                + [(0.75, 0), (0.75, 1)].map { Vector2(x: $0.0, y: $0.1) }, isAlternative: true),
+                + [(0.75, 0), (0.75, 1)].map { Vector2(x: $0.0, y: $0.1) }, alternative: .lowerCase),
             // A bar across the middle, then round anticlockwise, open at the bottom right.
             CharacterTemplate(.e, [(0.05, 0.5), (0.95, 0.5)].map { Vector2(x: $0.0, y: $0.1) }
-                + arc(from: 0, to: -315, steps: 18), isAlternative: true),
+                + arc(from: 0, to: -315, steps: 18), alternative: .lowerCase),
             // A round bowl, then a descender hooked to the left.
             CharacterTemplate(.g, arc(from: -30, to: -390, steps: 18).map { Vector2(x: 0.1 + 0.65 * $0.x, y: 0.5 * $0.y) }
                 + [(0.75, 0.05), (0.75, 0.85), (0.55, 1), (0.25, 1), (0.1, 0.85)].map { Vector2(x: $0.0, y: $0.1) },
-                isAlternative: true),
+                alternative: .lowerCase),
             CharacterTemplate(.m, [(0, 0.2), (0, 1), (0, 0.4), (0.15, 0.2), (0.35, 0.2), (0.5, 0.4), (0.5, 1),
-                                   (0.5, 0.4), (0.65, 0.2), (0.85, 0.2), (1, 0.4), (1, 1)], isAlternative: true),
-            CharacterTemplate(.n, [(0, 0), (0, 1), (0, 0.3), (0.25, 0), (0.75, 0), (1, 0.3), (1, 1)], isAlternative: true),
+                                   (0.5, 0.4), (0.65, 0.2), (0.85, 0.2), (1, 0.4), (1, 1)], alternative: .lowerCase),
+            CharacterTemplate(.n, [(0, 0), (0, 1), (0, 0.3), (0.25, 0), (0.75, 0), (1, 0.3), (1, 1)], alternative: .lowerCase),
             // Down, back up, and a short shoulder.
-            CharacterTemplate(.r, [(0, 0.1), (0, 1), (0, 0.4), (0.3, 0.05), (0.7, 0), (1, 0.15)], isAlternative: true),
+            CharacterTemplate(.r, [(0, 0.1), (0, 1), (0, 0.4), (0.3, 0.05), (0.7, 0), (1, 0.15)], alternative: .lowerCase),
             // A u, then a descender hooked to the left.
             CharacterTemplate(.y, [(0, 0), (0, 0.35), (0.2, 0.5), (0.8, 0.5), (1, 0.35), (1, 0), (1, 0.8), (0.75, 1),
-                                   (0.3, 1), (0.1, 0.85)], isAlternative: true),
+                                   (0.3, 1), (0.1, 0.85)], alternative: .lowerCase),
             // A u whose second stroke comes back down.
-            CharacterTemplate(.u, [(0, 0), (0, 0.7), (0.2, 1), (0.8, 1), (1, 0.7), (1, 0), (1, 1)], isAlternative: true),
+            CharacterTemplate(.u, [(0, 0), (0, 0.7), (0.2, 1), (0.8, 1), (1, 0.7), (1, 0), (1, 1)], alternative: .lowerCase),
         ]
         return result + lowerCase
     }()
@@ -202,9 +214,10 @@ public enum CharacterTemplates {
 }
 
 extension CharacterTemplate {
-    init(_ gesture: CharacterGesture, _ points: [Vector2], isAlternative: Bool = false) {
+    init(_ gesture: CharacterGesture, _ points: [Vector2], alternative: AlternativeKind? = nil) {
         self.gesture = gesture
         self.points = points
-        self.isAlternative = isAlternative
+        self.alternativeKind = alternative
+        self.isAlternative = alternative != nil
     }
 }

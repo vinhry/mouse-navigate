@@ -160,15 +160,18 @@ final class TouchMonitor {
         let match = strokeRecognizer.bestMatch(points)
         let character = match.flatMap { strokeRecognizer.accepts($0) ? $0.gesture : nil }
         if isDebugLogging {
-            let described = match.map { "\($0.gesture.displayName) (score \(String(format: "%.2f", $0.score)))" } ?? "nothing"
-            debugLog("[touch] stroke of \(points.count) points -> \(described)\(character == nil ? ", rejected" : "")")
+            debugLog("[touch] stroke of \(points.count) points -> "
+                + "\(StrokeFeedback.debugDescription(of: match, minimumScore: strokeRecognizer.minimumScore))"
+                + "\(character == nil ? ", rejected" : "")")
         }
 
         let binding = character.map {
             Preferences.shared.binding(for: .character($0), app: FrontmostApp.shared.bundleID)
         }
         overlay.show(points, in: space)
-        overlay.finish(character: character, binding: binding)
+        // A letter with nothing bound to it says so, rather than naming "Disabled".
+        let boundName = binding.flatMap { $0 == .disabled ? nil : $0.displayName }
+        overlay.finish(StrokeFeedback.lines(for: match, minimumScore: strokeRecognizer.minimumScore, actionName: boundName))
 
         guard let character, let binding else { return }
         // The overlay has just shown the character and its action, so no second flash.

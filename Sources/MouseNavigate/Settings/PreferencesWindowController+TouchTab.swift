@@ -381,7 +381,7 @@ extension PreferencesWindowController {
             popup.onFocus = { [weak self] in
                 self?.show(gesture)
             }
-            popup.setAccessibilityHelp(Self.accessibilityHelp(for: gesture))
+            popup.setAccessibilityHelp(CharacterDrawingHelp.text(for: gesture))
             characterRows.append((gesture, popup))
             return [label, popup]
         }
@@ -403,7 +403,15 @@ extension PreferencesWindowController {
         listAndPreview.setHuggingPriority(.required, for: .horizontal)
 
         let strictness = makeLetterStrictnessRow()
-        let stack = NSStackView(views: [showDrawing] + sources + [strictness, listAndPreview])
+
+        // What is forgiven, said once here rather than in every picker's help. A fixed width
+        // wraps it without asking the window for more room.
+        let forgiven = NSTextField(wrappingLabelWithString: CharacterDrawingHelp.summary)
+        forgiven.font = .systemFont(ofSize: 11)
+        forgiven.textColor = .secondaryLabelColor
+        forgiven.preferredMaxLayoutWidth = 420
+
+        let stack = NSStackView(views: [showDrawing] + sources + [strictness, forgiven, listAndPreview])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 4
@@ -411,23 +419,9 @@ extension PreferencesWindowController {
         if let last = sources.last {
             stack.setCustomSpacing(8, after: last)
         }
-        stack.setCustomSpacing(10, after: strictness)
+        stack.setCustomSpacing(6, after: strictness)
+        stack.setCustomSpacing(10, after: forgiven)
         return stack
-    }
-
-    /// The how-to for VoiceOver, which cannot hover over the preview.
-    static func accessibilityHelp(for gesture: CharacterGesture) -> String {
-        let what: String
-        if gesture.isDirection {
-            what = "Draw a straight line \(gesture.displayName)"
-        } else if CharacterGesture.strokes.contains(gesture) {
-            what = "Draw \(gesture.displayName) as one stroke with a corner"
-        } else {
-            what = "Draw the letter \(gesture.displayName)"
-        }
-        return what + " with two fingers spread apart on the trackpad, or with the right or middle "
-            + "button held, starting at the dot shown in the preview. Which of these work depends on "
-            + "the drawing sources chosen above."
     }
 
     /// How far apart the two drawing fingers must be. Wide enough that ordinary two-finger
@@ -506,7 +500,7 @@ extension PreferencesWindowController {
 
         let column = makePreviewColumn(
             placeholder: "Hover a character",
-            legend: "Start at the dot",
+            legend: "One way; start at the dot",
             preview: preview,
             names: CharacterGesture.allCases.map(\.displayName)
         )
