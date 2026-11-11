@@ -399,14 +399,16 @@ extension PreferencesWindowController {
         listAndPreview.spacing = 16
         listAndPreview.setHuggingPriority(.required, for: .horizontal)
 
-        let stack = NSStackView(views: [showDrawing] + sources + [listAndPreview])
+        let strictness = makeLetterStrictnessRow()
+        let stack = NSStackView(views: [showDrawing] + sources + [strictness, listAndPreview])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 4
         stack.setCustomSpacing(10, after: showDrawing)
         if let last = sources.last {
-            stack.setCustomSpacing(10, after: last)
+            stack.setCustomSpacing(8, after: last)
         }
+        stack.setCustomSpacing(10, after: strictness)
         return stack
     }
 
@@ -451,6 +453,38 @@ extension PreferencesWindowController {
         // Indented under the checkbox it belongs to.
         row.edgeInsets = NSEdgeInsets(top: 2, left: 18, bottom: 2, right: 0)
         return row
+    }
+
+    /// How closely a drawn letter must follow its template to count. It is for every way of
+    /// drawing, so it sits below the sources rather than under one of them.
+    func makeLetterStrictnessRow() -> NSView {
+        let caption = NSTextField(labelWithString: "Letter matching:")
+
+        let slider = makeSlider(
+            value: Preferences.shared.letterStrictness,
+            range: StrokeRecognizer.minimumScoreRange,
+            width: 160,
+            action: #selector(letterStrictnessChanged(_:))
+        )
+        slider.toolTip = "Loose accepts rough scribbles as a letter; Strict wants a neat one. "
+            + "Applies to drawings made with the trackpad and with a mouse button alike."
+        letterStrictnessSlider = slider
+
+        let value = PreferencesWindowController.makeValueLabel(width: 110)
+        letterStrictnessLabel = value
+
+        let row = NSStackView(views: [caption, slider, value])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+        row.setHuggingPriority(.required, for: .horizontal)
+        PreferencesWindowController.titleControls(in: [caption, slider])
+        return row
+    }
+
+    func updateLetterStrictnessLabel() {
+        let score = Preferences.shared.letterStrictness
+        letterStrictnessLabel?.stringValue = StrokeRecognizer.strictnessName(for: score)
     }
 
     func updateDrawSpreadLabel() {
@@ -554,6 +588,8 @@ extension PreferencesWindowController {
         drawSpreadSlider?.doubleValue = preferences.characterDrawSpread
         drawSpreadSlider?.isEnabled = drawSpreadSliderIsEnabled
         updateDrawSpreadLabel()
+        letterStrictnessSlider?.doubleValue = preferences.letterStrictness
+        updateLetterStrictnessLabel()
 
         touchStatusLabel?.stringValue = touchStatusText
         touchStatusLabel?.textColor = touchMonitor.isRunning ? .labelColor : .secondaryLabelColor
@@ -673,6 +709,11 @@ extension PreferencesWindowController {
         Preferences.shared.showsDrawingOverlay = sender.state == .on
     }
 
+    @objc func letterStrictnessChanged(_ sender: NSSlider) {
+        Preferences.shared.letterStrictness = sender.doubleValue
+        updateLetterStrictnessLabel()
+    }
+
     @objc func touchSurfaceChanged(_ sender: NSButton) {
         guard let raw = sender.identifier?.rawValue, let surface = TouchSurface(rawValue: raw) else { return }
         Preferences.shared.setTouchSurface(surface, enabled: sender.state == .on)
@@ -706,7 +747,7 @@ extension PreferencesWindowController {
         } else {
             title = "Restore the touch defaults?"
             message = "Every gesture and character binding for All Apps goes back to its default, and so do "
-                + "the touch options on this tab: left-handed, the trackpad and Magic Mouse switches, the drawing sources, finger spacing, showing "
+                + "the touch options on this tab: left-handed, the trackpad and Magic Mouse switches, the drawing sources, finger spacing, letter matching, showing "
                 + "the drawing, flashing gestures on screen, and ignoring touches. Whether touch gestures are switched on, apps' own "
                 + "gestures, mouse buttons and the keyboard cursor are kept."
         }

@@ -133,6 +133,8 @@ final class PreferencesWindowController: NSObject {
     var showDrawingCheckbox: NSButton?
     var drawSpreadSlider: NSSlider?
     var drawSpreadLabel: NSTextField?
+    var letterStrictnessSlider: NSSlider?
+    var letterStrictnessLabel: NSTextField?
     var strokePreview: StrokePreviewView?
     var strokePreviewName: NSTextField?
     var strokePreviewHint: NSTextField?

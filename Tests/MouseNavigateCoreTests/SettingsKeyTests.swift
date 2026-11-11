@@ -47,6 +47,11 @@ final class SettingsKeyTests: XCTestCase {
         }
     }
 
+    func testLetterStrictnessIsAnExportableDouble() {
+        XCTAssertEqual(SettingsKey.type(of: SettingsKey.touchLetterStrictness), .double)
+        XCTAssertTrue(SettingsKey.isExportable(SettingsKey.touchLetterStrictness))
+    }
+
     func testEveryCurrentKeyHasAType() {
         for key in everyCurrentKey {
             XCTAssertNotNil(SettingsKey.type(of: key), key)

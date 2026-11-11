@@ -582,6 +582,20 @@ public final class Preferences {
         }
     }
 
+    /// The lowest score a drawn letter may have and still count, from loose to strict.
+    /// Applies to every way of drawing, since they share one recognizer.
+    public var letterStrictness: Double {
+        get {
+            let stored = store.object(forKey: SettingsKey.touchLetterStrictness) as? Double
+                ?? StrokeRecognizer.defaultMinimumScore
+            return StrokeRecognizer.clampMinimumScore(stored)
+        }
+        set {
+            store.set(StrokeRecognizer.clampMinimumScore(newValue), forKey: SettingsKey.touchLetterStrictness)
+            notifyChange(.touch)
+        }
+    }
+
     /// Whether gestures are recognised on a surface at all. On for both until switched off:
     /// someone who only uses the trackpad can leave a Magic Mouse's gestures alone.
     public func isTouchSurfaceEnabled(_ surface: TouchSurface) -> Bool {
@@ -643,6 +657,7 @@ public final class Preferences {
         store.removeObject(forKey: SettingsKey.touchShowsDrawing)
         store.removeObject(forKey: SettingsKey.touchDrawSpread)
         store.removeObject(forKey: SettingsKey.touchShowsGestureHUD)
+        store.removeObject(forKey: SettingsKey.touchLetterStrictness)
         store.removeObject(forKey: SettingsKey.touchIgnoreWhileTyping)
         store.removeObject(forKey: SettingsKey.touchIgnoreWhileMoving)
         notifyChange(.touch)

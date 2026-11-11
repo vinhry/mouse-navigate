@@ -78,7 +78,32 @@ public struct StrokeRecognizer {
     /// Endpoint distance over path length at which a stroke counts as a straight line.
     public var straightness = 0.9
     /// Below this a letter match is rejected as a scribble.
-    public var minimumScore = 0.8
+    public var minimumScore = StrokeRecognizer.defaultMinimumScore
+
+    public static let defaultMinimumScore = 0.8
+
+    /// How loose or strict the user may make the match. A score is one minus the average
+    /// distance from the template as a share of half the drawing box's diagonal: the
+    /// templates themselves score 0.99 or better, and the same letters drawn with each
+    /// point wandering up to 2%, 5%, 8% and 12% of the box score at worst about 0.95,
+    /// 0.90, 0.87 and 0.82, while a random scribble's best match has a median of about
+    /// 0.70 and rarely passes 0.80. So 0.6 lets most scribbles through as some letter,
+    /// and 0.95 asks for a drawing almost as neat as the template; past either end the
+    /// slider would only make letters unusable.
+    public static let minimumScoreRange: ClosedRange<Double> = 0.6...0.95
+
+    public static func clampMinimumScore(_ value: Double) -> Double {
+        min(max(value, minimumScoreRange.lowerBound), minimumScoreRange.upperBound)
+    }
+
+    /// A word for a setting of `minimumScore`, for the slider's value.
+    public static func strictnessName(for score: Double) -> String {
+        switch clampMinimumScore(score) {
+        case ..<0.72: return "Loose"
+        case ..<0.88: return "Balanced"
+        default: return "Strict"
+        }
+    }
 
     private static let sampleCount = 64
     private static let rotationLimit = 15 * Double.pi / 180

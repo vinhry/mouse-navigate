@@ -27,6 +27,7 @@ public enum SettingsKey {
     public static let touchShowsDrawing = "touchShowsDrawing"
     public static let touchDrawSpread = "touchDrawSpread"
     public static let touchShowsGestureHUD = "touchShowsGestureHUD"
+    public static let touchLetterStrictness = "touchLetterStrictness"
     public static let touchIgnoreWhileTyping = "touchIgnoreWhileTyping"
     public static let touchIgnoreWhileMoving = "touchIgnoreWhileMoving"
     public static let automaticUpdates = "update.automatic"
@@ -66,6 +67,7 @@ public enum SettingsKey {
             touchShowsDrawing: .bool,
             touchDrawSpread: .double,
             touchShowsGestureHUD: .bool,
+            touchLetterStrictness: .double,
             touchIgnoreWhileTyping: .bool,
             touchIgnoreWhileMoving: .bool,
             automaticUpdates: .bool,

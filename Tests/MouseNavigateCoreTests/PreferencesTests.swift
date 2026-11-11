@@ -162,10 +162,23 @@ final class PreferencesTests: XCTestCase {
         XCTAssertFalse(preferences.isTouchSurfaceEnabled(.magicMouse))
     }
 
+    func testLetterStrictnessDefaultsToTodaysScoreAndIsClamped() {
+        let preferences = makePreferences()
+        XCTAssertEqual(preferences.letterStrictness, 0.8)
+        XCTAssertEqual(StrokeRecognizer().minimumScore, preferences.letterStrictness)
+        preferences.letterStrictness = 0.9
+        XCTAssertEqual(preferences.letterStrictness, 0.9)
+        preferences.letterStrictness = 2
+        XCTAssertEqual(preferences.letterStrictness, StrokeRecognizer.minimumScoreRange.upperBound)
+        preferences.letterStrictness = 0
+        XCTAssertEqual(preferences.letterStrictness, StrokeRecognizer.minimumScoreRange.lowerBound)
+    }
+
     func testGestureHUDIsOffUntilAskedFor() {
         let preferences = makePreferences()
         XCTAssertFalse(preferences.showsGestureHUD)
         preferences.showsGestureHUD = true
+        preferences.letterStrictness = 0.9
         XCTAssertTrue(preferences.showsGestureHUD)
     }
 
@@ -196,6 +209,7 @@ final class PreferencesTests: XCTestCase {
         XCTAssertTrue(preferences.ignoresTapsWhileMouseMoves)
         XCTAssertEqual(preferences.characterDrawSpread, TouchTuning().drawSpread)
         XCTAssertFalse(preferences.showsGestureHUD)
+        XCTAssertEqual(preferences.letterStrictness, 0.8)
         XCTAssertTrue(preferences.isTouchSurfaceEnabled(.trackpad))
         XCTAssertTrue(preferences.isTouchSurfaceEnabled(.magicMouse))
         // Whether gestures are on at all is not a default to restore.

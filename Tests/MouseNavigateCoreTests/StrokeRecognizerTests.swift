@@ -11,6 +11,23 @@ final class StrokeRecognizerTests: XCTestCase {
         }
     }
 
+    func testStrictnessAcceptsAMatchOnlyAtOrAboveItsScore() {
+        let match = StrokeRecognizer.Match(gesture: .t, score: 0.85)
+        var loose = StrokeRecognizer()
+        loose.minimumScore = 0.7
+        var strict = StrokeRecognizer()
+        strict.minimumScore = 0.9
+        XCTAssertTrue(loose.accepts(match))
+        XCTAssertFalse(strict.accepts(match))
+        XCTAssertEqual(StrokeRecognizer.defaultMinimumScore, 0.8, "the score before it was a setting")
+    }
+
+    func testStrictnessNamesCoverTheRangeAndCallTheDefaultBalanced() {
+        XCTAssertEqual(StrokeRecognizer.strictnessName(for: StrokeRecognizer.minimumScoreRange.lowerBound), "Loose")
+        XCTAssertEqual(StrokeRecognizer.strictnessName(for: StrokeRecognizer.defaultMinimumScore), "Balanced")
+        XCTAssertEqual(StrokeRecognizer.strictnessName(for: StrokeRecognizer.minimumScoreRange.upperBound), "Strict")
+    }
+
     func testEveryTemplateRecognizesAsItself() {
         for template in CharacterTemplates.all {
             XCTAssertEqual(

@@ -18,7 +18,7 @@ final class TouchMonitor {
     /// Main thread only, apart from stopping the frames in deinit.
     nonisolated(unsafe) private let bridge = MultitouchBridge()
     private let performer: ActionPerformer
-    private let strokeRecognizer = StrokeRecognizer()
+    private var strokeRecognizer = StrokeRecognizer()
     private let overlay = DrawingOverlay()
 
     /// Prints surfaces, contacts and recognized gestures, for tuning. Set by `--touch-debug`.
@@ -210,6 +210,8 @@ final class TouchMonitor {
         let shouldRun = preferences.isTouchEnabled && !isPaused && bridge.isAvailable
 
         overlay.isEnabled = preferences.showsDrawingOverlay
+        // Drawings from the trackpad and from mouse buttons both end up in `handleStroke`.
+        strokeRecognizer.minimumScore = preferences.letterStrictness
 
         lock.lock()
         isLeftHanded = preferences.isLeftHanded
