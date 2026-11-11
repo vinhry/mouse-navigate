@@ -123,6 +123,36 @@ final class SettingsSnapshotTests: XCTestCase {
         XCTAssertEqual(preferences.lastUpdateCheck, stamp, "bookkeeping survives an import")
     }
 
+    func testWhereSettingsWasLeftIsNeitherExportedNorImportedNorCleared() throws {
+        let store = makeStore()
+        let preferences = Preferences(store: store)
+        preferences.lastSettingsTab = 2
+        preferences.lastSettingsTouchPane = 1
+        preferences.isLeftHanded = true
+
+        let exported = try preferences.exportSettings(appVersion: "0.9.0")
+        let text = String(decoding: exported, as: UTF8.self)
+        XCTAssertFalse(text.contains(SettingsKey.settingsLastTab))
+        XCTAssertFalse(text.contains(SettingsKey.settingsLastTouchPane))
+
+        // A file that carries them anyway is not believed.
+        let result = try preferences.importSettings(json("""
+        {"format": "MouseNavigate settings", "schemaVersion": 1, "configVersion": 2,
+         "settings": {"touchEnabled": true, "ui.settingsTab": 3, "ui.settingsTouchPane": 0}}
+        """))
+        XCTAssertEqual(result.ignoredKeys, [SettingsKey.settingsLastTab, SettingsKey.settingsLastTouchPane].sorted())
+        XCTAssertEqual(preferences.lastSettingsTab, 2)
+        XCTAssertEqual(preferences.lastSettingsTouchPane, 1)
+        XCTAssertFalse(preferences.isLeftHanded, "the rest was replaced")
+
+        // And applying a file without them clears nothing of theirs.
+        try preferences.importSettings(json("""
+        {"format": "MouseNavigate settings", "schemaVersion": 1, "configVersion": 2, "settings": {}}
+        """))
+        XCTAssertEqual(preferences.lastSettingsTab, 2)
+        XCTAssertEqual(preferences.lastSettingsTouchPane, 1)
+    }
+
     func testImportPostsOneChangeForEverything() throws {
         let preferences = Preferences(store: makeStore())
         var areas: [SettingsArea] = []

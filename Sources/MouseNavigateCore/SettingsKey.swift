@@ -36,9 +36,16 @@ public enum SettingsKey {
     /// The Welcome window has been seen through, or was never needed. Bookkeeping too.
     public static let onboardingCompleted = "onboarding.completed"
 
+    /// Which tab and which Touch pane the Settings window was last left on, as positions.
+    /// Where a window was left says nothing about another Mac's, so bookkeeping too.
+    public static let settingsLastTab = "ui.settingsTab"
+    public static let settingsLastTouchPane = "ui.settingsTouchPane"
+
     /// Keys this Mac keeps for itself: never exported, and kept when settings are imported,
     /// since another Mac's answer means nothing here.
-    public static let bookkeeping: Set<String> = [lastUpdateCheck, onboardingCompleted]
+    public static let bookkeeping: Set<String> = [
+        lastUpdateCheck, onboardingCompleted, settingsLastTab, settingsLastTouchPane,
+    ]
 
     /// "scroll.<field>" for all mice, "scroll.<profile>.<field>" for one mouse model.
     public static func scroll(_ field: ScrollField, profile: DeviceProfile? = nil) -> String {
@@ -73,6 +80,8 @@ public enum SettingsKey {
             automaticUpdates: .bool,
             lastUpdateCheck: .date,
             onboardingCompleted: .bool,
+            settingsLastTab: .int,
+            settingsLastTouchPane: .int,
         ]
         for field in ScrollField.allCases {
             keys[scroll(field)] = field.valueType

@@ -471,6 +471,20 @@ public final class Preferences {
         set { store.set(newValue, forKey: SettingsKey.onboardingCompleted) }
     }
 
+    /// Where the Settings window was left, as the position of its tab and of its Touch pane,
+    /// or nil before it was ever left anywhere. Whatever is stored is only a position:
+    /// the window checks it against the tabs it has. Not settings, so they change without
+    /// telling anyone.
+    public var lastSettingsTab: Int? {
+        get { store.object(forKey: SettingsKey.settingsLastTab) as? Int }
+        set { store.set(newValue, forKey: SettingsKey.settingsLastTab) }
+    }
+
+    public var lastSettingsTouchPane: Int? {
+        get { store.object(forKey: SettingsKey.settingsLastTouchPane) as? Int }
+        set { store.set(newValue, forKey: SettingsKey.settingsLastTouchPane) }
+    }
+
     // MARK: - Keyboard cursor
 
     public var isCursorModeEnabled: Bool {

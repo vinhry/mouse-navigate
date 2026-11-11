@@ -52,6 +52,15 @@ final class SettingsKeyTests: XCTestCase {
         XCTAssertTrue(SettingsKey.isExportable(SettingsKey.touchLetterStrictness))
     }
 
+    func testWindowPositionKeysAreIntegerBookkeeping() {
+        for key in [SettingsKey.settingsLastTab, SettingsKey.settingsLastTouchPane] {
+            XCTAssertEqual(SettingsKey.type(of: key), .int)
+            XCTAssertTrue(SettingsKey.bookkeeping.contains(key))
+            XCTAssertFalse(SettingsKey.isExportable(key))
+            XCTAssertTrue(SettingsSnapshot.keptOnThisMac.contains(key))
+        }
+    }
+
     func testEveryCurrentKeyHasAType() {
         for key in everyCurrentKey {
             XCTAssertNotNil(SettingsKey.type(of: key), key)

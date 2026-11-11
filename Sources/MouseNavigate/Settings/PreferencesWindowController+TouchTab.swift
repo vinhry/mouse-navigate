@@ -119,6 +119,7 @@ extension PreferencesWindowController {
             action: #selector(touchPaneChanged(_:))
         )
         panePicker.selectedSegment = 0
+        touchPanePicker = panePicker
 
         let panes = [
             makeGesturePane(for: .trackpad),
@@ -126,9 +127,11 @@ extension PreferencesWindowController {
             makeCharacterPane(),
         ]
         touchPanes = panes
-        // Only the pane on show animates, and only the first is on show to begin with.
-        gesturePreviews[.magicMouse]?.isAnimating = false
-        strokePreview?.isAnimating = false
+        // The pane the window was left on, if it is still one; otherwise the first.
+        let storedPane = Preferences.shared.lastSettingsTouchPane ?? 0
+        let shownPane = panes.indices.contains(storedPane) ? storedPane : 0
+        panePicker.selectedSegment = shownPane
+        showTouchPane(shownPane)
 
         // Panes overlap in one container that is as large as the largest, so switching
         // never resizes the window. The container is pinned to that size: left with only
@@ -140,7 +143,7 @@ extension PreferencesWindowController {
         let paneSizes = panes.map(\.fittingSize)
         for (index, pane) in panes.enumerated() {
             pane.translatesAutoresizingMaskIntoConstraints = false
-            pane.isHidden = index != 0
+            pane.isHidden = index != shownPane
             paneContainer.addSubview(pane)
             NSLayoutConstraint.activate([
                 pane.topAnchor.constraint(equalTo: paneContainer.topAnchor),
@@ -696,13 +699,18 @@ extension PreferencesWindowController {
     }
 
     @objc func touchPaneChanged(_ sender: NSSegmentedControl) {
+        Preferences.shared.lastSettingsTouchPane = sender.selectedSegment
+        showTouchPane(sender.selectedSegment)
+    }
+
+    func showTouchPane(_ selected: Int) {
         for (index, pane) in touchPanes.enumerated() {
-            pane.isHidden = index != sender.selectedSegment
+            pane.isHidden = index != selected
         }
         // Nothing should animate on a pane nobody is looking at.
-        gesturePreviews[.trackpad]?.isAnimating = sender.selectedSegment == 0
-        gesturePreviews[.magicMouse]?.isAnimating = sender.selectedSegment == 1
-        strokePreview?.isAnimating = sender.selectedSegment == 2
+        gesturePreviews[.trackpad]?.isAnimating = selected == 0
+        gesturePreviews[.magicMouse]?.isAnimating = selected == 1
+        strokePreview?.isAnimating = selected == 2
     }
 
     @objc func showDrawingChanged(_ sender: NSButton) {

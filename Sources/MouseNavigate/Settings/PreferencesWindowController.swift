@@ -59,6 +59,7 @@ final class PreferencesWindowController: NSObject {
     /// Marks the one item in a picker that shows its current custom binding.
     static let customItemTag = 1
     var window: NSWindow?
+    var tabView: NSTabView?
     /// The pages and the tab view around them, kept so the window can be fitted to them
     /// again when a page grows or shrinks.
     var pages: [NSView] = []
@@ -121,6 +122,7 @@ final class PreferencesWindowController: NSObject {
     var ignoreTypingCheckbox: NSButton?
     var ignoreMouseMovingCheckbox: NSButton?
     var touchStatusLabel: NSTextField?
+    var touchPanePicker: NSSegmentedControl?
     var gestureHUDCheckbox: NSButton?
     var touchSurfaceCheckboxes: [TouchSurface: NSButton] = [:]
     /// The Touch tab's report of the gesture that fired last.
@@ -185,8 +187,11 @@ final class PreferencesWindowController: NSObject {
 
     // MARK: - Window
 
-    func showOrFocus() {
+    /// `tab` is the position of a tab to open on, for a caller that wants a particular one;
+    /// otherwise the window opens where it was left.
+    func showOrFocus(tab: Int? = nil) {
         if let window {
+            if let tab { selectTab(at: tab) }
             refreshUpdatesUI()
             refreshScopeUI()
             refreshDeviceUI()
@@ -240,6 +245,8 @@ final class PreferencesWindowController: NSObject {
         aboutTab.label = "About"
         aboutTab.view = aboutPage
         tabView.addTabViewItem(aboutTab)
+        tabView.delegate = self
+        self.tabView = tabView
 
         let margin = PreferencesWindowController.windowMargin
         NSLayoutConstraint.activate([
@@ -274,9 +281,19 @@ final class PreferencesWindowController: NSObject {
         refreshDeviceUI()
         refreshTouchUI()
 
+        // After the pages are sized, which a tab change does not alter. A stored position
+        // that no tab has any more opens the first.
+        selectTab(at: tab ?? Preferences.shared.lastSettingsTab ?? 0)
         w.center()
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Out of range falls back to the first tab, so a stale value is harmless.
+    func selectTab(at position: Int) {
+        guard let tabView else { return }
+        let count = tabView.numberOfTabViewItems
+        tabView.selectTabViewItem(at: (0..<count).contains(position) ? position : 0)
     }
 
     var isVisible: Bool { window?.isVisible ?? false }
@@ -319,5 +336,12 @@ final class PreferencesWindowController: NSObject {
         refreshCursorUI()
         refreshTouchUI()
         refreshUpdatesUI()
+    }
+}
+
+extension PreferencesWindowController: NSTabViewDelegate {
+    func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        guard let tabViewItem else { return }
+        Preferences.shared.lastSettingsTab = tabView.indexOfTabViewItem(tabViewItem)
     }
 }
