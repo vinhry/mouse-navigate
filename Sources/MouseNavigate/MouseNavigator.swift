@@ -114,6 +114,7 @@ final class MouseNavigator {
             self.isUserPaused = paused
             self.applyPauseState()
         }
+        controller.isTouchAvailable = { [weak self] in self?.touchMonitor.isAvailable ?? false }
         controller.setup()
         statusBarController = controller
         installMainMenu()

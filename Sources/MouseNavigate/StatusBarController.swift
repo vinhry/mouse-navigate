@@ -5,6 +5,8 @@ import MouseNavigateCore
 final class StatusBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var pauseMenuItem: NSMenuItem?
+    private var touchMenuItem: NSMenuItem?
+    private var cursorMenuItem: NSMenuItem?
     private var launchAtLoginMenuItem: NSMenuItem?
     private var permissionMenuItem: NSMenuItem?
     private var permissionSeparator: NSMenuItem?
@@ -25,6 +27,8 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     var onQuit: (() -> Void)?
     var onPauseToggle: ((Bool) -> Void)?
     var onShowWelcome: (() -> Void)?
+    /// Whether this macOS has the private touch framework. Asked each time the menu opens.
+    var isTouchAvailable: () -> Bool = { true }
 
     private(set) var isPaused = false {
         didSet {
@@ -130,6 +134,20 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        // The same two switches as in Settings, for the times the window is the wrong place
+        // to reach for: they write the same preferences, so everything else follows.
+        let touchItem = NSMenuItem(title: "Touch Gestures", action: #selector(touchToggleTapped), keyEquivalent: "")
+        touchItem.target = self
+        menu.addItem(touchItem)
+        touchMenuItem = touchItem
+
+        let cursorItem = NSMenuItem(title: "Keyboard Cursor", action: #selector(cursorToggleTapped), keyEquivalent: "")
+        cursorItem.target = self
+        menu.addItem(cursorItem)
+        cursorMenuItem = cursorItem
+
+        menu.addItem(.separator())
+
         // Launch at Login
         let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(launchAtLoginTapped), keyEquivalent: "")
         loginItem.target = self
@@ -168,6 +186,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         updatePermissionWarning()
         updateLaunchAtLoginState()
+        updateFeatureToggles()
         detector.refresh()
         deviceMenuItem?.title = detector.statusDescription
 
@@ -227,6 +246,26 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     @objc private func pauseToggleTapped() {
         isPaused.toggle()
         onPauseToggle?(isPaused)
+    }
+
+    // MARK: - Touch gestures and keyboard cursor
+
+    private func updateFeatureToggles() {
+        // The checkmark is the item's state, which VoiceOver reads on its own.
+        touchMenuItem?.state = Preferences.shared.isTouchEnabled ? .on : .off
+        // Without the framework the switch could not do anything, so it is left off and grey.
+        touchMenuItem?.isEnabled = isTouchAvailable()
+        cursorMenuItem?.state = Preferences.shared.isCursorModeEnabled ? .on : .off
+    }
+
+    @objc private func touchToggleTapped() {
+        Preferences.shared.isTouchEnabled.toggle()
+        updateFeatureToggles()
+    }
+
+    @objc private func cursorToggleTapped() {
+        Preferences.shared.isCursorModeEnabled.toggle()
+        updateFeatureToggles()
     }
 
     // MARK: - Launch at Login
