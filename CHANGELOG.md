@@ -55,7 +55,8 @@ All notable changes to this project will be documented in this file.
   first, as on the Mouse tab, and on Keyboard Cursor it no longer turns the keyboard cursor
   back on: the switch stays as it is.
 - **Remove App** and the three **Restore Defaults** buttons no longer answer Return.
-- Logitech tooltips came back after a refresh of the Mouse tab.
+- The tooltips on the **Logitech Buttons** pickers never showed, because every refresh of
+  the Mouse tab cleared them. They show now.
 - The gesture preview tells resting fingers from acting ones by shape, hollow or filled, as
   well as by colour.
 - The text on the result HUD is readable in both light and dark appearance.
