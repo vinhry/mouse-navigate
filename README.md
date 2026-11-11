@@ -77,6 +77,8 @@ To see what MouseNavigate detects:
   - **Grant Accessibility Permission…**, with a warning sign — shown only while the permission is missing; clicking opens System Settings → Accessibility directly
   - **Grant Input Monitoring…**, with a warning sign — shown only when keyboard events are blocked
   - **Pause** / **Resume** — temporarily stands everything down without quitting: buttons, wheel options, touch gestures, the keyboard cursor and the Logitech buttons
+  - **Pause for 1 Hour** — the same, ending by itself an hour later, even if the Mac sleeps meanwhile. Hidden while paused; the icon's tooltip and the **Resume** item give the time it ends. **Pause** during a timed pause keeps it paused until you resume, and a timed pause is forgotten when MouseNavigate quits.
+  - **Touch Gestures** ✓ and **Keyboard Cursor** ✓ — the same two switches as in Settings, for when the window is the wrong place to reach for. **Touch Gestures** is greyed out when the touch framework is unavailable.
   - **Launch at Login** ✓ — toggle to start MouseNavigate automatically at login. When macOS is still waiting for you to allow it, the item says so and opens System Settings → Login Items instead.
   - **Check for Updates…** — ask GitHub for a newer release now
   - **Settings…** (`⌘,`) — open the Settings window
@@ -88,7 +90,9 @@ mode, off in an app or waiting for permission.
 
 ## Button Mapping
 
-Open **Settings…** from the status bar menu to configure each button. The action menus are
+Open **Settings…** from the status bar menu to configure each button. If other mouse
+software that can remap the same buttons is running, a warning at the top of the Mouse tab
+names it and says a button may act twice or not at all. The action menus are
 grouped under headings, with **Disabled** at the top; a custom binding too long for its
 menu shows in full on hover.
 
@@ -271,7 +275,8 @@ Switching to such an app mid-hold lets go of anything held, as **Pause** does.
 
 **Remove App** deletes that app's bindings, scroll settings and turned-off state. In an app's
 scope, **Restore Defaults** on the Mouse tab hands its buttons and wheel back to the ones
-for all apps, and on the Touch tab its gestures.
+for all apps, and on the Touch tab its gestures. **Remove App** and every **Restore
+Defaults** can be taken back with **Revert Last Change…** on the About tab (see [About](#about)).
 
 ## Keyboard Cursor
 
@@ -302,7 +307,8 @@ Speed tiers, held alongside `A`:
 Movement eases in rather than starting at full speed, and diagonals travel at the same
 rate as the axes. Every key and every speed is rebindable in **Settings → Keyboard
 Cursor**, along with the hold delay. Swapping two keys says so under the grid, and
-**Restore Defaults** there asks first and leaves the on/off switch as it is.
+**Restore Defaults** there asks first and leaves the on/off switch as it is; it can be taken
+back with **Revert Last Change…** on the About tab.
 
 ### Grid jump
 
@@ -387,6 +393,12 @@ included. In a gesture's name, **Fix** is a finger that stays resting. Two optio
 it, both on by default, keep accidental touches out: **Ignore touches while typing** and
 **Ignore taps while the mouse is moving**.
 
+The line **Last gesture** under the status reports the gesture or letter that fired last
+and the action it ran, to find out which one did something you did not mean. Tick **Show
+gestures on screen as they fire** (off by default) to see the same flashed in the middle of
+the screen as well. When an app, link or Shortcuts shortcut a gesture or button runs cannot
+be opened, MouseNavigate beeps and flashes the reason there, whatever that option says.
+
 Gestures run alongside the ones built into macOS rather than replacing them, so turn off
 any that overlap. On a trackpad, the three-finger gestures clash with macOS's own: set
 **Mission Control** and **App Exposé** to four fingers in `System Settings` → `Trackpad` →
@@ -403,6 +415,11 @@ it. A resting finger stays a resting finger however long it has been there, and 
 the hand on the back of the mouse is never taken for a finger. Clicking beside a resting
 finger is a click, not a tap. A tap made while the pointer is moving is a grip, not a
 gesture, unless **Ignore taps while the mouse is moving** is turned off.
+
+Each of **Trackpad** and **Magic Mouse** has its own **Trackpad gestures** / **Magic Mouse
+gestures** switch at the top of its pane, both on by default, so a trackpad user can leave a
+Magic Mouse's gestures alone. Switching trackpad gestures off also stops drawing letters
+with two fingers.
 
 ### Trackpad
 
@@ -465,6 +482,9 @@ trackpad's own proportions, a button drag along the path the pointer takes. When
 finish, the ink gives way for half a second to what it was recognised as and the action it
 ran — "T" over "New Tab (⌘T)" — in the middle of the screen, or a "no match" when nothing
 fit. Untick **Show the drawing on screen** in the Characters section to work without it.
+
+**Letter matching** sets how strictly a drawing must resemble a letter: Loose accepts rough
+scribbles, Strict wants a neat one. It applies to every way of drawing.
 
 Letters are single strokes, loosely after Graffiti. `I` is a straight line down. To see how
 one goes, hover it in **Settings → Touch → Characters**: the stroke traces itself beside
@@ -668,6 +688,8 @@ publishing.
 
 ## About
 
+**Settings** opens on the tab it was last left on, and on the Touch pane last used there.
+
 **Settings → About** shows the version, links to this repository and the issue tracker,
 and the license. MouseNavigate is developed by Vinhry and released under the MIT License.
 
@@ -685,6 +707,11 @@ the file exactly as they are stored, a built-in action by name, so a file is eas
 by hand. A file with a setting of the wrong type is refused whole, and one from a newer
 MouseNavigate is refused until this copy is updated; settings a file has that this version
 does not know are left out and listed.
+
+**Revert Last Change…** puts back the settings from before the last import, **Restore
+Defaults** or **Remove App**, after asking. Only one change is kept, a newer one replaces it,
+and it is forgotten when MouseNavigate quits. Anything changed since is lost by reverting.
+The import's result also has a **Revert** button.
 
 ## Run from Source
 

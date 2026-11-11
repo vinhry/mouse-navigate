@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased: features]
+
+_On the `features-0.9` branch; ships after the fixes below._
+
+### Added
+- **Touch Gestures** and **Keyboard Cursor** switches in the menu bar menu, the same two as
+  in Settings. **Touch Gestures** is greyed out when the touch framework is unavailable.
+- **Pause for 1 Hour** in the menu bar menu. It ends by the clock, even if the Mac sleeps
+  meanwhile, and the icon's tooltip and the **Resume** item say when. It is hidden while
+  paused, choosing **Pause** during a timed pause keeps it paused until you resume, and it
+  is forgotten when MouseNavigate quits.
+- A warning at the top of **Settings → Mouse** while other mouse software that can remap
+  the same buttons is running, naming it. It follows apps starting and quitting while the
+  window is open.
+- **Last gesture** on **Settings → Touch** says which gesture or letter fired last and the
+  action it ran. **Show gestures on screen as they fire**, off by default, flashes the same
+  in the middle of the screen.
+- An app, link or Shortcuts shortcut that cannot be run now beeps and flashes the reason on
+  screen, such as "Couldn't open Safari: the app is not installed", whatever the option
+  above says. Nothing flashes while paused.
+- **Trackpad gestures** and **Magic Mouse gestures** switches at the top of each pane of
+  **Settings → Touch**, both on by default. Switching trackpad gestures off also stops
+  drawing letters with two fingers. **Restore Defaults** on the Touch tab includes them.
+- **Letter matching** on **Settings → Touch → Characters**, from Loose to Strict, for how
+  neat a drawn letter must be. It applies to the trackpad and to button drags alike.
+- **Revert Last Change…** on **Settings → About** takes back the last import, **Restore
+  Defaults** or **Remove App**, after asking. Only one change is kept, a newer one
+  replaces it, and it is forgotten when MouseNavigate quits. The result of an import has
+  a **Revert** button too.
+
+### Changed
+- Settings opens on the tab it was last left on, and **Settings → Touch** on the pane last
+  used.
+- Importing settings no longer says there is no undo, and the confirmations for **Restore
+  Defaults** and **Remove App** say they can be taken back with **Revert Last Change**
+  until you quit.
+
 ## [Unreleased]
 
 ### Added
